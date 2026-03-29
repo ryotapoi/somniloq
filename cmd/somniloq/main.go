@@ -9,7 +9,7 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
-	"github.com/ryotapoi/cclog/internal/core"
+	"github.com/ryotapoi/somniloq/internal/core"
 )
 
 func main() {
@@ -19,7 +19,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	defaultDB := filepath.Join(homeDir, ".cclog", "cclog.db")
+	defaultDB := filepath.Join(homeDir, ".somniloq", "somniloq.db")
 	defaultProjectsDir := filepath.Join(homeDir, ".claude", "projects")
 
 	dbPath := flag.String("db", defaultDB, "path to SQLite database")
@@ -27,7 +27,7 @@ func main() {
 
 	args := flag.Args()
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: cclog [--db path] <command>")
+		fmt.Fprintln(os.Stderr, "usage: somniloq [--db path] <command>")
 		fmt.Fprintln(os.Stderr, "commands: import, sessions, show, projects")
 		os.Exit(1)
 	}
@@ -144,7 +144,7 @@ func runShow(dbPath string, args []string) {
 
 	if fs.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "error: too many arguments")
-		fmt.Fprintln(os.Stderr, "usage: cclog show <session-id> | cclog show [--since <time>] [--until <time>]")
+		fmt.Fprintln(os.Stderr, "usage: somniloq show <session-id> | somniloq show [--since <time>] [--until <time>]")
 		os.Exit(1)
 	}
 
@@ -155,7 +155,7 @@ func runShow(dbPath string, args []string) {
 		os.Exit(1)
 	}
 	if sessionID == "" && *since == "" && *until == "" {
-		fmt.Fprintln(os.Stderr, "usage: cclog show <session-id> | cclog show [--since <time>] [--until <time>]")
+		fmt.Fprintln(os.Stderr, "usage: somniloq show <session-id> | somniloq show [--since <time>] [--until <time>]")
 		os.Exit(1)
 	}
 
@@ -211,7 +211,7 @@ func runProjects(dbPath string, args []string) {
 
 	if fs.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "error: unexpected arguments")
-		fmt.Fprintln(os.Stderr, "usage: cclog projects [--since <time>] [--until <time>]")
+		fmt.Fprintln(os.Stderr, "usage: somniloq projects [--since <time>] [--until <time>]")
 		os.Exit(1)
 	}
 

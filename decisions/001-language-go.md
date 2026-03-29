@@ -5,7 +5,7 @@
 
 ## 文脈
 
-cclog は JSONL パース + SQLite 書き込みがメインの CLI ツール。
+somniloq は JSONL パース + SQLite 書き込みがメインの CLI ツール。
 候補として Go, Swift, Rust, Python を検討した。
 
 ## 決定

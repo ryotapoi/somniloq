@@ -36,26 +36,26 @@
 ## CLI インターフェース
 
 ```bash
-cclog import                          # 全 JSONL を差分取り込み
-cclog import --full                   # 全件再取り込み（確認あり）
-cclog import --full --yes             # 確認なしで全件再取り込み
-cclog sessions                        # セッション一覧
-cclog sessions --since 24h            # 直近24時間
-cclog sessions --since 2026-03-28     # 3/28 以降
-cclog sessions --until 2026-03-28     # 3/28 終わりまで
-cclog sessions --since 7d --until 2h  # 直近7日間から最新2時間を除外
-cclog sessions --project Brimday      # プロジェクト名フィルタ
-cclog show <session-id>               # セッション内容を Markdown で出力
-cclog show --since 24h                # 直近24時間の全セッション
-cclog show --since 2026-03-28 --until 2026-03-29  # 3/28 の全セッション
-cclog projects                        # プロジェクト一覧
-cclog projects --since 7d             # 直近7日間にセッションがあるプロジェクト
-cclog --db /path/to/cclog.db ...      # DB パスの指定
+somniloq import                          # 全 JSONL を差分取り込み
+somniloq import --full                   # 全件再取り込み（確認あり）
+somniloq import --full --yes             # 確認なしで全件再取り込み
+somniloq sessions                        # セッション一覧
+somniloq sessions --since 24h            # 直近24時間
+somniloq sessions --since 2026-03-28     # 3/28 以降
+somniloq sessions --until 2026-03-28     # 3/28 終わりまで
+somniloq sessions --since 7d --until 2h  # 直近7日間から最新2時間を除外
+somniloq sessions --project Brimday      # プロジェクト名フィルタ
+somniloq show <session-id>               # セッション内容を Markdown で出力
+somniloq show --since 24h                # 直近24時間の全セッション
+somniloq show --since 2026-03-28 --until 2026-03-29  # 3/28 の全セッション
+somniloq projects                        # プロジェクト一覧
+somniloq projects --since 7d             # 直近7日間にセッションがあるプロジェクト
+somniloq --db /path/to/somniloq.db ...      # DB パスの指定
 ```
 
 ## SQLite
 
-- デフォルト配置: `~/.cclog/cclog.db`（`--db` フラグで変更可能）
+- デフォルト配置: `~/.somniloq/somniloq.db`（`--db` フラグで変更可能）
 - セッション横断で使うため、特定プロジェクトの中には置かない
 
 ### テーブル設計

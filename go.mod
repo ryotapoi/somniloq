@@ -1,4 +1,4 @@
-module github.com/ryotapoi/cclog
+module github.com/ryotapoi/somniloq
 
 go 1.25.6
 

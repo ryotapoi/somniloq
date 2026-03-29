@@ -341,7 +341,7 @@ func TestListSessions_ProjectFilter(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-Users-test-cclog", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-Users-test-somniloq", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Project: "Brimday"})
 	if err != nil {
@@ -360,7 +360,7 @@ func TestListSessions_CombinedFilter(t *testing.T) {
 
 	must(t, db.UpsertSession(SessionMeta{SessionID: "old-brim", ProjectDir: "-Users-test-Brimday", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{SessionID: "new-brim", ProjectDir: "-Users-test-Brimday", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "new-cclog", ProjectDir: "-Users-test-cclog", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "new-somniloq", ProjectDir: "-Users-test-somniloq", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Since: "2026-03-28T00:00:00Z", Project: "Brimday"})
 	if err != nil {

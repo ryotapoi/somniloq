@@ -27,7 +27,7 @@ argument-hint: [plan-file-path]
 
 新規 MUST/SHOULD がゼロになるまでループする。
 
-### 4. `/review-plan-cclog` を Skill tool で実行する
+### 4. `/review-plan-somniloq` を Skill tool で実行する
 
 引数（`$ARGUMENTS`）があればそのまま渡す。新規 MUST/SHOULD 指摘があれば反映し、手順1に戻る。
 

@@ -52,7 +52,7 @@ go test ./...
 
 新規 MUST/SHOULD がゼロになるまでループする。
 
-### 8. `/review-code-cclog` を Skill tool で実行する
+### 8. `/review-code-somniloq` を Skill tool で実行する
 
 引数（`$ARGUMENTS`）があればそのまま渡す。新規 MUST/SHOULD 指摘があれば反映し、手順4に戻る。
 

@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/ryotapoi/cclog/internal/core"
+	"github.com/ryotapoi/somniloq/internal/core"
 )
 
 func TestFormatSession_WithTitle(t *testing.T) {

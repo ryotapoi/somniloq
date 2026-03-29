@@ -5,7 +5,7 @@ import (
 	"io"
 	"strings"
 
-	"github.com/ryotapoi/cclog/internal/core"
+	"github.com/ryotapoi/somniloq/internal/core"
 )
 
 var titleSanitizer = strings.NewReplacer("\n", " ", "\r", " ")

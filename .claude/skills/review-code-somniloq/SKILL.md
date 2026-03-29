@@ -1,14 +1,14 @@
 ---
-name: review-code-cclog
-description: cclog 固有の設計制約に基づく実装レビュー。通常はチェーンスキルから呼ばれる。
+name: review-code-somniloq
+description: somniloq 固有の設計制約に基づく実装レビュー。通常はチェーンスキルから呼ばれる。
 argument-hint: <plan-file-path>
 allowed-tools: Read, Glob, Grep, Bash(git diff *), Bash(git log *), Bash(git status *), Task
 context: fork
 ---
 
-# Self Implementation Review — cclog Project
+# Self Implementation Review — somniloq Project
 
-グローバルの `/review-code` + `/review-code-go` の後に追加実行する cclog プロジェクト固有の実装レビュー。
+グローバルの `/review-code` + `/review-code-go` の後に追加実行する somniloq プロジェクト固有の実装レビュー。
 1つの Plan サブエージェントで実行する。
 
 **重要な制約:**
@@ -35,12 +35,12 @@ Task ツールで `subagent_type: Plan, model: "sonnet"` を使う。
 
 加えて、「変更されたファイルの全文は自分で Read/Grep/Glob して確認すること」という指示を含める。
 
-#### Agent 1: cclog 固有の設計制約チェック
+#### Agent 1: somniloq 固有の設計制約チェック
 
 プロンプト:
 
 ```
-あなたはコードレビュアーです。以下の実装変更を「cclog プロジェクト固有の設計制約」と照合し、違反がないか検証してください。
+あなたはコードレビュアーです。以下の実装変更を「somniloq プロジェクト固有の設計制約」と照合し、違反がないか検証してください。
 
 ## 変更差分
 {GIT_DIFF}
@@ -53,26 +53,26 @@ Task ツールで `subagent_type: Plan, model: "sonnet"` を使う。
 2. 以下の設計制約リストと実装を照合する
 3. 違反があれば指摘する
 
-## cclog 設計制約
+## somniloq 設計制約
 
 以下はこのプロジェクトで守るべき設計上の制約です。実装がこれらに抵触していないか検証してください。
 
 ### モジュール配置・構造
-1. **モジュール配置と依存方向の遵守**: 新しい import が `cmd/cclog → internal/core` の方向に従っているか。`internal/core` が `cmd/cclog` に依存していないか（rules/architecture.md 参照）
-2. **共通化の妥当性**: `cmd/cclog` と `internal/core` 間で共有するコードが `internal/core` に正しく配置されているか。`cmd/cclog` のローカルなヘルパーが本来 `internal/core` に属する概念を扱っていないか
+1. **モジュール配置と依存方向の遵守**: 新しい import が `cmd/somniloq → internal/core` の方向に従っているか。`internal/core` が `cmd/somniloq` に依存していないか（rules/architecture.md 参照）
+2. **共通化の妥当性**: `cmd/somniloq` と `internal/core` 間で共有するコードが `internal/core` に正しく配置されているか。`cmd/somniloq` のローカルなヘルパーが本来 `internal/core` に属する概念を扱っていないか
 3. **リファクタリングと機能実装のコミット分離**: diff にリファクタリング（rename、ファイル移動、構造変更）と機能実装（新しいビジネスロジック）が混在していないか
 
 ### DB・SQL の安全性
 4. **SQL プレースホルダの使用**: JSONL 由来のデータは必ず `?` プレースホルダ経由で SQL に渡す。文字列結合で SQL を組み立てない
 5. **modernc.org/sqlite の LastInsertId の罠**: `ON CONFLICT DO NOTHING` 時、`LastInsertId()` は前回挿入の rowid を返す。`RowsAffected()` を先にチェックすること
 
-上記に該当しないが cclog 固有の設計判断に関わる問題も自由に指摘してよい。
+上記に該当しないが somniloq 固有の設計判断に関わる問題も自由に指摘してよい。
 
 ## 出力形式
 - 日本語で出力
 - 指摘事項は箇条書きで、該当するコードの箇所を引用する
 - 指摘ごとに重要度を付ける: 🔴 MUST / 🟡 SHOULD / 🔵 NIT
-- 問題がなければ「cclog 固有の指摘なし」と記載する
+- 問題がなければ「somniloq 固有の指摘なし」と記載する
 ```
 
 ### 3. 結果を出力する
@@ -80,9 +80,9 @@ Task ツールで `subagent_type: Plan, model: "sonnet"` を使う。
 エージェントの結果を以下の形式でユーザーに表示する:
 
 ```
-## 自己レビュー結果（cclog 固有）
+## 自己レビュー結果（somniloq 固有）
 
-### cclog 設計制約チェック
+### somniloq 設計制約チェック
 {Agent 1 の結果}
 ```
 

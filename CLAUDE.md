@@ -2,7 +2,7 @@
 
 ## プロジェクト概要
 
-cclog は Claude Code のセッションログ（JSONL）を読み取り、SQLite に保存・検索する CLI ツール。詳細: rules/mission.md
+somniloq は Claude Code のセッションログ（JSONL）を読み取り、SQLite に保存・検索する CLI ツール。詳細: rules/mission.md
 
 ## ビルド・テストコマンド
 
@@ -10,7 +10,7 @@ cclog は Claude Code のセッションログ（JSONL）を読み取り、SQLit
 go test ./...                          # 全テスト実行
 go test ./internal/...                 # 特定パッケージのテスト実行
 go test ./internal/... -run TestImport # 特定テストのみ実行
-go build -o bin/cclog ./cmd/cclog      # バイナリビルド
+go build -o bin/somniloq ./cmd/somniloq      # バイナリビルド
 ```
 
 ## rules/
