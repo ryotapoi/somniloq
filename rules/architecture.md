@@ -15,7 +15,7 @@ cmd/cclog → internal/core
 
 - `internal/core` は `cmd/cclog` に依存しない
 - `internal/core` は外部ライブラリとして `modernc.org/sqlite` のみ使用
-- `cmd/cclog` は stdlib `flag` のみ使用（外部 CLI フレームワーク不使用）
+- `cmd/cclog` は stdlib `flag` + `go-isatty` を使用（外部 CLI フレームワーク不使用）
 
 ## 責務の境界
 

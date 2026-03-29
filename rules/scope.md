@@ -10,7 +10,9 @@
 - `user`/`assistant` → messages テーブルへ（text 部分のみ抽出）
 - `custom-title`/`agent-name` → sessions テーブルの該当カラム更新
 - `import_state` を更新
-- `--full` フラグで全件再取り込み
+- `--full` フラグで全件再取り込み（確認プロンプトあり、デフォルト No）
+  - `--yes` で確認をスキップ
+  - 非対話環境（パイプ、CI 等）では `--yes` が必須
 
 ### セッション一覧（sessions）
 
@@ -29,7 +31,8 @@
 
 ```bash
 cclog import                          # 全 JSONL を差分取り込み
-cclog import --full                   # 全件再取り込み
+cclog import --full                   # 全件再取り込み（確認あり）
+cclog import --full --yes             # 確認なしで全件再取り込み
 cclog sessions                        # セッション一覧
 cclog sessions --since 24h            # 直近24時間
 cclog sessions --project Brimday      # プロジェクト名フィルタ

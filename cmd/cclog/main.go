@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-isatty"
 	"github.com/ryotapoi/cclog/internal/core"
 )
 
@@ -60,7 +61,18 @@ func openDB(dbPath string) *core.DB {
 func runImport(dbPath, projectsDir string, args []string) {
 	fs := flag.NewFlagSet("import", flag.ExitOnError)
 	full := fs.Bool("full", false, "full re-import (delete all and re-import)")
+	yes := fs.Bool("yes", false, "skip confirmation prompt")
 	fs.Parse(args)
+
+	if *full && !*yes {
+		if !isatty.IsTerminal(os.Stdin.Fd()) {
+			fmt.Fprintln(os.Stderr, "error: --full requires confirmation; use --yes to skip in non-interactive mode")
+			os.Exit(1)
+		}
+		if !confirmFullImport(os.Stdin, os.Stderr) {
+			return
+		}
+	}
 
 	db := openDB(dbPath)
 	defer db.Close()
