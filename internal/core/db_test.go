@@ -374,6 +374,108 @@ func TestListSessions_CombinedFilter(t *testing.T) {
 	}
 }
 
+func TestGetMessages_Empty(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	msgs, err := db.GetMessages("s1")
+	if err != nil {
+		t.Fatalf("GetMessages failed: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages, got %d", len(msgs))
+	}
+}
+
+func TestGetMessages_OrderByTimestamp(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	// Insert in reverse order
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "assistant", Content: "world", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
+
+	msgs, err := db.GetMessages("s1")
+	if err != nil {
+		t.Fatalf("GetMessages failed: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+
+	// Should be in timestamp ASC order
+	if msgs[0].UUID != "m1" {
+		t.Errorf("first message UUID: got %s, want m1", msgs[0].UUID)
+	}
+	if msgs[0].Role != "user" {
+		t.Errorf("first message Role: got %s, want user", msgs[0].Role)
+	}
+	if msgs[0].Content != "hello" {
+		t.Errorf("first message Content: got %s, want hello", msgs[0].Content)
+	}
+	if msgs[0].Timestamp != "2026-03-28T10:00:00Z" {
+		t.Errorf("first message Timestamp: got %s, want 2026-03-28T10:00:00Z", msgs[0].Timestamp)
+	}
+	if msgs[0].IsSidechain != true {
+		t.Errorf("first message IsSidechain: got %v, want true", msgs[0].IsSidechain)
+	}
+
+	if msgs[1].UUID != "m2" {
+		t.Errorf("second message UUID: got %s, want m2", msgs[1].UUID)
+	}
+	if msgs[1].Role != "assistant" {
+		t.Errorf("second message Role: got %s, want assistant", msgs[1].Role)
+	}
+	if msgs[1].IsSidechain != false {
+		t.Errorf("second message IsSidechain: got %v, want false", msgs[1].IsSidechain)
+	}
+}
+
+func TestGetSession_Found(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpdateSessionTitle("s1", "-Users-test-proj", "my session", "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
+
+	got, err := db.GetSession("s1")
+	if err != nil {
+		t.Fatalf("GetSession failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil session")
+	}
+	if got.SessionID != "s1" {
+		t.Errorf("SessionID: got %s, want s1", got.SessionID)
+	}
+	if got.ProjectDir != "-Users-test-proj" {
+		t.Errorf("ProjectDir: got %s, want -Users-test-proj", got.ProjectDir)
+	}
+	if got.StartedAt != "2026-03-28T10:00:00Z" {
+		t.Errorf("StartedAt: got %s, want 2026-03-28T10:00:00Z", got.StartedAt)
+	}
+	if got.CustomTitle != "my session" {
+		t.Errorf("CustomTitle: got %q, want %q", got.CustomTitle, "my session")
+	}
+	if got.MessageCount != 1 {
+		t.Errorf("MessageCount: got %d, want 1", got.MessageCount)
+	}
+}
+
+func TestGetSession_NotFound(t *testing.T) {
+	db := testDB(t)
+
+	got, err := db.GetSession("nonexistent")
+	if err != nil {
+		t.Fatalf("GetSession failed: %v", err)
+	}
+	if got != nil {
+		t.Errorf("expected nil, got %+v", got)
+	}
+}
+
 func TestUpdateSessionAgentName(t *testing.T) {
 	db := testDB(t)
 

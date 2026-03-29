@@ -207,6 +207,60 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	return result, nil
 }
 
+type MessageRow struct {
+	UUID        string
+	Role        string
+	Content     string
+	Timestamp   string
+	IsSidechain bool
+}
+
+func (d *DB) GetSession(sessionID string) (*SessionRow, error) {
+	var r SessionRow
+	err := d.db.QueryRow(`
+		SELECT s.session_id, s.project_dir, COALESCE(s.started_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+		FROM sessions s
+		LEFT JOIN messages m ON s.session_id = m.session_id
+		WHERE s.session_id = ?
+		GROUP BY s.session_id`,
+		sessionID,
+	).Scan(&r.SessionID, &r.ProjectDir, &r.StartedAt, &r.CustomTitle, &r.MessageCount)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
+}
+
+func (d *DB) GetMessages(sessionID string) ([]MessageRow, error) {
+	rows, err := d.db.Query(`
+		SELECT uuid, role, content, timestamp, is_sidechain
+		FROM messages
+		WHERE session_id = ?
+		ORDER BY timestamp ASC`,
+		sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []MessageRow{}
+	for rows.Next() {
+		var m MessageRow
+		if err := rows.Scan(&m.UUID, &m.Role, &m.Content, &m.Timestamp, &m.IsSidechain); err != nil {
+			return nil, err
+		}
+		result = append(result, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (d *DB) DeleteAll() error {
 	for _, table := range []string{"messages", "sessions", "import_state"} {
 		if _, err := d.db.Exec("DELETE FROM " + table); err != nil {

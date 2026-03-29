@@ -27,7 +27,7 @@ func main() {
 	args := flag.Args()
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: cclog [--db path] <command>")
-		fmt.Fprintln(os.Stderr, "commands: import, sessions")
+		fmt.Fprintln(os.Stderr, "commands: import, sessions, show")
 		os.Exit(1)
 	}
 
@@ -36,6 +36,8 @@ func main() {
 		runImport(*dbPath, defaultProjectsDir, args[1:])
 	case "sessions":
 		runSessions(*dbPath, args[1:])
+	case "show":
+		runShow(*dbPath, args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", args[0])
 		os.Exit(1)
@@ -114,6 +116,82 @@ func runSessions(dbPath string, args []string) {
 		title := sanitizeTSV(r.CustomTitle)
 		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%d\n",
 			r.SessionID, r.StartedAt, r.ProjectDir, title, r.MessageCount)
+	}
+}
+
+func runShow(dbPath string, args []string) {
+	fs := flag.NewFlagSet("show", flag.ExitOnError)
+	since := fs.String("since", "", "filter sessions by age (e.g. 24h, 7d)")
+	project := fs.String("project", "", "filter sessions by project name (substring match)")
+	format := fs.String("format", "markdown", "output format (markdown)")
+	fs.Parse(args)
+
+	if *format != "markdown" {
+		fmt.Fprintf(os.Stderr, "error: unknown format: %q\n", *format)
+		os.Exit(1)
+	}
+
+	if fs.NArg() > 1 {
+		fmt.Fprintln(os.Stderr, "error: too many arguments")
+		fmt.Fprintln(os.Stderr, "usage: cclog show <session-id> | cclog show --since <duration>")
+		os.Exit(1)
+	}
+
+	sessionID := fs.Arg(0)
+
+	if sessionID != "" && *since != "" {
+		fmt.Fprintln(os.Stderr, "error: specify either session-id or --since, not both")
+		os.Exit(1)
+	}
+	if sessionID == "" && *since == "" {
+		fmt.Fprintln(os.Stderr, "usage: cclog show <session-id> | cclog show --since <duration>")
+		os.Exit(1)
+	}
+
+	db := openDB(dbPath)
+	defer db.Close()
+
+	if sessionID != "" {
+		session, err := db.GetSession(sessionID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		if session == nil {
+			fmt.Fprintf(os.Stderr, "error: session not found: %s\n", sessionID)
+			os.Exit(1)
+		}
+		messages, err := db.GetMessages(sessionID)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		formatSession(os.Stdout, *session, messages)
+		return
+	}
+
+	// --since mode
+	d, err := core.ParseDuration(*since)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	var filter core.SessionFilter
+	filter.Since = time.Now().UTC().Add(-d).Format("2006-01-02T15:04:05.000Z")
+	filter.Project = *project
+
+	sessions, err := db.ListSessions(filter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	if len(sessions) == 0 {
+		return
+	}
+
+	if err := formatSessions(os.Stdout, sessions, db.GetMessages); err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
 }
 
