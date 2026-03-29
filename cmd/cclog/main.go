@@ -100,24 +100,19 @@ func runImport(dbPath, projectsDir string, args []string) {
 
 func runSessions(dbPath string, args []string) {
 	fs := flag.NewFlagSet("sessions", flag.ExitOnError)
-	since := fs.String("since", "", "filter sessions by age (e.g. 24h, 7d)")
+	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
+	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
 	fs.Parse(args)
 
 	db := openDB(dbPath)
 	defer db.Close()
 
-	now := time.Now().UTC()
-	var filter core.SessionFilter
-	if *since != "" {
-		s, err := resolveTimeFlag(*since, now)
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "error: %v\n", err)
-			os.Exit(1)
-		}
-		filter.Since = s
+	filter, err := buildSessionFilter(*since, *until, *project)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
 	}
-	filter.Project = *project
 
 	rows, err := db.ListSessions(filter)
 	if err != nil {
@@ -134,7 +129,8 @@ func runSessions(dbPath string, args []string) {
 
 func runShow(dbPath string, args []string) {
 	fs := flag.NewFlagSet("show", flag.ExitOnError)
-	since := fs.String("since", "", "filter sessions by age (e.g. 24h, 7d)")
+	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
+	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
 	format := fs.String("format", "markdown", "output format (markdown)")
 	fs.Parse(args)
@@ -146,18 +142,18 @@ func runShow(dbPath string, args []string) {
 
 	if fs.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "error: too many arguments")
-		fmt.Fprintln(os.Stderr, "usage: cclog show <session-id> | cclog show --since <duration>")
+		fmt.Fprintln(os.Stderr, "usage: cclog show <session-id> | cclog show [--since <time>] [--until <time>]")
 		os.Exit(1)
 	}
 
 	sessionID := fs.Arg(0)
 
-	if sessionID != "" && *since != "" {
-		fmt.Fprintln(os.Stderr, "error: specify either session-id or --since, not both")
+	if sessionID != "" && (*since != "" || *until != "") {
+		fmt.Fprintln(os.Stderr, "error: specify either session-id or --since/--until, not both")
 		os.Exit(1)
 	}
-	if sessionID == "" && *since == "" {
-		fmt.Fprintln(os.Stderr, "usage: cclog show <session-id> | cclog show --since <duration>")
+	if sessionID == "" && *since == "" && *until == "" {
+		fmt.Fprintln(os.Stderr, "usage: cclog show <session-id> | cclog show [--since <time>] [--until <time>]")
 		os.Exit(1)
 	}
 
@@ -183,16 +179,12 @@ func runShow(dbPath string, args []string) {
 		return
 	}
 
-	// --since mode
-	now := time.Now().UTC()
-	var filter core.SessionFilter
-	s, err := resolveTimeFlag(*since, now)
+	// --since/--until mode
+	filter, err := buildSessionFilter(*since, *until, *project)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	filter.Since = s
-	filter.Project = *project
 
 	sessions, err := db.ListSessions(filter)
 	if err != nil {
@@ -209,12 +201,39 @@ func runShow(dbPath string, args []string) {
 	}
 }
 
-func resolveTimeFlag(value string, now time.Time) (string, error) {
-	d, err := core.ParseDuration(value)
+func buildSessionFilter(since, until, project string) (core.SessionFilter, error) {
+	now := time.Now().UTC()
+	var filter core.SessionFilter
+	if since != "" {
+		s, err := resolveTimeFlag(since, now, false)
+		if err != nil {
+			return filter, err
+		}
+		filter.Since = s
+	}
+	if until != "" {
+		u, err := resolveTimeFlag(until, now, true)
+		if err != nil {
+			return filter, err
+		}
+		filter.Until = u
+	}
+	if filter.Since != "" && filter.Until != "" && filter.Since >= filter.Until {
+		return filter, fmt.Errorf("--since must be before --until")
+	}
+	filter.Project = project
+	return filter, nil
+}
+
+func resolveTimeFlag(value string, now time.Time, isUntil bool) (string, error) {
+	t, dateOnly, err := core.ParseTimeRef(value, now)
 	if err != nil {
 		return "", err
 	}
-	return now.Add(-d).Format("2006-01-02T15:04:05.000Z"), nil
+	if isUntil && dateOnly {
+		t = t.Add(24 * time.Hour)
+	}
+	return t.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 var tsvReplacer = strings.NewReplacer("\t", " ", "\n", " ", "\r", " ")

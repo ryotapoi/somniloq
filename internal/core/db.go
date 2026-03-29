@@ -162,6 +162,7 @@ type SessionRow struct {
 
 type SessionFilter struct {
 	Since   string // RFC3339 UTC string. Empty = no filter.
+	Until   string // RFC3339 UTC string. Empty = no filter. Exclusive upper bound.
 	Project string // Empty = no filter.
 }
 
@@ -176,6 +177,10 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	if filter.Since != "" {
 		conditions = append(conditions, "s.started_at >= ?")
 		args = append(args, filter.Since)
+	}
+	if filter.Until != "" {
+		conditions = append(conditions, "s.started_at < ?")
+		args = append(args, filter.Until)
 	}
 	if filter.Project != "" {
 		conditions = append(conditions, "s.project_dir LIKE '%' || ? || '%'")

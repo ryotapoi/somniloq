@@ -374,6 +374,57 @@ func TestListSessions_CombinedFilter(t *testing.T) {
 	}
 }
 
+func TestListSessions_UntilFilter(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "early", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "late", ProjectDir: "-test", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{Until: "2026-03-28T12:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].SessionID != "early" {
+		t.Errorf("expected 'early', got %s", rows[0].SessionID)
+	}
+}
+
+func TestListSessions_SinceAndUntilFilter(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-test", StartedAt: "2026-03-28T12:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s3", ProjectDir: "-test", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{Since: "2026-03-28T11:00:00.000Z", Until: "2026-03-28T13:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].SessionID != "s2" {
+		t.Errorf("expected 's2', got %s", rows[0].SessionID)
+	}
+}
+
+func TestListSessions_UntilFilter_MillisecondTimestamp(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T12:00:00.500Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{Until: "2026-03-28T12:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("expected 0 rows (ms timestamp 500ms > 000ms), got %d", len(rows))
+	}
+}
+
 func TestGetMessages_Empty(t *testing.T) {
 	db := testDB(t)
 

@@ -17,13 +17,13 @@
 ### セッション一覧（sessions）
 
 - セッション一覧を表示
-- `--since` で期間フィルタ
+- `--since`/`--until` で時刻フィルタ（相対: `24h`, `7d`、絶対: `2026-03-28`, `2026-03-28T15:00`）。絶対日付は UTC
 - `--project` でプロジェクト名フィルタ
 
 ### 内容表示（show）
 
 - セッション内容を Markdown で出力
-- `--since` で直近の全セッションを一括表示
+- `--since`/`--until` で期間指定して一括表示
 - `--format markdown` でフォーマット指定
 
 
@@ -35,9 +35,13 @@ cclog import --full                   # 全件再取り込み（確認あり）
 cclog import --full --yes             # 確認なしで全件再取り込み
 cclog sessions                        # セッション一覧
 cclog sessions --since 24h            # 直近24時間
+cclog sessions --since 2026-03-28     # 3/28 以降
+cclog sessions --until 2026-03-28     # 3/28 終わりまで
+cclog sessions --since 7d --until 2h  # 直近7日間から最新2時間を除外
 cclog sessions --project Brimday      # プロジェクト名フィルタ
 cclog show <session-id>               # セッション内容を Markdown で出力
 cclog show --since 24h                # 直近24時間の全セッション
+cclog show --since 2026-03-28 --until 2026-03-29  # 3/28 の全セッション
 cclog --db /path/to/cclog.db ...      # DB パスの指定
 ```
 
