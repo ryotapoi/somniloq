@@ -212,6 +212,50 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	return result, nil
 }
 
+type ProjectRow struct {
+	ProjectDir   string
+	SessionCount int
+}
+
+func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
+	query := `SELECT s.project_dir, COUNT(*) FROM sessions s`
+
+	var conditions []string
+	var args []any
+	if filter.Since != "" {
+		conditions = append(conditions, "s.started_at >= ?")
+		args = append(args, filter.Since)
+	}
+	if filter.Until != "" {
+		conditions = append(conditions, "s.started_at < ?")
+		args = append(args, filter.Until)
+	}
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query += " GROUP BY s.project_dir ORDER BY MAX(s.started_at) DESC"
+
+	rows, err := d.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []ProjectRow{}
+	for rows.Next() {
+		var r ProjectRow
+		if err := rows.Scan(&r.ProjectDir, &r.SessionCount); err != nil {
+			return nil, err
+		}
+		result = append(result, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 type MessageRow struct {
 	UUID        string
 	Role        string

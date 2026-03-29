@@ -28,7 +28,7 @@ func main() {
 	args := flag.Args()
 	if len(args) == 0 {
 		fmt.Fprintln(os.Stderr, "usage: cclog [--db path] <command>")
-		fmt.Fprintln(os.Stderr, "commands: import, sessions, show")
+		fmt.Fprintln(os.Stderr, "commands: import, sessions, show, projects")
 		os.Exit(1)
 	}
 
@@ -39,6 +39,8 @@ func main() {
 		runSessions(*dbPath, args[1:])
 	case "show":
 		runShow(*dbPath, args[1:])
+	case "projects":
+		runProjects(*dbPath, args[1:])
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", args[0])
 		os.Exit(1)
@@ -198,6 +200,38 @@ func runShow(dbPath string, args []string) {
 	if err := formatSessions(os.Stdout, sessions, db.GetMessages); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func runProjects(dbPath string, args []string) {
+	fs := flag.NewFlagSet("projects", flag.ExitOnError)
+	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
+	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
+	fs.Parse(args)
+
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "error: unexpected arguments")
+		fmt.Fprintln(os.Stderr, "usage: cclog projects [--since <time>] [--until <time>]")
+		os.Exit(1)
+	}
+
+	db := openDB(dbPath)
+	defer db.Close()
+
+	filter, err := buildSessionFilter(*since, *until, "")
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	rows, err := db.ListProjects(filter)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
+	for _, r := range rows {
+		fmt.Fprintf(os.Stdout, "%s\t%d\n", r.ProjectDir, r.SessionCount)
 	}
 }
 

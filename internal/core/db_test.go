@@ -527,6 +527,150 @@ func TestGetSession_NotFound(t *testing.T) {
 	}
 }
 
+func TestListProjects_Empty(t *testing.T) {
+	db := testDB(t)
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Errorf("expected 0 rows, got %d", len(rows))
+	}
+}
+
+func TestListProjects_GroupByProject(t *testing.T) {
+	db := testDB(t)
+
+	// Project A: 2 sessions
+	must(t, db.UpsertSession(SessionMeta{SessionID: "a1", ProjectDir: "-Users-test-projA", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "a2", ProjectDir: "-Users-test-projA", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	// Project B: 1 session
+	must(t, db.UpsertSession(SessionMeta{SessionID: "b1", ProjectDir: "-Users-test-projB", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+
+	// Project B first (latest started_at is 14:00, A's latest is 11:00)
+	if rows[0].ProjectDir != "-Users-test-projB" {
+		t.Errorf("first row: got %s, want -Users-test-projB", rows[0].ProjectDir)
+	}
+	if rows[0].SessionCount != 1 {
+		t.Errorf("projB session count: got %d, want 1", rows[0].SessionCount)
+	}
+	if rows[1].ProjectDir != "-Users-test-projA" {
+		t.Errorf("second row: got %s, want -Users-test-projA", rows[1].ProjectDir)
+	}
+	if rows[1].SessionCount != 2 {
+		t.Errorf("projA session count: got %d, want 2", rows[1].SessionCount)
+	}
+}
+
+func TestListProjects_SinceFilter(t *testing.T) {
+	db := testDB(t)
+
+	// Old project (only old sessions)
+	must(t, db.UpsertSession(SessionMeta{SessionID: "old1", ProjectDir: "-Users-test-old", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	// New project
+	must(t, db.UpsertSession(SessionMeta{SessionID: "new1", ProjectDir: "-Users-test-new", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{Since: "2026-03-28T00:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].ProjectDir != "-Users-test-new" {
+		t.Errorf("expected -Users-test-new, got %s", rows[0].ProjectDir)
+	}
+}
+
+func TestListProjects_UntilFilter(t *testing.T) {
+	db := testDB(t)
+
+	// Early project
+	must(t, db.UpsertSession(SessionMeta{SessionID: "early1", ProjectDir: "-Users-test-early", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	// Late project (only late sessions)
+	must(t, db.UpsertSession(SessionMeta{SessionID: "late1", ProjectDir: "-Users-test-late", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{Until: "2026-03-28T12:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].ProjectDir != "-Users-test-early" {
+		t.Errorf("expected -Users-test-early, got %s", rows[0].ProjectDir)
+	}
+}
+
+func TestListProjects_SinceAndUntilFilter(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-old", StartedAt: "2026-03-28T08:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-Users-test-mid", StartedAt: "2026-03-28T12:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s3", ProjectDir: "-Users-test-new", StartedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{Since: "2026-03-28T10:00:00.000Z", Until: "2026-03-28T14:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].ProjectDir != "-Users-test-mid" {
+		t.Errorf("expected -Users-test-mid, got %s", rows[0].ProjectDir)
+	}
+}
+
+func TestListProjects_NullStartedAt(t *testing.T) {
+	db := testDB(t)
+
+	// Normal session
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-normal", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	// Session with NULL started_at (title-only)
+	must(t, db.UpdateSessionTitle("s2", "-Users-test-titleonly", "title", "2026-03-28T15:00:00Z"))
+
+	// No filter: both projects should appear
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	// Normal project first, NULL started_at project last
+	if rows[0].ProjectDir != "-Users-test-normal" {
+		t.Errorf("first row: got %s, want -Users-test-normal", rows[0].ProjectDir)
+	}
+	if rows[1].ProjectDir != "-Users-test-titleonly" {
+		t.Errorf("second row: got %s, want -Users-test-titleonly", rows[1].ProjectDir)
+	}
+
+	// With filter: NULL started_at excluded
+	rows, err = db.ListProjects(SessionFilter{Since: "2026-03-28T00:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListProjects with Since failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row with Since filter, got %d", len(rows))
+	}
+	if rows[0].ProjectDir != "-Users-test-normal" {
+		t.Errorf("expected -Users-test-normal, got %s", rows[0].ProjectDir)
+	}
+}
+
 func TestUpdateSessionAgentName(t *testing.T) {
 	db := testDB(t)
 
