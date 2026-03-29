@@ -107,14 +107,15 @@ func runSessions(dbPath string, args []string) {
 	db := openDB(dbPath)
 	defer db.Close()
 
+	now := time.Now().UTC()
 	var filter core.SessionFilter
 	if *since != "" {
-		d, err := core.ParseDuration(*since)
+		s, err := resolveTimeFlag(*since, now)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		filter.Since = time.Now().UTC().Add(-d).Format("2006-01-02T15:04:05.000Z")
+		filter.Since = s
 	}
 	filter.Project = *project
 
@@ -183,13 +184,14 @@ func runShow(dbPath string, args []string) {
 	}
 
 	// --since mode
-	d, err := core.ParseDuration(*since)
+	now := time.Now().UTC()
+	var filter core.SessionFilter
+	s, err := resolveTimeFlag(*since, now)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
-	var filter core.SessionFilter
-	filter.Since = time.Now().UTC().Add(-d).Format("2006-01-02T15:04:05.000Z")
+	filter.Since = s
 	filter.Project = *project
 
 	sessions, err := db.ListSessions(filter)
@@ -205,6 +207,14 @@ func runShow(dbPath string, args []string) {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
+}
+
+func resolveTimeFlag(value string, now time.Time) (string, error) {
+	d, err := core.ParseDuration(value)
+	if err != nil {
+		return "", err
+	}
+	return now.Add(-d).Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 var tsvReplacer = strings.NewReplacer("\t", " ", "\n", " ", "\r", " ")
