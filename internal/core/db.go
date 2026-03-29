@@ -3,6 +3,7 @@ package core
 import (
 	"database/sql"
 	"errors"
+	"strings"
 
 	_ "modernc.org/sqlite"
 )
@@ -149,6 +150,61 @@ func (d *DB) GetImportState(jsonlPath string) (*ImportState, error) {
 		return nil, err
 	}
 	return &s, nil
+}
+
+type SessionRow struct {
+	SessionID    string
+	ProjectDir   string
+	StartedAt    string
+	CustomTitle  string
+	MessageCount int
+}
+
+type SessionFilter struct {
+	Since   string // RFC3339 UTC string. Empty = no filter.
+	Project string // Empty = no filter.
+}
+
+func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
+	query := `
+		SELECT s.session_id, s.project_dir, COALESCE(s.started_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+		FROM sessions s
+		LEFT JOIN messages m ON s.session_id = m.session_id`
+
+	var conditions []string
+	var args []any
+	if filter.Since != "" {
+		conditions = append(conditions, "s.started_at >= ?")
+		args = append(args, filter.Since)
+	}
+	if filter.Project != "" {
+		conditions = append(conditions, "s.project_dir LIKE '%' || ? || '%'")
+		args = append(args, filter.Project)
+	}
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+
+	query += " GROUP BY s.session_id ORDER BY s.started_at DESC"
+
+	rows, err := d.db.Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []SessionRow{}
+	for rows.Next() {
+		var r SessionRow
+		if err := rows.Scan(&r.SessionID, &r.ProjectDir, &r.StartedAt, &r.CustomTitle, &r.MessageCount); err != nil {
+			return nil, err
+		}
+		result = append(result, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
 }
 
 func (d *DB) DeleteAll() error {
