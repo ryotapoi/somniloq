@@ -23,12 +23,27 @@ func main() {
 	defaultProjectsDir := filepath.Join(homeDir, ".claude", "projects")
 
 	dbPath := flag.String("db", defaultDB, "path to SQLite database")
+	flag.Usage = func() {
+		fmt.Fprint(os.Stderr, `Session log viewer for Claude Code
+
+Usage:
+  somniloq [flags] <command>
+
+Commands:
+  import     Import session logs from JSONL files
+  sessions   List sessions
+  show       Show session content in Markdown
+  projects   List projects
+
+Flags:
+`)
+		flag.PrintDefaults()
+	}
 	flag.Parse()
 
 	args := flag.Args()
 	if len(args) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: somniloq [--db path] <command>")
-		fmt.Fprintln(os.Stderr, "commands: import, sessions, show, projects")
+		flag.Usage()
 		os.Exit(1)
 	}
 
@@ -64,6 +79,7 @@ func runImport(dbPath, projectsDir string, args []string) {
 	fs := flag.NewFlagSet("import", flag.ExitOnError)
 	full := fs.Bool("full", false, "full re-import (delete all and re-import)")
 	yes := fs.Bool("yes", false, "skip confirmation prompt")
+	setUsage(fs, "Import session logs from JSONL files", "somniloq import [flags]")
 	fs.Parse(args)
 
 	if *full && !*yes {
@@ -105,6 +121,7 @@ func runSessions(dbPath string, args []string) {
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
+	setUsage(fs, "List sessions", "somniloq sessions [flags]")
 	fs.Parse(args)
 
 	db := openDB(dbPath)
@@ -135,6 +152,7 @@ func runShow(dbPath string, args []string) {
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
 	format := fs.String("format", "markdown", "output format (markdown)")
+	setUsage(fs, "Show session content in Markdown", "somniloq show <session-id>\n  somniloq show --since <time> [--until <time>] [--project <name>]")
 	fs.Parse(args)
 
 	if *format != "markdown" {
@@ -207,6 +225,7 @@ func runProjects(dbPath string, args []string) {
 	fs := flag.NewFlagSet("projects", flag.ExitOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
+	setUsage(fs, "List projects", "somniloq projects [flags]")
 	fs.Parse(args)
 
 	if fs.NArg() != 0 {
