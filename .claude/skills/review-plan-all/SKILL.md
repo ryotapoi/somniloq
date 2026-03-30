@@ -35,7 +35,7 @@ argument-hint: [plan-file-path]
 
 初回はそのまま、2回目以降は `--resume` をつけて呼ぶ。
 
-Codex の出力に 🔴 MUST / 🟡 SHOULD / 🔵 NIT の指摘がある場合（LGTM でない場合）、指摘をメインリポジトリの `tmp/codex-findings.md` に追記する。パスは `"$(dirname "$(git rev-parse --git-common-dir)")/tmp/codex-findings.md"` で解決する（worktree でもメインリポに書く）。ファイルやディレクトリが存在しない場合は作成する。
+Codex の出力に 🔴 MUST / 🟡 SHOULD / 🔵 NIT の指摘がある場合（LGTM でない場合）、指摘を `tmp/codex-findings.md` に追記する。ファイルやディレクトリが存在しない場合は作成する。
 
 ```markdown
 ## YYYY-MM-DD plan: <変更の概要（1行）>
