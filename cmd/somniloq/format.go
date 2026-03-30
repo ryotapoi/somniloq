@@ -4,13 +4,22 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
+func formatLocalTime(utcStr string, loc *time.Location) string {
+	t, err := time.Parse(time.RFC3339Nano, utcStr)
+	if err != nil {
+		return utcStr
+	}
+	return t.In(loc).Format("2006-01-02 15:04")
+}
+
 var titleSanitizer = strings.NewReplacer("\n", " ", "\r", " ")
 
-func formatSession(w io.Writer, session core.SessionRow, messages []core.MessageRow) {
+func formatSession(w io.Writer, session core.SessionRow, messages []core.MessageRow, loc *time.Location) {
 	title := session.CustomTitle
 	if title == "" {
 		title = session.SessionID
@@ -20,7 +29,7 @@ func formatSession(w io.Writer, session core.SessionRow, messages []core.Message
 	fmt.Fprintf(w, "## %s\n\n", title)
 	fmt.Fprintf(w, "- **Session**: `%s`\n", session.SessionID)
 	fmt.Fprintf(w, "- **Project**: `%s`\n", session.ProjectDir)
-	fmt.Fprintf(w, "- **Started**: `%s`\n", session.StartedAt)
+	fmt.Fprintf(w, "- **Started**: `%s`\n", formatLocalTime(session.StartedAt, loc))
 
 	for _, msg := range messages {
 		if msg.IsSidechain {
@@ -34,7 +43,7 @@ func formatSession(w io.Writer, session core.SessionRow, messages []core.Message
 	}
 }
 
-func formatSessions(w io.Writer, sessions []core.SessionRow, getMessages func(sessionID string) ([]core.MessageRow, error)) error {
+func formatSessions(w io.Writer, sessions []core.SessionRow, getMessages func(sessionID string) ([]core.MessageRow, error), loc *time.Location) error {
 	for i, session := range sessions {
 		if i > 0 {
 			fmt.Fprint(w, "\n---\n\n")
@@ -43,7 +52,7 @@ func formatSessions(w io.Writer, sessions []core.SessionRow, getMessages func(se
 		if err != nil {
 			return err
 		}
-		formatSession(w, session, msgs)
+		formatSession(w, session, msgs, loc)
 	}
 	return nil
 }

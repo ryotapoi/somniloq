@@ -102,8 +102,8 @@ func runImport(dbPath, projectsDir string, args []string) {
 
 func runSessions(dbPath string, args []string) {
 	fs := flag.NewFlagSet("sessions", flag.ExitOnError)
-	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
-	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
+	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
+	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
 	fs.Parse(args)
 
@@ -131,8 +131,8 @@ func runSessions(dbPath string, args []string) {
 
 func runShow(dbPath string, args []string) {
 	fs := flag.NewFlagSet("show", flag.ExitOnError)
-	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
-	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
+	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
+	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
 	format := fs.String("format", "markdown", "output format (markdown)")
 	fs.Parse(args)
@@ -177,7 +177,7 @@ func runShow(dbPath string, args []string) {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		formatSession(os.Stdout, *session, messages)
+		formatSession(os.Stdout, *session, messages, time.Local)
 		return
 	}
 
@@ -197,7 +197,7 @@ func runShow(dbPath string, args []string) {
 		return
 	}
 
-	if err := formatSessions(os.Stdout, sessions, db.GetMessages); err != nil {
+	if err := formatSessions(os.Stdout, sessions, db.GetMessages, time.Local); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -205,8 +205,8 @@ func runShow(dbPath string, args []string) {
 
 func runProjects(dbPath string, args []string) {
 	fs := flag.NewFlagSet("projects", flag.ExitOnError)
-	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
-	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are UTC")
+	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
+	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	fs.Parse(args)
 
 	if fs.NArg() != 0 {
@@ -239,14 +239,14 @@ func buildSessionFilter(since, until, project string) (core.SessionFilter, error
 	now := time.Now().UTC()
 	var filter core.SessionFilter
 	if since != "" {
-		s, err := resolveTimeFlag(since, now, false)
+		s, err := resolveTimeFlag(since, now, false, time.Local)
 		if err != nil {
 			return filter, err
 		}
 		filter.Since = s
 	}
 	if until != "" {
-		u, err := resolveTimeFlag(until, now, true)
+		u, err := resolveTimeFlag(until, now, true, time.Local)
 		if err != nil {
 			return filter, err
 		}
@@ -259,13 +259,13 @@ func buildSessionFilter(since, until, project string) (core.SessionFilter, error
 	return filter, nil
 }
 
-func resolveTimeFlag(value string, now time.Time, isUntil bool) (string, error) {
-	t, dateOnly, err := core.ParseTimeRef(value, now)
+func resolveTimeFlag(value string, now time.Time, isUntil bool, loc *time.Location) (string, error) {
+	t, dateOnly, err := core.ParseTimeRef(value, now, loc)
 	if err != nil {
 		return "", err
 	}
 	if isUntil && dateOnly {
-		t = t.Add(24 * time.Hour)
+		t = t.AddDate(0, 0, 1)
 	}
 	return t.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }

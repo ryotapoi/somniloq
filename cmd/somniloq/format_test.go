@@ -4,9 +4,35 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
+
+func TestFormatLocalTime(t *testing.T) {
+	jst := time.FixedZone("JST", 9*60*60)
+
+	tests := []struct {
+		name  string
+		input string
+		loc   *time.Location
+		want  string
+	}{
+		{"RFC3339Nano", "2026-03-28T10:00:00.123Z", jst, "2026-03-28 19:00"},
+		{"RFC3339", "2026-03-28T10:00:00Z", jst, "2026-03-28 19:00"},
+		{"UTC loc", "2026-03-28T10:00:00Z", time.UTC, "2026-03-28 10:00"},
+		{"invalid", "invalid", jst, "invalid"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatLocalTime(tt.input, tt.loc)
+			if got != tt.want {
+				t.Errorf("formatLocalTime(%q) = %q, want %q", tt.input, got, tt.want)
+			}
+		})
+	}
+}
 
 func TestFormatSession_WithTitle(t *testing.T) {
 	var buf bytes.Buffer
@@ -23,7 +49,7 @@ func TestFormatSession_WithTitle(t *testing.T) {
 		{UUID: "m2", Role: "assistant", Content: "done", Timestamp: "2026-03-28T10:01:00Z"},
 	}
 
-	formatSession(&buf, session, messages)
+	formatSession(&buf, session, messages, time.UTC)
 	got := buf.String()
 
 	// Check h2 uses custom_title
@@ -36,7 +62,7 @@ func TestFormatSession_WithTitle(t *testing.T) {
 	if !strings.Contains(got, "- **Project**: `-Users-test-proj`") {
 		t.Errorf("expected project in metadata, got:\n%s", got)
 	}
-	if !strings.Contains(got, "- **Started**: `2026-03-28T10:00:00Z`") {
+	if !strings.Contains(got, "- **Started**: `2026-03-28 10:00`") {
 		t.Errorf("expected started_at in metadata, got:\n%s", got)
 	}
 	if !strings.Contains(got, "### User\n") {
@@ -62,7 +88,7 @@ func TestFormatSession_EmptyTitle(t *testing.T) {
 		StartedAt:  "2026-03-28T10:00:00Z",
 	}
 
-	formatSession(&buf, session, nil)
+	formatSession(&buf, session, nil, time.UTC)
 	got := buf.String()
 
 	// Should fallback to session_id
@@ -85,7 +111,7 @@ func TestFormatSession_SkipsSidechain(t *testing.T) {
 		{UUID: "m3", Role: "assistant", Content: "visible reply", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false},
 	}
 
-	formatSession(&buf, session, messages)
+	formatSession(&buf, session, messages, time.UTC)
 	got := buf.String()
 
 	if strings.Contains(got, "sidechain thought") {
@@ -117,7 +143,7 @@ func TestFormatSessions_Multiple(t *testing.T) {
 		"s2": {{UUID: "m2", Role: "user", Content: "world", Timestamp: "2026-03-28T10:00:00Z"}},
 	}
 
-	if err := formatSessions(&buf, sessions, stubGetMessages(msgs)); err != nil {
+	if err := formatSessions(&buf, sessions, stubGetMessages(msgs), time.UTC); err != nil {
 		t.Fatalf("formatSessions failed: %v", err)
 	}
 	got := buf.String()
@@ -149,7 +175,7 @@ func TestFormatSessions_Single(t *testing.T) {
 		"s1": {{UUID: "m1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}},
 	}
 
-	if err := formatSessions(&buf, sessions, stubGetMessages(msgs)); err != nil {
+	if err := formatSessions(&buf, sessions, stubGetMessages(msgs), time.UTC); err != nil {
 		t.Fatalf("formatSessions failed: %v", err)
 	}
 	got := buf.String()
@@ -169,7 +195,7 @@ func TestFormatSession_TitleWithNewline(t *testing.T) {
 		CustomTitle: "line1\nline2",
 	}
 
-	formatSession(&buf, session, nil)
+	formatSession(&buf, session, nil, time.UTC)
 	got := buf.String()
 
 	// Newline in title should be replaced with space
