@@ -8,5 +8,9 @@
 - [x] `--until` オプション追加（範囲指定）
 - [x] `projects` コマンド（プロジェクト一覧 + セッション数、`--since` 対応）
 - [x] cclog → somniloq リネーム（モジュールパス、パッケージ名、DB パス、ドキュメント、スキル名）
+- [ ] ローカルタイムゾーン対応（--since/--until の入力と sessions/show の出力をローカルタイムに）
+- [ ] サブコマンド --help（`somniloq sessions --help` 等でフラグ一覧表示）
+- [ ] show --summary（各セッションの冒頭だけ出すモード）
+- [ ] sessions --short（プロジェクト名を最後のパス要素のみに）
 - [ ] サンプルスキル（examples/skills/somniloq/）
 - [ ] README.md
