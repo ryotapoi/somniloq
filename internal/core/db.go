@@ -294,6 +294,25 @@ func (d *DB) GetMessages(sessionID string) ([]MessageRow, error) {
 	if err != nil {
 		return nil, err
 	}
+	return scanMessages(rows)
+}
+
+func (d *DB) GetSummaryMessages(sessionID string) ([]MessageRow, error) {
+	rows, err := d.db.Query(`
+		SELECT uuid, role, content, timestamp, is_sidechain
+		FROM messages
+		WHERE session_id = ? AND role = 'user' AND is_sidechain = 0 AND TRIM(content) <> ''
+		ORDER BY timestamp ASC
+		LIMIT 1`,
+		sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return scanMessages(rows)
+}
+
+func scanMessages(rows *sql.Rows) ([]MessageRow, error) {
 	defer rows.Close()
 
 	result := []MessageRow{}

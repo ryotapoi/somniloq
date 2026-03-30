@@ -151,6 +151,7 @@ func runShow(dbPath string, args []string) {
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
+	summary := fs.Bool("summary", false, "show only the first user message of each session")
 	format := fs.String("format", "markdown", "output format (markdown)")
 	setUsage(fs, "Show session content in Markdown", "somniloq show <session-id>\n  somniloq show --since <time> [--until <time>] [--project <name>]")
 	fs.Parse(args)
@@ -160,9 +161,11 @@ func runShow(dbPath string, args []string) {
 		os.Exit(1)
 	}
 
+	const showUsage = "usage: somniloq show <session-id> | somniloq show [--since <time>] [--until <time>] [--summary]"
+
 	if fs.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "error: too many arguments")
-		fmt.Fprintln(os.Stderr, "usage: somniloq show <session-id> | somniloq show [--since <time>] [--until <time>]")
+		fmt.Fprintln(os.Stderr, showUsage)
 		os.Exit(1)
 	}
 
@@ -173,12 +176,17 @@ func runShow(dbPath string, args []string) {
 		os.Exit(1)
 	}
 	if sessionID == "" && *since == "" && *until == "" {
-		fmt.Fprintln(os.Stderr, "usage: somniloq show <session-id> | somniloq show [--since <time>] [--until <time>]")
+		fmt.Fprintln(os.Stderr, showUsage)
 		os.Exit(1)
 	}
 
 	db := openDB(dbPath)
 	defer db.Close()
+
+	getMessages := db.GetMessages
+	if *summary {
+		getMessages = db.GetSummaryMessages
+	}
 
 	if sessionID != "" {
 		session, err := db.GetSession(sessionID)
@@ -190,7 +198,7 @@ func runShow(dbPath string, args []string) {
 			fmt.Fprintf(os.Stderr, "error: session not found: %s\n", sessionID)
 			os.Exit(1)
 		}
-		messages, err := db.GetMessages(sessionID)
+		messages, err := getMessages(sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -215,7 +223,7 @@ func runShow(dbPath string, args []string) {
 		return
 	}
 
-	if err := formatSessions(os.Stdout, sessions, db.GetMessages, time.Local); err != nil {
+	if err := formatSessions(os.Stdout, sessions, getMessages, time.Local); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}

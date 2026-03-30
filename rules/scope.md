@@ -30,6 +30,7 @@
 
 - セッション内容を Markdown で出力
 - `--since`/`--until` で期間指定して一括表示
+- `--summary` で各セッションの最初のユーザーメッセージのみ表示
 - `--format markdown` でフォーマット指定
 
 
@@ -48,6 +49,7 @@ somniloq sessions --project Brimday      # プロジェクト名フィルタ
 somniloq show <session-id>               # セッション内容を Markdown で出力
 somniloq show --since 24h                # 直近24時間の全セッション
 somniloq show --since 2026-03-28 --until 2026-03-29  # 3/28 の全セッション
+somniloq show --summary --since 24h                  # 直近24時間の各セッションの冒頭のみ
 somniloq projects                        # プロジェクト一覧
 somniloq projects --since 7d             # 直近7日間にセッションがあるプロジェクト
 somniloq --db /path/to/somniloq.db ...      # DB パスの指定

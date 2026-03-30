@@ -671,6 +671,106 @@ func TestListProjects_NullStartedAt(t *testing.T) {
 	}
 }
 
+func TestGetSummaryMessages_Empty(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	msgs, err := db.GetSummaryMessages("s1")
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages, got %d", len(msgs))
+	}
+}
+
+func TestGetSummaryMessages_ReturnsFirstUserMessage(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "fix the bug", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "assistant", Content: "done", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m3", SessionID: "s1", Role: "user", Content: "thanks", Timestamp: "2026-03-28T10:02:00Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1")
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].UUID != "m1" {
+		t.Errorf("UUID: got %s, want m1", msgs[0].UUID)
+	}
+	if msgs[0].Role != "user" {
+		t.Errorf("Role: got %s, want user", msgs[0].Role)
+	}
+	if msgs[0].Content != "fix the bug" {
+		t.Errorf("Content: got %s, want 'fix the bug'", msgs[0].Content)
+	}
+	if msgs[0].Timestamp != "2026-03-28T10:00:00Z" {
+		t.Errorf("Timestamp: got %s, want 2026-03-28T10:00:00Z", msgs[0].Timestamp)
+	}
+	if msgs[0].IsSidechain != false {
+		t.Errorf("IsSidechain: got %v, want false", msgs[0].IsSidechain)
+	}
+}
+
+func TestGetSummaryMessages_SkipsSidechain(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "sidechain msg", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "real msg", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
+
+	msgs, err := db.GetSummaryMessages("s1")
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].UUID != "m2" {
+		t.Errorf("expected m2 (non-sidechain), got %s", msgs[0].UUID)
+	}
+}
+
+func TestGetSummaryMessages_NoUserMessages(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "assistant", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1")
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages, got %d", len(msgs))
+	}
+}
+
+func TestGetSummaryMessages_SkipsEmptyContent(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "   ", Timestamp: "2026-03-28T10:00:30Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m3", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1")
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].UUID != "m3" {
+		t.Errorf("expected m3 (non-empty content), got %s", msgs[0].UUID)
+	}
+}
+
 func TestUpdateSessionAgentName(t *testing.T) {
 	db := testDB(t)
 

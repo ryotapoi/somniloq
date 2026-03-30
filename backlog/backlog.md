@@ -10,7 +10,7 @@
 - [x] cclog → somniloq リネーム（モジュールパス、パッケージ名、DB パス、ドキュメント、スキル名）
 - [x] ローカルタイムゾーン対応（--since/--until の入力と sessions/show の出力をローカルタイムに）
 - [x] サブコマンド --help（`somniloq sessions --help` 等でフラグ一覧表示）
-- [ ] show --summary（各セッションの冒頭だけ出すモード）
+- [x] show --summary（各セッションの冒頭だけ出すモード）
 - [ ] sessions --short（プロジェクト名を最後のパス要素のみに）
 - [ ] サンプルスキル（examples/skills/somniloq/）
 - [ ] README.md
