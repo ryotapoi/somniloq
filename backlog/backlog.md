@@ -12,6 +12,6 @@
 - [x] サブコマンド --help（`somniloq sessions --help` 等でフラグ一覧表示）
 - [x] show --summary（各セッションの冒頭だけ出すモード）
 - [x] sessions --short（プロジェクト名を最後のパス要素のみに）
-- [ ] show で content が空のメッセージ（tool_use のみ等）をスキップする
+- [x] show で content が空のメッセージ（tool_use のみ等）をスキップする
 - [ ] サンプルスキル（examples/skills/somniloq/）
 - [ ] README.md
