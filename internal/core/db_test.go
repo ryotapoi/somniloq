@@ -787,3 +787,55 @@ func TestUpdateSessionAgentName(t *testing.T) {
 		t.Errorf("got %q, want %q", name, "agent1")
 	}
 }
+
+func TestListSessions_CWD(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-proj", CWD: "/Users/test/proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].CWD != "/Users/test/proj" {
+		t.Errorf("CWD: got %q, want %q", rows[0].CWD, "/Users/test/proj")
+	}
+}
+
+func TestGetSession_CWD(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-proj", CWD: "/Users/test/proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	got, err := db.GetSession("s1")
+	if err != nil {
+		t.Fatalf("GetSession failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil session")
+	}
+	if got.CWD != "/Users/test/proj" {
+		t.Errorf("CWD: got %q, want %q", got.CWD, "/Users/test/proj")
+	}
+}
+
+func TestListSessions_CWD_Null(t *testing.T) {
+	db := testDB(t)
+
+	// Session with no CWD (title-only)
+	must(t, db.UpdateSessionTitle("s1", "-test", "title", "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].CWD != "" {
+		t.Errorf("CWD should be empty for NULL cwd, got %q", rows[0].CWD)
+	}
+}

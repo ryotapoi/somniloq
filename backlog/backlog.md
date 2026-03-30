@@ -11,6 +11,6 @@
 - [x] ローカルタイムゾーン対応（--since/--until の入力と sessions/show の出力をローカルタイムに）
 - [x] サブコマンド --help（`somniloq sessions --help` 等でフラグ一覧表示）
 - [x] show --summary（各セッションの冒頭だけ出すモード）
-- [ ] sessions --short（プロジェクト名を最後のパス要素のみに）
+- [x] sessions --short（プロジェクト名を最後のパス要素のみに）
 - [ ] サンプルスキル（examples/skills/somniloq/）
 - [ ] README.md

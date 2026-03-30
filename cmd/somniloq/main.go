@@ -121,6 +121,7 @@ func runSessions(dbPath string, args []string) {
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
+	short := fs.Bool("short", false, "show only the last path element of project name")
 	setUsage(fs, "List sessions", "somniloq sessions [flags]")
 	fs.Parse(args)
 
@@ -141,8 +142,12 @@ func runSessions(dbPath string, args []string) {
 
 	for _, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
+		proj := r.ProjectDir
+		if *short {
+			proj = shortenProject(r.CWD, r.ProjectDir)
+		}
 		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%d\n",
-			r.SessionID, r.StartedAt, r.ProjectDir, title, r.MessageCount)
+			r.SessionID, r.StartedAt, proj, title, r.MessageCount)
 	}
 }
 

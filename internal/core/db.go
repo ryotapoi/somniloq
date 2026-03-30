@@ -155,6 +155,7 @@ func (d *DB) GetImportState(jsonlPath string) (*ImportState, error) {
 type SessionRow struct {
 	SessionID    string
 	ProjectDir   string
+	CWD          string
 	StartedAt    string
 	CustomTitle  string
 	MessageCount int
@@ -168,7 +169,7 @@ type SessionFilter struct {
 
 func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	query := `
-		SELECT s.session_id, s.project_dir, COALESCE(s.started_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+		SELECT s.session_id, s.project_dir, COALESCE(s.cwd, ''), COALESCE(s.started_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
 		FROM sessions s
 		LEFT JOIN messages m ON s.session_id = m.session_id`
 
@@ -201,7 +202,7 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	result := []SessionRow{}
 	for rows.Next() {
 		var r SessionRow
-		if err := rows.Scan(&r.SessionID, &r.ProjectDir, &r.StartedAt, &r.CustomTitle, &r.MessageCount); err != nil {
+		if err := rows.Scan(&r.SessionID, &r.ProjectDir, &r.CWD, &r.StartedAt, &r.CustomTitle, &r.MessageCount); err != nil {
 			return nil, err
 		}
 		result = append(result, r)
@@ -267,13 +268,13 @@ type MessageRow struct {
 func (d *DB) GetSession(sessionID string) (*SessionRow, error) {
 	var r SessionRow
 	err := d.db.QueryRow(`
-		SELECT s.session_id, s.project_dir, COALESCE(s.started_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+		SELECT s.session_id, s.project_dir, COALESCE(s.cwd, ''), COALESCE(s.started_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
 		FROM sessions s
 		LEFT JOIN messages m ON s.session_id = m.session_id
 		WHERE s.session_id = ?
 		GROUP BY s.session_id`,
 		sessionID,
-	).Scan(&r.SessionID, &r.ProjectDir, &r.StartedAt, &r.CustomTitle, &r.MessageCount)
+	).Scan(&r.SessionID, &r.ProjectDir, &r.CWD, &r.StartedAt, &r.CustomTitle, &r.MessageCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

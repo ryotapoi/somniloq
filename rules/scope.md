@@ -19,6 +19,7 @@
 - セッション一覧を表示
 - `--since`/`--until` で時刻フィルタ（相対: `24h`, `7d`、絶対: `2026-03-28`, `2026-03-28T15:00`）。絶対日付はローカルタイム
 - `--project` でプロジェクト名フィルタ
+- `--short` でプロジェクト名を最後のパス要素のみに短縮表示（`cwd` から取得、worktree 対応）
 
 ### プロジェクト一覧（projects）
 
@@ -46,6 +47,7 @@ somniloq sessions --since 2026-03-28     # 3/28 以降
 somniloq sessions --until 2026-03-28     # 3/28 終わりまで
 somniloq sessions --since 7d --until 2h  # 直近7日間から最新2時間を除外
 somniloq sessions --project Brimday      # プロジェクト名フィルタ
+somniloq sessions --short                # プロジェクト名を短縮表示
 somniloq show <session-id>               # セッション内容を Markdown で出力
 somniloq show --since 24h                # 直近24時間の全セッション
 somniloq show --since 2026-03-28 --until 2026-03-29  # 3/28 の全セッション
