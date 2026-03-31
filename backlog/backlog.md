@@ -16,6 +16,6 @@
 - [x] import 時に content が空のメッセージを保存しない（show 側のスキップを不要にする）
 - [ ] `sessions` の出力タイムスタンプをローカルタイムにする（入力は対応済み、出力が UTC のまま）
 - [ ] `projects` に `--short` フラグ追加（`sessions --short` と同様、出力時に短縮）
-- [ ] `show` の Project 表記を短縮する（`--short` フラグまたはデフォルト動作）
+- [x] `show` の Project 表記を短縮する（`--short` フラグまたはデフォルト動作）
 - [ ] サンプルスキル（examples/skills/somniloq/）— CLI 変更後に反映してコミット
 - [ ] README.md

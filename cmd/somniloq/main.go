@@ -156,6 +156,7 @@ func runShow(dbPath string, args []string) {
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
+	short := fs.Bool("short", false, "show only the last path element of project name")
 	summary := fs.Bool("summary", false, "show only the first user message of each session")
 	format := fs.String("format", "markdown", "output format (markdown)")
 	setUsage(fs, "Show session content in Markdown", "somniloq show <session-id>\n  somniloq show --since <time> [--until <time>] [--project <name>]")
@@ -166,7 +167,7 @@ func runShow(dbPath string, args []string) {
 		os.Exit(1)
 	}
 
-	const showUsage = "usage: somniloq show <session-id> | somniloq show [--since <time>] [--until <time>] [--summary]"
+	const showUsage = "usage: somniloq show <session-id> [--short] | somniloq show [--since <time>] [--until <time>] [--project <name>] [--summary] [--short]"
 
 	if fs.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "error: too many arguments")
@@ -203,6 +204,9 @@ func runShow(dbPath string, args []string) {
 			fmt.Fprintf(os.Stderr, "error: session not found: %s\n", sessionID)
 			os.Exit(1)
 		}
+		if *short {
+			session.ProjectDir = shortenProject(session.CWD, session.ProjectDir)
+		}
 		messages, err := getMessages(sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -226,6 +230,12 @@ func runShow(dbPath string, args []string) {
 	}
 	if len(sessions) == 0 {
 		return
+	}
+
+	if *short {
+		for i := range sessions {
+			sessions[i].ProjectDir = shortenProject(sessions[i].CWD, sessions[i].ProjectDir)
+		}
 	}
 
 	if err := formatSessions(os.Stdout, sessions, getMessages, time.Local); err != nil {
