@@ -248,12 +248,13 @@ func runProjects(dbPath string, args []string) {
 	fs := flag.NewFlagSet("projects", flag.ExitOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
+	short := fs.Bool("short", false, "shorten project names to last path element")
 	setUsage(fs, "List projects", "somniloq projects [flags]")
 	fs.Parse(args)
 
 	if fs.NArg() != 0 {
 		fmt.Fprintln(os.Stderr, "error: unexpected arguments")
-		fmt.Fprintln(os.Stderr, "usage: somniloq projects [--since <time>] [--until <time>]")
+		fmt.Fprintln(os.Stderr, "usage: somniloq projects [--since <time>] [--until <time>] [--short]")
 		os.Exit(1)
 	}
 
@@ -273,7 +274,11 @@ func runProjects(dbPath string, args []string) {
 	}
 
 	for _, r := range rows {
-		fmt.Fprintf(os.Stdout, "%s\t%d\n", r.ProjectDir, r.SessionCount)
+		name := r.ProjectDir
+		if *short {
+			name = shortenProject(r.CWD, r.ProjectDir)
+		}
+		fmt.Fprintf(os.Stdout, "%s\t%d\n", name, r.SessionCount)
 	}
 }
 

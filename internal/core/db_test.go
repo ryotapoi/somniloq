@@ -671,6 +671,80 @@ func TestListProjects_NullStartedAt(t *testing.T) {
 	}
 }
 
+func TestListProjects_CWD(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "s1",
+		ProjectDir: "-Users-test-projA",
+		CWD:        "/Users/test/projA",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].CWD != "/Users/test/projA" {
+		t.Errorf("CWD: got %q, want %q", rows[0].CWD, "/Users/test/projA")
+	}
+}
+
+func TestListProjects_CWD_LatestSession(t *testing.T) {
+	db := testDB(t)
+
+	// Same project, different cwds; older session has alphabetically later cwd
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "s1",
+		ProjectDir: "-Users-test-proj",
+		CWD:        "/Users/test/proj/sub",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "s2",
+		ProjectDir: "-Users-test-proj",
+		CWD:        "/Users/test/proj",
+		StartedAt:  "2026-03-28T11:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	// Latest session (s2, started at 11:00) has cwd "/Users/test/proj"
+	if rows[0].CWD != "/Users/test/proj" {
+		t.Errorf("CWD: got %q, want %q", rows[0].CWD, "/Users/test/proj")
+	}
+}
+
+func TestListProjects_CWD_NullReturnsEmpty(t *testing.T) {
+	db := testDB(t)
+
+	// Session with no CWD (empty string → stored as NULL or empty)
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "s1",
+		ProjectDir: "-Users-test-proj",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].CWD != "" {
+		t.Errorf("CWD: got %q, want empty string", rows[0].CWD)
+	}
+}
+
 func TestGetSummaryMessages_Empty(t *testing.T) {
 	db := testDB(t)
 

@@ -216,10 +216,18 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 type ProjectRow struct {
 	ProjectDir   string
 	SessionCount int
+	CWD          string
 }
 
 func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
-	query := `SELECT s.project_dir, COUNT(*) FROM sessions s`
+	query := `SELECT s.project_dir, COUNT(*),
+		COALESCE((
+			SELECT s2.cwd FROM sessions s2
+			WHERE s2.project_dir = s.project_dir
+				AND s2.cwd IS NOT NULL AND s2.cwd != ''
+			ORDER BY s2.started_at DESC LIMIT 1
+		), '')
+	FROM sessions s`
 
 	var conditions []string
 	var args []any
@@ -246,7 +254,7 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	result := []ProjectRow{}
 	for rows.Next() {
 		var r ProjectRow
-		if err := rows.Scan(&r.ProjectDir, &r.SessionCount); err != nil {
+		if err := rows.Scan(&r.ProjectDir, &r.SessionCount, &r.CWD); err != nil {
 			return nil, err
 		}
 		result = append(result, r)
