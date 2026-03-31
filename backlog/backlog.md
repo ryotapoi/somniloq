@@ -13,5 +13,6 @@
 - [x] show --summary（各セッションの冒頭だけ出すモード）
 - [x] sessions --short（プロジェクト名を最後のパス要素のみに）
 - [x] show で content が空のメッセージ（tool_use のみ等）をスキップする
+- [ ] import 時に content が空のメッセージを保存しない（show 側のスキップを不要にする）
 - [ ] サンプルスキル（examples/skills/somniloq/）
 - [ ] README.md
