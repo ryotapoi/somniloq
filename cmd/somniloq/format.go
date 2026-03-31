@@ -35,9 +35,6 @@ func formatSession(w io.Writer, session core.SessionRow, messages []core.Message
 		if msg.IsSidechain {
 			continue
 		}
-		if strings.TrimSpace(msg.Content) == "" {
-			continue
-		}
 		heading := msg.Role
 		if len(heading) > 0 {
 			heading = strings.ToUpper(heading[:1]) + heading[1:]

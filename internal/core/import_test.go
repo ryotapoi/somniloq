@@ -143,6 +143,61 @@ func TestProcessFile_NoTrailingNewline(t *testing.T) {
 	}
 }
 
+func TestProcessFile_SkipsEmptyContent(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	// tool_use only message: ExtractText returns "" for this content
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}}
+`
+	path := filepath.Join(dir, "s1.jsonl")
+	os.WriteFile(path, []byte(jsonl), 0o644)
+
+	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	_, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
+	if err != nil {
+		t.Fatalf("processFile failed: %v", err)
+	}
+
+	// Only the user message should be saved (tool_use-only assistant message skipped)
+	var msgCount int
+	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&msgCount)
+	if msgCount != 1 {
+		t.Errorf("messages: got %d, want 1 (empty content skipped)", msgCount)
+	}
+
+	// Session should still be created (upsertSession called for all messages)
+	var sessCount int
+	db.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id='s1'").Scan(&sessCount)
+	if sessCount != 1 {
+		t.Errorf("session should exist even for empty content messages")
+	}
+}
+
+func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":"   \n  "}}
+`
+	path := filepath.Join(dir, "s1.jsonl")
+	os.WriteFile(path, []byte(jsonl), 0o644)
+
+	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	_, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
+	if err != nil {
+		t.Fatalf("processFile failed: %v", err)
+	}
+
+	var msgCount int
+	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&msgCount)
+	if msgCount != 1 {
+		t.Errorf("messages: got %d, want 1 (whitespace-only content skipped)", msgCount)
+	}
+}
+
 func TestImport_Incremental(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()

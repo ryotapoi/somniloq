@@ -145,6 +145,9 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 				if uerr := upsertSession(tx, meta, importedAt); uerr != nil {
 					return offset, fmt.Errorf("upsert session: %w", uerr)
 				}
+				if strings.TrimSpace(msg.Content) == "" {
+					continue
+				}
 				if ierr := insertMessage(tx, *msg); ierr != nil {
 					return offset, fmt.Errorf("insert message: %w", ierr)
 				}

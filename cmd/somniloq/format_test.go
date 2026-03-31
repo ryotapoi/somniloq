@@ -185,58 +185,6 @@ func TestFormatSessions_Single(t *testing.T) {
 	}
 }
 
-func TestFormatSession_SkipsEmptyContent(t *testing.T) {
-	var buf bytes.Buffer
-
-	session := core.SessionRow{
-		SessionID:  "s1",
-		ProjectDir: "-test",
-		StartedAt:  "2026-03-28T10:00:00Z",
-	}
-	messages := []core.MessageRow{
-		{UUID: "m1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"},
-		{UUID: "m2", Role: "assistant", Content: "", Timestamp: "2026-03-28T10:00:30Z"},
-		{UUID: "m3", Role: "assistant", Content: "visible reply", Timestamp: "2026-03-28T10:01:00Z"},
-	}
-
-	formatSession(&buf, session, messages, time.UTC)
-	got := buf.String()
-
-	// Empty content assistant message should be skipped
-	assistantCount := strings.Count(got, "### Assistant")
-	if assistantCount != 1 {
-		t.Errorf("expected 1 Assistant heading (empty content skipped), got %d:\n%s", assistantCount, got)
-	}
-	if !strings.Contains(got, "visible reply") {
-		t.Errorf("expected non-empty assistant message, got:\n%s", got)
-	}
-}
-
-func TestFormatSession_SkipsWhitespaceOnlyContent(t *testing.T) {
-	var buf bytes.Buffer
-
-	session := core.SessionRow{
-		SessionID:  "s1",
-		ProjectDir: "-test",
-		StartedAt:  "2026-03-28T10:00:00Z",
-	}
-	messages := []core.MessageRow{
-		{UUID: "m1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"},
-		{UUID: "m2", Role: "assistant", Content: "   \n  ", Timestamp: "2026-03-28T10:00:30Z"},
-	}
-
-	formatSession(&buf, session, messages, time.UTC)
-	got := buf.String()
-
-	// Whitespace-only content should be skipped
-	if strings.Contains(got, "### Assistant") {
-		t.Errorf("whitespace-only assistant message should be skipped, got:\n%s", got)
-	}
-	if !strings.Contains(got, "### User") {
-		t.Errorf("expected User heading, got:\n%s", got)
-	}
-}
-
 func TestFormatSession_TitleWithNewline(t *testing.T) {
 	var buf bytes.Buffer
 

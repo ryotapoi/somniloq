@@ -302,7 +302,7 @@ func (d *DB) GetSummaryMessages(sessionID string) ([]MessageRow, error) {
 	rows, err := d.db.Query(`
 		SELECT uuid, role, content, timestamp, is_sidechain
 		FROM messages
-		WHERE session_id = ? AND role = 'user' AND is_sidechain = 0 AND TRIM(content) <> ''
+		WHERE session_id = ? AND role = 'user' AND is_sidechain = 0
 		ORDER BY timestamp ASC
 		LIMIT 1`,
 		sessionID,

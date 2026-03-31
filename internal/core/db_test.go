@@ -751,26 +751,6 @@ func TestGetSummaryMessages_NoUserMessages(t *testing.T) {
 	}
 }
 
-func TestGetSummaryMessages_SkipsEmptyContent(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "   ", Timestamp: "2026-03-28T10:00:30Z"}))
-	must(t, db.InsertMessage(ParsedMessage{UUID: "m3", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
-
-	msgs, err := db.GetSummaryMessages("s1")
-	if err != nil {
-		t.Fatalf("GetSummaryMessages failed: %v", err)
-	}
-	if len(msgs) != 1 {
-		t.Fatalf("expected 1 message, got %d", len(msgs))
-	}
-	if msgs[0].UUID != "m3" {
-		t.Errorf("expected m3 (non-empty content), got %s", msgs[0].UUID)
-	}
-}
-
 func TestUpdateSessionAgentName(t *testing.T) {
 	db := testDB(t)
 
