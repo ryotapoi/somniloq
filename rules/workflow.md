@@ -4,6 +4,12 @@ IMPORTANT: 以下のフローを必ずこの順番で実行すること。ステ
 
 ## Step 1: 計画（プランモード）
 
+### worktree チェック（worktree セッション時のみ）
+
+Environment セクションの Primary working directory が `.claude/worktrees/` 配下のパスを指していることを確認する。メインリポジトリのパスを指していたら、作業を中断してユーザーに「Primary working directory がメインリポジトリを指しています。`claude -w` で再起動してください」と報告する。
+
+チェック結果をユーザーに出力すること: 「worktree: true/false, primary_working_directory: <パス>, check: ok/ng」
+
 プランを書く前に以下を確認する:
 - 変更対象のコードを Read で読み、現在の実装を把握する
 - 変更対象から呼び出している・呼び出されている関連コードを確認する
@@ -30,6 +36,12 @@ EnterPlanMode でプランを作成する。
 レビュー完了後に ExitPlanMode を呼ぶ。
 
 ## Step 3: 実装
+
+### worktree チェック（worktree セッション時のみ）
+
+Environment セクションの Primary working directory が `.claude/worktrees/` 配下のパスを指していることを確認する。メインリポジトリのパスを指していたら、作業を中断してユーザーに「Primary working directory がメインリポジトリを指しています。`claude -w` で再起動してください」と報告する。
+
+チェック結果をユーザーに出力すること: 「worktree: true/false, primary_working_directory: <パス>, check: ok/ng」
 
 プラン承認後、実装に入る前に以下を確認する:
 - `rules/` と `references/knowledge.md` を Read で読み、関連する知見がないか確認する
