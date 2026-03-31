@@ -1,45 +1,165 @@
 package main
 
-import "testing"
+import (
+	"reflect"
+	"testing"
 
-func TestShortenProject_NormalPath(t *testing.T) {
-	got := shortenProject("/Users/ryota/Sources/myproject", "-Users-ryota-Sources-myproject")
-	if got != "myproject" {
-		t.Errorf("got %q, want %q", got, "myproject")
+	"github.com/ryotapoi/somniloq/internal/core"
+)
+
+func TestNormalizeProjectDir(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "normal path",
+			in:   "-Users-ryota-Sources-Brimday",
+			want: "-Users-ryota-Sources-Brimday",
+		},
+		{
+			name: "worktree path",
+			in:   "-Users-ryota-Sources-Brimday--claude-worktrees-cheerful-sprouting-globe",
+			want: "-Users-ryota-Sources-Brimday",
+		},
+		{
+			name: "empty string",
+			in:   "",
+			want: "",
+		},
+		{
+			name: "marker at end",
+			in:   "-Users-ryota-Sources-Brimday--claude-worktrees-",
+			want: "-Users-ryota-Sources-Brimday",
+		},
+		{
+			name: "multiple markers",
+			in:   "-Users-ryota--claude-worktrees-foo--claude-worktrees-bar",
+			want: "-Users-ryota",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := normalizeProjectDir(tt.in)
+			if got != tt.want {
+				t.Errorf("normalizeProjectDir(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }
 
-func TestShortenProject_EmptyCWD(t *testing.T) {
-	got := shortenProject("", "-Users-test-proj")
-	if got != "-Users-test-proj" {
-		t.Errorf("got %q, want %q", got, "-Users-test-proj")
+func TestShortenProject(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "normal path",
+			in:   "-Users-ryota-Sources-Brimday",
+			want: "Brimday",
+		},
+		{
+			name: "worktree path",
+			in:   "-Users-ryota-Sources-Brimday--claude-worktrees-cheerful-sprouting-globe",
+			want: "Brimday",
+		},
+		{
+			name: "hyphenated folder name",
+			in:   "-Users-ryota-Sources-202512-phase2",
+			want: "phase2",
+		},
+		{
+			name: "empty string",
+			in:   "",
+			want: "",
+		},
+		{
+			name: "dash only",
+			in:   "-",
+			want: "-",
+		},
+		{
+			name: "no dash",
+			in:   "Brimday",
+			want: "Brimday",
+		},
+		{
+			name: "marker at end",
+			in:   "-Users-ryota-Sources-Brimday--claude-worktrees-",
+			want: "Brimday",
+		},
+		{
+			name: "leading dash only",
+			in:   "-Brimday",
+			want: "Brimday",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := shortenProject(tt.in)
+			if got != tt.want {
+				t.Errorf("shortenProject(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
 	}
 }
 
-func TestShortenProject_WorktreePath(t *testing.T) {
-	got := shortenProject("/Users/ryota/Sources/myproject/.claude/worktrees/xyz", "-Users-ryota-Sources-myproject")
-	if got != "myproject" {
-		t.Errorf("got %q, want %q", got, "myproject")
+func TestMergeProjects(t *testing.T) {
+	tests := []struct {
+		name string
+		in   []core.ProjectRow
+		want []core.ProjectRow
+	}{
+		{
+			name: "root and worktree merged",
+			in: []core.ProjectRow{
+				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 5},
+				{ProjectDir: "-Users-ryota-Sources-Brimday--claude-worktrees-cheerful-sprouting-globe", SessionCount: 3},
+			},
+			want: []core.ProjectRow{
+				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 8},
+			},
+		},
+		{
+			name: "worktree first then root",
+			in: []core.ProjectRow{
+				{ProjectDir: "-Users-ryota-Sources-Brimday--claude-worktrees-cheerful-sprouting-globe", SessionCount: 3},
+				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 5},
+			},
+			want: []core.ProjectRow{
+				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 8},
+			},
+		},
+		{
+			name: "no merge needed",
+			in: []core.ProjectRow{
+				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 5},
+				{ProjectDir: "-Users-ryota-Sources-Other", SessionCount: 3},
+			},
+			want: []core.ProjectRow{
+				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 5},
+				{ProjectDir: "-Users-ryota-Sources-Other", SessionCount: 3},
+			},
+		},
+		{
+			name: "empty input",
+			in:   []core.ProjectRow{},
+			want: []core.ProjectRow{},
+		},
+		{
+			name: "nil input",
+			in:   nil,
+			want: []core.ProjectRow{},
+		},
 	}
-}
-
-func TestShortenProject_HyphenatedName(t *testing.T) {
-	got := shortenProject("/Users/ryota/Sources/202512-phase2", "-Users-ryota-Sources-202512-phase2")
-	if got != "202512-phase2" {
-		t.Errorf("got %q, want %q", got, "202512-phase2")
-	}
-}
-
-func TestShortenProject_TrailingSlash(t *testing.T) {
-	got := shortenProject("/Users/ryota/Sources/myproject/", "-Users-ryota-Sources-myproject")
-	if got != "myproject" {
-		t.Errorf("got %q, want %q", got, "myproject")
-	}
-}
-
-func TestShortenProject_RootPath(t *testing.T) {
-	got := shortenProject("/", "-")
-	if got != "/" {
-		t.Errorf("got %q, want %q", got, "/")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := mergeProjects(tt.in)
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("mergeProjects() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }

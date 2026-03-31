@@ -17,7 +17,7 @@
 - [x] `sessions` の出力タイムスタンプをローカルタイムにする（入力は対応済み、出力が UTC のまま）
 - [x] `projects` に `--short` フラグ追加（`sessions --short` と同様、出力時に短縮）
 - [x] `show` の Project 表記を短縮する（`--short` フラグまたはデフォルト動作）
-- [ ] プロジェクト名表示ロジックの改善（CWD 依存をやめ project_dir のみで処理する）
+- [x] プロジェクト名表示ロジックの改善（CWD 依存をやめ project_dir のみで処理する）
   - デフォルト表示: worktree セッションは `--claude-worktrees-*` 以降を省いて root と同じ project_dir にする
   - `--short`: 上記の結果から最後の `-` 以降を取る（CWD 不使用）
   - ハイフン入りフォルダ名（`202512-phase2` 等）は `--short` で壊れうるが割り切り

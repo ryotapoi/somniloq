@@ -121,7 +121,7 @@ func runSessions(dbPath string, args []string) {
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
-	short := fs.Bool("short", false, "show only the last path element of project name")
+	short := fs.Bool("short", false, "shorten project name to last hyphen-separated element")
 	setUsage(fs, "List sessions", "somniloq sessions [flags]")
 	fs.Parse(args)
 
@@ -142,9 +142,9 @@ func runSessions(dbPath string, args []string) {
 
 	for _, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
-		proj := r.ProjectDir
+		proj := normalizeProjectDir(r.ProjectDir)
 		if *short {
-			proj = shortenProject(r.CWD, r.ProjectDir)
+			proj = shortenProject(r.ProjectDir)
 		}
 		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%d\n",
 			r.SessionID, formatLocalTime(r.StartedAt, time.Local), proj, title, r.MessageCount)
@@ -156,7 +156,7 @@ func runShow(dbPath string, args []string) {
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
-	short := fs.Bool("short", false, "show only the last path element of project name")
+	short := fs.Bool("short", false, "shorten project name to last hyphen-separated element")
 	summary := fs.Bool("summary", false, "show only the first user message of each session")
 	format := fs.String("format", "markdown", "output format (markdown)")
 	setUsage(fs, "Show session content in Markdown", "somniloq show <session-id>\n  somniloq show --since <time> [--until <time>] [--project <name>]")
@@ -204,8 +204,9 @@ func runShow(dbPath string, args []string) {
 			fmt.Fprintf(os.Stderr, "error: session not found: %s\n", sessionID)
 			os.Exit(1)
 		}
+		session.ProjectDir = normalizeProjectDir(session.ProjectDir)
 		if *short {
-			session.ProjectDir = shortenProject(session.CWD, session.ProjectDir)
+			session.ProjectDir = shortenProject(session.ProjectDir)
 		}
 		messages, err := getMessages(sessionID)
 		if err != nil {
@@ -232,9 +233,11 @@ func runShow(dbPath string, args []string) {
 		return
 	}
 
-	if *short {
-		for i := range sessions {
-			sessions[i].ProjectDir = shortenProject(sessions[i].CWD, sessions[i].ProjectDir)
+	for i := range sessions {
+		if *short {
+			sessions[i].ProjectDir = shortenProject(sessions[i].ProjectDir)
+		} else {
+			sessions[i].ProjectDir = normalizeProjectDir(sessions[i].ProjectDir)
 		}
 	}
 
@@ -248,7 +251,7 @@ func runProjects(dbPath string, args []string) {
 	fs := flag.NewFlagSet("projects", flag.ExitOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	short := fs.Bool("short", false, "shorten project names to last path element")
+	short := fs.Bool("short", false, "shorten project names to last hyphen-separated element")
 	setUsage(fs, "List projects", "somniloq projects [flags]")
 	fs.Parse(args)
 
@@ -273,10 +276,11 @@ func runProjects(dbPath string, args []string) {
 		os.Exit(1)
 	}
 
+	rows = mergeProjects(rows)
 	for _, r := range rows {
 		name := r.ProjectDir
 		if *short {
-			name = shortenProject(r.CWD, r.ProjectDir)
+			name = shortenProject(r.ProjectDir)
 		}
 		fmt.Fprintf(os.Stdout, "%s\t%d\n", name, r.SessionCount)
 	}
