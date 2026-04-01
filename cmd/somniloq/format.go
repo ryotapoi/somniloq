@@ -17,6 +17,14 @@ func formatLocalTime(utcStr string, loc *time.Location) string {
 	return t.In(loc).Format("2006-01-02 15:04")
 }
 
+func formatTimeRange(startedAt, endedAt string, loc *time.Location) string {
+	s := formatLocalTime(startedAt, loc)
+	if endedAt == "" {
+		return s + " ~"
+	}
+	return s + " ~ " + formatLocalTime(endedAt, loc)
+}
+
 var titleSanitizer = strings.NewReplacer("\n", " ", "\r", " ")
 
 func formatSession(w io.Writer, session core.SessionRow, messages []core.MessageRow, loc *time.Location) {
@@ -29,7 +37,7 @@ func formatSession(w io.Writer, session core.SessionRow, messages []core.Message
 	fmt.Fprintf(w, "## %s\n\n", title)
 	fmt.Fprintf(w, "- **Session**: `%s`\n", session.SessionID)
 	fmt.Fprintf(w, "- **Project**: `%s`\n", session.ProjectDir)
-	fmt.Fprintf(w, "- **Started**: `%s`\n", formatLocalTime(session.StartedAt, loc))
+	fmt.Fprintf(w, "- **Started**: `%s`\n", formatTimeRange(session.StartedAt, session.EndedAt, loc))
 
 	for _, msg := range messages {
 		if msg.IsSidechain {

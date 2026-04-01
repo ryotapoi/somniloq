@@ -147,7 +147,7 @@ func runSessions(dbPath string, args []string) {
 			proj = shortenProject(r.ProjectDir)
 		}
 		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%d\n",
-			r.SessionID, formatLocalTime(r.StartedAt, time.Local), proj, title, r.MessageCount)
+			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), proj, title, r.MessageCount)
 	}
 }
 

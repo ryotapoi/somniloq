@@ -425,6 +425,40 @@ func TestListSessions_UntilFilter_MillisecondTimestamp(t *testing.T) {
 	}
 }
 
+func TestListSessions_EndedAt(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].EndedAt != "2026-03-28T10:30:00Z" {
+		t.Errorf("EndedAt: got %q, want %q", rows[0].EndedAt, "2026-03-28T10:30:00Z")
+	}
+}
+
+func TestListSessions_EndedAt_Null(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].EndedAt != "" {
+		t.Errorf("EndedAt: got %q, want empty string", rows[0].EndedAt)
+	}
+}
+
 func TestGetMessages_Empty(t *testing.T) {
 	db := testDB(t)
 
@@ -512,6 +546,40 @@ func TestGetSession_Found(t *testing.T) {
 	}
 	if got.MessageCount != 1 {
 		t.Errorf("MessageCount: got %d, want 1", got.MessageCount)
+	}
+}
+
+func TestGetSession_EndedAt(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
+
+	got, err := db.GetSession("s1")
+	if err != nil {
+		t.Fatalf("GetSession failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil session")
+	}
+	if got.EndedAt != "2026-03-28T10:30:00Z" {
+		t.Errorf("EndedAt: got %q, want %q", got.EndedAt, "2026-03-28T10:30:00Z")
+	}
+}
+
+func TestGetSession_EndedAt_Null(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	got, err := db.GetSession("s1")
+	if err != nil {
+		t.Fatalf("GetSession failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil session")
+	}
+	if got.EndedAt != "" {
+		t.Errorf("EndedAt: got %q, want empty string", got.EndedAt)
 	}
 }
 

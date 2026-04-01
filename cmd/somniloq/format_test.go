@@ -34,6 +34,32 @@ func TestFormatLocalTime(t *testing.T) {
 	}
 }
 
+func TestFormatTimeRange(t *testing.T) {
+	loc := time.UTC
+
+	tests := []struct {
+		name    string
+		started string
+		ended   string
+		want    string
+	}{
+		{"both valid", "2026-03-28T10:00:00Z", "2026-03-28T10:30:00Z", "2026-03-28 10:00 ~ 2026-03-28 10:30"},
+		{"ended empty", "2026-03-28T10:00:00Z", "", "2026-03-28 10:00 ~"},
+		{"ended invalid", "2026-03-28T10:00:00Z", "invalid", "2026-03-28 10:00 ~ invalid"},
+		{"started empty", "", "2026-03-28T10:30:00Z", " ~ 2026-03-28 10:30"},
+		{"both empty", "", "", " ~"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := formatTimeRange(tt.started, tt.ended, loc)
+			if got != tt.want {
+				t.Errorf("formatTimeRange(%q, %q) = %q, want %q", tt.started, tt.ended, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestFormatSession_WithTitle(t *testing.T) {
 	var buf bytes.Buffer
 
@@ -62,8 +88,8 @@ func TestFormatSession_WithTitle(t *testing.T) {
 	if !strings.Contains(got, "- **Project**: `-Users-test-proj`") {
 		t.Errorf("expected project in metadata, got:\n%s", got)
 	}
-	if !strings.Contains(got, "- **Started**: `2026-03-28 10:00`") {
-		t.Errorf("expected started_at in metadata, got:\n%s", got)
+	if !strings.Contains(got, "- **Started**: `2026-03-28 10:00 ~`") {
+		t.Errorf("expected started_at with time range in metadata, got:\n%s", got)
 	}
 	if !strings.Contains(got, "### User\n") {
 		t.Errorf("expected User heading, got:\n%s", got)
