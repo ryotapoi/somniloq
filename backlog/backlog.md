@@ -27,4 +27,4 @@
   - `SessionRow` に `EndedAt` 追加、SELECT に `ended_at` 追加
   - 出力フォーマット: `2026-04-01 03:03 ~ 2026-04-01 10:57`（常に年月日つき）
   - `show` コマンドのメタデータにも反映
-- [ ] README.md
+- [x] README.md
