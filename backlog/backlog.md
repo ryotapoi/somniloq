@@ -22,5 +22,5 @@
   - `--short`: 上記の結果から最後の `-` 以降を取る（CWD 不使用）
   - ハイフン入りフォルダ名（`202512-phase2` 等）は `--short` で壊れうるが割り切り
   - CWD 空でも正しく動作する
-- [ ] サンプルスキル（examples/skills/somniloq/）— CLI 変更後に反映してコミット
+- [x] サンプルスキル（examples/skills/somniloq/）— CLI 変更後に反映してコミット
 - [ ] README.md
