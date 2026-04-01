@@ -79,10 +79,10 @@ somniloq sessions --short                        # short project names
 **Columns** (tab-separated):
 
 ```
-SessionID    StartedAt    ProjectDir    CustomTitle    MessageCount
+SessionID    TimeRange    ProjectDir    CustomTitle    MessageCount
 ```
 
-- `StartedAt` is displayed in local time (`YYYY-MM-DD HH:MM`).
+- `TimeRange` is displayed as `YYYY-MM-DD HH:MM ~ YYYY-MM-DD HH:MM` (started ~ ended) in local time. If `ended_at` is unavailable, the format is `YYYY-MM-DD HH:MM ~`.
 - `ProjectDir` is normalized — worktree suffixes (`--claude-worktrees-*`) are removed.
 - `--short` further reduces the project name to the last hyphen-separated element (e.g. `-Users-ryota-Sources-myapp` → `myapp`).
 
@@ -124,7 +124,7 @@ somniloq show --since 24h --short
 
 - **Session**: `<session-id>`
 - **Project**: `<project-dir>`
-- **Started**: `<local-time>`
+- **Started**: `<started_at ~ ended_at>`
 
 ### User
 
