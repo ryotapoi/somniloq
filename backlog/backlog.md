@@ -23,4 +23,8 @@
   - ハイフン入りフォルダ名（`202512-phase2` 等）は `--short` で壊れうるが割り切り
   - CWD 空でも正しく動作する
 - [x] サンプルスキル（examples/skills/somniloq/）— CLI 変更後に反映してコミット
+- [ ] `sessions` に `ended_at` を表示する（DB にはデータあり、表示層のみの変更）
+  - `SessionRow` に `EndedAt` 追加、SELECT に `ended_at` 追加
+  - 出力フォーマット: `2026-04-01 03:03 ~ 2026-04-01 10:57`（常に年月日つき）
+  - `show` コマンドのメタデータにも反映
 - [ ] README.md
