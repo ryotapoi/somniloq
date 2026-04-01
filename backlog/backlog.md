@@ -1,30 +1,5 @@
 # Backlog
 
-- [x] import コマンド（JSONL パース + SQLite スキーマ + 差分取り込み）
-- [x] sessions コマンド（一覧表示）
-- [x] show コマンド（Markdown 出力）
-- [x] `import --full` 実行時の確認ステップ（`y/N` プロンプト、`--yes` でスキップ）
-- [x] `--since` で絶対日付指定に対応（`2026-03-28`、`2026-03-28T15:00`）
-- [x] `--until` オプション追加（範囲指定）
-- [x] `projects` コマンド（プロジェクト一覧 + セッション数、`--since` 対応）
-- [x] cclog → somniloq リネーム（モジュールパス、パッケージ名、DB パス、ドキュメント、スキル名）
-- [x] ローカルタイムゾーン対応（--since/--until の入力と sessions/show の出力をローカルタイムに）
-- [x] サブコマンド --help（`somniloq sessions --help` 等でフラグ一覧表示）
-- [x] show --summary（各セッションの冒頭だけ出すモード）
-- [x] sessions --short（プロジェクト名を最後のパス要素のみに）
-- [x] show で content が空のメッセージ（tool_use のみ等）をスキップする
-- [x] import 時に content が空のメッセージを保存しない（show 側のスキップを不要にする）
-- [x] `sessions` の出力タイムスタンプをローカルタイムにする（入力は対応済み、出力が UTC のまま）
-- [x] `projects` に `--short` フラグ追加（`sessions --short` と同様、出力時に短縮）
-- [x] `show` の Project 表記を短縮する（`--short` フラグまたはデフォルト動作）
-- [x] プロジェクト名表示ロジックの改善（CWD 依存をやめ project_dir のみで処理する）
-  - デフォルト表示: worktree セッションは `--claude-worktrees-*` 以降を省いて root と同じ project_dir にする
-  - `--short`: 上記の結果から最後の `-` 以降を取る（CWD 不使用）
-  - ハイフン入りフォルダ名（`202512-phase2` 等）は `--short` で壊れうるが割り切り
-  - CWD 空でも正しく動作する
-- [x] サンプルスキル（examples/skills/somniloq/）— CLI 変更後に反映してコミット
-- [x] `sessions` に `ended_at` を表示する（DB にはデータあり、表示層のみの変更）
-  - `SessionRow` に `EndedAt` 追加、SELECT に `ended_at` 追加
-  - 出力フォーマット: `2026-04-01 03:03 ~ 2026-04-01 10:57`（常に年月日つき）
-  - `show` コマンドのメタデータにも反映
-- [x] README.md
+## v0.1.1
+
+- [ ] `--version` フラグ追加（バージョン番号を出力する）
