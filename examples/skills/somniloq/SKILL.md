@@ -94,15 +94,15 @@ SessionID    TimeRange    ProjectDir    CustomTitle    MessageCount
 Display session content as Markdown. Accepts either a single session ID or a time range.
 
 ```bash
-# single session
+# single session (flags must come BEFORE the session-id)
 somniloq show <session-id>
-somniloq show <session-id> --short
+somniloq show --short <session-id>
 
 # by time range
 somniloq show --since 24h
 somniloq show --since 7d --project myapp
 somniloq show --summary --since 24h
-somniloq show --since 24h --short
+somniloq show --short --since 24h
 ```
 
 | Flag | Default | Description |
@@ -221,6 +221,7 @@ somniloq show "$(somniloq sessions --since 24h | head -1 | cut -f1)"
 ## Notes
 
 - **Import is not automatic.** The database is a snapshot at import time.
+- **Flags must come before positional arguments.** `somniloq show --short <session-id>` works, but `somniloq show <session-id> --short` does not. This applies to all subcommands.
 - **TSV output** from `sessions` and `projects` is pipe-friendly. Use `cut`, `awk`, or `column -t -s $'\t'` to reshape.
 - **Sidechain messages** (subagent conversations) are excluded from `show`.
 - **Empty messages** (tool_use-only turns with no text) are excluded at import time.
