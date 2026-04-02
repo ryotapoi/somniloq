@@ -96,6 +96,7 @@ somniloq show --short --since 24h                       # shorten project names
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--db <path>` | Path to SQLite database | `~/.somniloq/somniloq.db` |
+| `--version` | Print version and exit | — |
 
 ### Time Filters
 

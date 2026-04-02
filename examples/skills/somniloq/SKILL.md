@@ -29,6 +29,7 @@ Always run `somniloq import` first if the user might have new sessions since the
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--db <path>` | `~/.somniloq/somniloq.db` | Override the database path. Must come **before** the subcommand. |
+| `--version` | — | Print version and exit. |
 
 ```bash
 somniloq --db /tmp/test.db sessions --since 7d

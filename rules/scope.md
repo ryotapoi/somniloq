@@ -64,6 +64,7 @@ somniloq projects                        # プロジェクト一覧
 somniloq projects --short                # プロジェクト名を短縮表示
 somniloq projects --since 7d             # 直近7日間にセッションがあるプロジェクト
 somniloq --db /path/to/somniloq.db ...      # DB パスの指定
+somniloq --version                          # バージョン表示
 ```
 
 ## SQLite

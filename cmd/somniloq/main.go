@@ -23,6 +23,7 @@ func main() {
 	defaultProjectsDir := filepath.Join(homeDir, ".claude", "projects")
 
 	dbPath := flag.String("db", defaultDB, "path to SQLite database")
+	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Usage = func() {
 		fmt.Fprint(os.Stderr, `Session log viewer for Claude Code
 
@@ -40,6 +41,11 @@ Flags:
 		flag.PrintDefaults()
 	}
 	flag.Parse()
+
+	if *showVersion {
+		fmt.Printf("somniloq version %s\n", getVersion())
+		os.Exit(0)
+	}
 
 	args := flag.Args()
 	if len(args) == 0 {
