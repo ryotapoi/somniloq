@@ -37,6 +37,8 @@ argument-hint: [plan-file-path]
 
 Codex の出力に 🔴 MUST / 🟡 SHOULD / 🔵 NIT の指摘がある場合（LGTM でない場合）、指摘を `tmp/codex-findings.md` に追記する。ファイルやディレクトリが存在しない場合は作成する。
 
+**IMPORTANT: 必ず Edit ツール（末尾追記）を使うこと。Write ツールは既存内容を上書きするため絶対に使わない。** ファイルが存在しない場合のみ Write で新規作成してよい。
+
 ```markdown
 ## YYYY-MM-DD plan: <変更の概要（1行）>
 
