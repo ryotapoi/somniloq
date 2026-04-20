@@ -40,18 +40,7 @@ argument-hint: [plan-file-path]
 
 `<PLAN_PATH>` は手順 1 で受け取ったプランファイルの絶対パスに置換する。
 
-Codex の出力に 🔴 MUST / 🟡 SHOULD / 🔵 NIT の指摘がある場合（LGTM でない場合）、指摘を `~/.local/share/codex-findings/codex-findings.md` に追記する。
-
-**IMPORTANT: 必ず Edit ツール（末尾追記）を使うこと。Write ツールは既存内容を上書きするため絶対に使わない。**
-
-```markdown
-## YYYY-MM-DD plan [somniloq]: <変更の概要（1行）>
-
-- 🔴/🟡/🔵 指摘内容の要約（1行）
-  - スコープ: common / domain / project
-  - self: Yes / No
-- ...
-```
+Codex の出力に 🔴 MUST / 🟡 SHOULD / 🔵 NIT の指摘がある場合（LGTM でない場合）、`/codex-findings-append` スキルを Skill tool で実行して追記する。引数: `plan somniloq "<変更概要>"`
 
 ### 6. 新規指摘があれば反映し、手順1に戻る
 
