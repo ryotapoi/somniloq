@@ -21,10 +21,7 @@ context: fork
 ### 1. プランファイルのパスを決定する
 
 - `$ARGUMENTS` が空でなければ、その値をプランファイルパス `PLAN_PATH` とする
-- `$ARGUMENTS` が空なら:
-  1. Glob で `backlog/plans/*.md` を検索する
-  2. 最も新しいファイル（Glob 結果の先頭）を `PLAN_PATH` とする
-  3. ファイルが見つからなければ「backlog/plans/ にプランファイルが見つかりません」と返して終了する
+- `$ARGUMENTS` が空なら「プランファイルのパスを引数で指定してください（例: `/review-plan-somniloq path/to/plan.md`）」と返して終了する
 
 ### 2. プランファイルを読む
 
