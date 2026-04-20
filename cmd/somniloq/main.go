@@ -163,17 +163,29 @@ func runShow(dbPath string, args []string) {
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter sessions by project name (substring match)")
 	short := fs.Bool("short", false, "shorten project name to last hyphen-separated element")
-	summary := fs.Bool("summary", false, "show only the first user message of each session")
+	summary := fs.Int("summary", 0, "show first N user messages skipping /clear and local-command-caveat (0 disables)")
+	includeClear := fs.Bool("include-clear", false, "keep /clear and local-command-caveat messages in --summary output (requires --summary >= 1)")
 	format := fs.String("format", "markdown", "output format (markdown)")
-	setUsage(fs, "Show session content in Markdown", "somniloq show <session-id>\n  somniloq show --since <time> [--until <time>] [--project <name>]")
+	setUsage(fs, "Show session content in Markdown",
+		"somniloq show <session-id> [--summary <N>] [--include-clear] [--short]\n"+
+			"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--summary <N>] [--include-clear] [--short]")
 	fs.Parse(args)
+
+	if *summary < 0 {
+		fmt.Fprintln(os.Stderr, "error: --summary must be >= 0")
+		os.Exit(1)
+	}
+	if *includeClear && *summary == 0 {
+		fmt.Fprintln(os.Stderr, "error: --include-clear requires --summary >= 1")
+		os.Exit(1)
+	}
 
 	if *format != "markdown" {
 		fmt.Fprintf(os.Stderr, "error: unknown format: %q\n", *format)
 		os.Exit(1)
 	}
 
-	const showUsage = "usage: somniloq show <session-id> [--short] | somniloq show [--since <time>] [--until <time>] [--project <name>] [--summary] [--short]"
+	const showUsage = "usage: somniloq show <session-id> [--summary <N>] [--include-clear] [--short] | somniloq show [--since <time>] [--until <time>] [--project <name>] [--summary <N>] [--include-clear] [--short]"
 
 	if fs.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "error: too many arguments")
@@ -196,8 +208,11 @@ func runShow(dbPath string, args []string) {
 	defer db.Close()
 
 	getMessages := db.GetMessages
-	if *summary {
-		getMessages = db.GetSummaryMessages
+	if *summary >= 1 {
+		n, ic := *summary, *includeClear
+		getMessages = func(id string) ([]core.MessageRow, error) {
+			return db.GetSummaryMessages(id, n, ic)
+		}
 	}
 
 	if sessionID != "" {

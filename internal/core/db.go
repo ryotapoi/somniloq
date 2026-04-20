@@ -300,15 +300,50 @@ func (d *DB) GetMessages(sessionID string) ([]MessageRow, error) {
 	return scanMessages(rows)
 }
 
-func (d *DB) GetSummaryMessages(sessionID string) ([]MessageRow, error) {
-	rows, err := d.db.Query(`
+// Prefixes of user message content that mark synthetic entries inserted by
+// Claude Code itself (a /clear command echo and the caveat block that
+// accompanies commands like /clear and shell `!` invocations). They are
+// skipped by GetSummaryMessages so that --summary surfaces real user input.
+//
+// When adding a new prefix, check it does not contain SQLite LIKE wildcards
+// (`%` or `_`). If it does, the LIKE clauses in GetSummaryMessages need
+// `ESCAPE '\'` and the pattern must escape those characters.
+const (
+	clearCommandPrefix       = "<command-name>/clear</command-name>"
+	localCommandCaveatPrefix = "<local-command-caveat>"
+)
+
+// GetSummaryMessages returns the first `limit` user messages of the session
+// in chronological order, intended for --summary output. Returns an error if
+// limit <= 0.
+//
+// Always filters to role='user' and is_sidechain=0. By default, also skips
+// entries whose content starts with clearCommandPrefix or
+// localCommandCaveatPrefix; includeClear=true disables that prefix skip only.
+func (d *DB) GetSummaryMessages(sessionID string, limit int, includeClear bool) ([]MessageRow, error) {
+	if limit <= 0 {
+		return nil, errors.New("limit must be >= 1")
+	}
+
+	query := `
 		SELECT uuid, role, content, timestamp, is_sidechain
 		FROM messages
-		WHERE session_id = ? AND role = 'user' AND is_sidechain = 0
+		WHERE session_id = ?
+		  AND role = 'user'
+		  AND is_sidechain = 0`
+	args := []any{sessionID}
+	if !includeClear {
+		query += `
+		  AND content NOT LIKE ?
+		  AND content NOT LIKE ?`
+		args = append(args, clearCommandPrefix+"%", localCommandCaveatPrefix+"%")
+	}
+	query += `
 		ORDER BY timestamp ASC
-		LIMIT 1`,
-		sessionID,
-	)
+		LIMIT ?`
+	args = append(args, limit)
+
+	rows, err := d.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}

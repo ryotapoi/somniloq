@@ -87,7 +87,7 @@ somniloq show <session-id>                              # single session
 somniloq show --since 24h                               # last 24 hours
 somniloq show --since 2026-03-28 --until 2026-03-29     # date range
 somniloq show --since 7d --project myapp                # filter by project
-somniloq show --summary --since 24h                     # first message only
+somniloq show --summary 1 --since 24h                   # first user message per session
 somniloq show --short --since 24h                       # shorten project names
 ```
 

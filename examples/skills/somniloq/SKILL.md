@@ -101,7 +101,7 @@ somniloq show --short <session-id>
 # by time range
 somniloq show --since 24h
 somniloq show --since 7d --project myapp
-somniloq show --summary --since 24h
+somniloq show --summary 1 --since 24h
 somniloq show --short --since 24h
 ```
 
@@ -111,12 +111,14 @@ somniloq show --short --since 24h
 | `--until` | — | End time filter |
 | `--project` | — | Substring match on project directory (time-range mode only) |
 | `--short` | false | Short project names in output |
-| `--summary` | false | Show only the first user message per session (time-range mode only) |
+| `--summary <N>` | 0 | Show first N user messages per session after skipping `/clear` and `<local-command-caveat>`. `0` disables (full output). |
+| `--include-clear` | false | Requires `--summary >= 1`; disable `/clear` + caveat skipping (sidechain still excluded). Debug use. |
 | `--format` | markdown | Output format (only `markdown` is supported) |
 
 **Constraints:**
 - `<session-id>` and `--since`/`--until` are mutually exclusive.
-- `--summary` and `--project` only apply in time-range mode.
+- `--project` only applies in time-range mode. `--summary` works in both modes.
+- `--include-clear` without `--summary >= 1` is an error.
 
 **Output structure:**
 
@@ -193,7 +195,7 @@ somniloq sessions --since 7d --until 2h   # last 7 days, excluding most recent 2
 
 ```bash
 # daily activity summary
-somniloq import && somniloq show --summary --since 24h
+somniloq import && somniloq show --summary 1 --since 24h
 
 # quick scan of recent work
 somniloq import && somniloq sessions --since 7d --short

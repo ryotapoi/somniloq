@@ -85,7 +85,7 @@ somniloq show <session-id>                              # 特定セッション
 somniloq show --since 24h                               # 直近24時間の全セッション
 somniloq show --since 2026-03-28 --until 2026-03-29     # 特定期間
 somniloq show --since 7d --project myapp                # プロジェクト絞り込み
-somniloq show --summary --since 24h                     # 各セッションの冒頭のみ
+somniloq show --summary 1 --since 24h                   # 各セッションの冒頭ユーザーメッセージ 1 件
 somniloq show --short --since 24h                       # プロジェクト名を短縮表示
 ```
 

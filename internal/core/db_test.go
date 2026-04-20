@@ -744,7 +744,7 @@ func TestGetSummaryMessages_Empty(t *testing.T) {
 
 	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	msgs, err := db.GetSummaryMessages("s1")
+	msgs, err := db.GetSummaryMessages("s1", 1, false)
 	if err != nil {
 		t.Fatalf("GetSummaryMessages failed: %v", err)
 	}
@@ -761,7 +761,7 @@ func TestGetSummaryMessages_ReturnsFirstUserMessage(t *testing.T) {
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "assistant", Content: "done", Timestamp: "2026-03-28T10:01:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m3", SessionID: "s1", Role: "user", Content: "thanks", Timestamp: "2026-03-28T10:02:00Z"}))
 
-	msgs, err := db.GetSummaryMessages("s1")
+	msgs, err := db.GetSummaryMessages("s1", 1, false)
 	if err != nil {
 		t.Fatalf("GetSummaryMessages failed: %v", err)
 	}
@@ -792,7 +792,7 @@ func TestGetSummaryMessages_SkipsSidechain(t *testing.T) {
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "sidechain msg", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "real msg", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
 
-	msgs, err := db.GetSummaryMessages("s1")
+	msgs, err := db.GetSummaryMessages("s1", 1, false)
 	if err != nil {
 		t.Fatalf("GetSummaryMessages failed: %v", err)
 	}
@@ -810,12 +810,169 @@ func TestGetSummaryMessages_NoUserMessages(t *testing.T) {
 	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "assistant", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
-	msgs, err := db.GetSummaryMessages("s1")
+	msgs, err := db.GetSummaryMessages("s1", 1, false)
 	if err != nil {
 		t.Fatalf("GetSummaryMessages failed: %v", err)
 	}
 	if len(msgs) != 0 {
 		t.Errorf("expected 0 messages, got %d", len(msgs))
+	}
+}
+
+func TestGetSummaryMessages_LimitN(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "u1", SessionID: "s1", Role: "user", Content: "one", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "u2", SessionID: "s1", Role: "user", Content: "two", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "a1", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: "2026-03-28T10:02:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "u3", SessionID: "s1", Role: "user", Content: "three", Timestamp: "2026-03-28T10:03:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "u4", SessionID: "s1", Role: "user", Content: "four", Timestamp: "2026-03-28T10:04:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "u5", SessionID: "s1", Role: "user", Content: "five", Timestamp: "2026-03-28T10:05:00Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1", 3, false)
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(msgs))
+	}
+	wantUUIDs := []string{"u1", "u2", "u3"}
+	for i, w := range wantUUIDs {
+		if msgs[i].UUID != w {
+			t.Errorf("msgs[%d].UUID: got %s, want %s", i, msgs[i].UUID, w)
+		}
+	}
+}
+
+func TestGetSummaryMessages_SkipsClearPrefix(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>\n<command-message>clear</command-message>", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1", 1, false)
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].UUID != "m2" {
+		t.Errorf("expected m2 (/clear skipped), got %s", msgs[0].UUID)
+	}
+}
+
+func TestGetSummaryMessages_SkipsCaveatPrefix(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "<local-command-caveat>Caveat: ...</local-command-caveat>", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1", 1, false)
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].UUID != "m2" {
+		t.Errorf("expected m2 (caveat skipped), got %s", msgs[0].UUID)
+	}
+}
+
+func TestGetSummaryMessages_IncludeClear(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m_clear", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>\nmore", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m_caveat", SessionID: "s1", Role: "user", Content: "<local-command-caveat>note</local-command-caveat>", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m_assistant", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: "2026-03-28T10:02:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m_sidechain", SessionID: "s1", Role: "user", Content: "sidechain", Timestamp: "2026-03-28T10:03:00Z", IsSidechain: true}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m_real", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:04:00Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1", 3, true)
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(msgs))
+	}
+	wantUUIDs := []string{"m_clear", "m_caveat", "m_real"}
+	for i, w := range wantUUIDs {
+		if msgs[i].UUID != w {
+			t.Errorf("msgs[%d].UUID: got %s, want %s", i, msgs[i].UUID, w)
+		}
+	}
+	if msgs[0].Content != "<command-name>/clear</command-name>\nmore" {
+		t.Errorf("msgs[0].Content: got %q", msgs[0].Content)
+	}
+	if msgs[1].Content != "<local-command-caveat>note</local-command-caveat>" {
+		t.Errorf("msgs[1].Content: got %q", msgs[1].Content)
+	}
+}
+
+func TestGetSummaryMessages_AllSkipped(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "<local-command-caveat>x</local-command-caveat>", Timestamp: "2026-03-28T10:01:00Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1", 1, false)
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages, got %d", len(msgs))
+	}
+}
+
+func TestGetSummaryMessages_LimitExceedsAvailable(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "one", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "two", Timestamp: "2026-03-28T10:01:00Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1", 5, false)
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+}
+
+func TestGetSummaryMessages_LimitZeroReturnsError(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	_, err := db.GetSummaryMessages("s1", 0, false)
+	if err == nil {
+		t.Fatal("expected error for limit=0, got nil")
+	}
+}
+
+func TestGetSummaryMessages_MillisecondTimestamp(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00.000Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m_late", SessionID: "s1", Role: "user", Content: "later", Timestamp: "2026-03-28T10:00:00.200Z"}))
+	must(t, db.InsertMessage(ParsedMessage{UUID: "m_early", SessionID: "s1", Role: "user", Content: "earlier", Timestamp: "2026-03-28T10:00:00.100Z"}))
+
+	msgs, err := db.GetSummaryMessages("s1", 1, false)
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].UUID != "m_early" {
+		t.Errorf("expected m_early (100ms), got %s", msgs[0].UUID)
 	}
 }
 

@@ -36,7 +36,8 @@
 - セッション内容を Markdown で出力
 - Started 行に `started_at ~ ended_at` の時刻範囲を表示。ended_at がない場合は `started_at ~`
 - `--since`/`--until` で期間指定して一括表示
-- `--summary` で各セッションの最初のユーザーメッセージのみ表示
+- `--summary N` で各セッションの user メッセージ先頭 N 件を表示（`/clear` と `<local-command-caveat>` はスキップ）。`0` または未指定で従来の全文表示
+- `--include-clear` で `/clear`・caveat のスキップを無効化（`--summary >= 1` が前提）
 - デフォルト表示では worktree サフィックスを除去して正規化
 - `--short` で `project_dir` の最後のハイフン区切り要素のみに短縮表示
 - `--format markdown` でフォーマット指定
@@ -58,7 +59,9 @@ somniloq sessions --short                # プロジェクト名を短縮表示
 somniloq show <session-id>               # セッション内容を Markdown で出力
 somniloq show --since 24h                # 直近24時間の全セッション
 somniloq show --since 2026-03-28 --until 2026-03-29  # 3/28 の全セッション
-somniloq show --summary --since 24h                  # 直近24時間の各セッションの冒頭のみ
+somniloq show --summary 1 --since 24h                # 直近24時間の各セッションの冒頭 1 件
+somniloq show --summary 3 --since 24h                # 冒頭 3 件
+somniloq show --summary 1 --include-clear --since 24h  # /clear・caveat もスキップせずに表示
 somniloq show --since 24h --short                    # プロジェクト名を短縮表示
 somniloq projects                        # プロジェクト一覧
 somniloq projects --short                # プロジェクト名を短縮表示
