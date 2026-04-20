@@ -111,7 +111,7 @@ somniloq show --short --since 24h
 | `--until` | — | End time filter |
 | `--project` | — | Substring match on project directory (time-range mode only) |
 | `--short` | false | Short project names in output |
-| `--summary <N>` | 0 | Show first N user messages per session after skipping `/clear` and `<local-command-caveat>`. `0` disables (full output). |
+| `--summary <N>` | 0 | Show first N user messages per session after skipping `/clear` and `<local-command-caveat>`. `0` disables (full output). Requires an integer argument — bare `--summary` is an error (use `--summary 1` for the old default). |
 | `--include-clear` | false | Requires `--summary >= 1`; disable `/clear` + caveat skipping (sidechain still excluded). Debug use. |
 | `--format` | markdown | Output format (only `markdown` is supported) |
 
@@ -119,6 +119,7 @@ somniloq show --short --since 24h
 - `<session-id>` and `--since`/`--until` are mutually exclusive.
 - `--project` only applies in time-range mode. `--summary` works in both modes.
 - `--include-clear` without `--summary >= 1` is an error.
+- `--summary` takes an integer (v0.2+). Earlier versions accepted a bare `--summary` flag; that form no longer works.
 
 **Output structure:**
 
