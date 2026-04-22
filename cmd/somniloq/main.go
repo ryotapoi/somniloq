@@ -157,6 +157,9 @@ func runSessions(dbPath string, args []string) {
 	}
 }
 
+const showUsageLine = "somniloq show [--summary <N>] [--include-clear] [--short] <session-id>\n" +
+	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--summary <N>] [--include-clear] [--short]"
+
 func runShow(dbPath string, args []string) {
 	fs := flag.NewFlagSet("show", flag.ExitOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
@@ -166,9 +169,7 @@ func runShow(dbPath string, args []string) {
 	summary := fs.Int("summary", 0, "show first N user messages skipping /clear and local-command-caveat (0 disables)")
 	includeClear := fs.Bool("include-clear", false, "keep /clear and local-command-caveat messages in --summary output (requires --summary >= 1)")
 	format := fs.String("format", "markdown", "output format (markdown)")
-	setUsage(fs, "Show session content in Markdown",
-		"somniloq show <session-id> [--summary <N>] [--include-clear] [--short]\n"+
-			"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--summary <N>] [--include-clear] [--short]")
+	setUsage(fs, "Show session content in Markdown", showUsageLine)
 	fs.Parse(args)
 
 	if *summary < 0 {
@@ -185,7 +186,7 @@ func runShow(dbPath string, args []string) {
 		os.Exit(1)
 	}
 
-	const showUsage = "usage: somniloq show <session-id> [--summary <N>] [--include-clear] [--short] | somniloq show [--since <time>] [--until <time>] [--project <name>] [--summary <N>] [--include-clear] [--short]"
+	showUsage := "usage: " + showUsageLine
 
 	if fs.NArg() > 1 {
 		fmt.Fprintln(os.Stderr, "error: too many arguments")
