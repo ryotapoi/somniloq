@@ -28,11 +28,14 @@ go build -o bin/somniloq ./cmd/somniloq      # バイナリビルド
 IMPORTANT: 各ステップの詳細ファイルを、**ステップに入る前**に Read で読むこと。CLAUDE.md の要約で済ませず、毎回実ファイルを読む。
 
 1. **計画（プランモード）**
-   - 1-a **UX シナリオ** — rules/workflow/1a-ux-scenario.md を読んでから着手
-   - 1-b **調査・設計判断** — rules/workflow/1b-design.md を読んでから着手
-   - 1-c **プラン作成・レビュー** — rules/workflow/1c-plan.md を読んでから着手
-2. **実装** — rules/workflow/2-implement.md を読んでから着手
-3. **完了** — rules/workflow/3-finish.md に従う
+   1. **UX シナリオ** — rules/workflow/1a-ux-scenario.md を読んでから着手
+   2. **調査・設計判断** — rules/workflow/1b-design.md を読んでから着手
+   3. **プラン作成・レビュー** — rules/workflow/1c-plan.md を読んでから着手
+2. **実装**
+   1. **実装** — rules/workflow/2a-implement.md を読んでから着手
+   2. **動作確認** — rules/workflow/2b-verify.md を読む
+   3. **レビュー** — rules/workflow/2c-review.md を読む
+3. **コミット** — rules/workflow/3-finish.md に従う
 
 ### 進行の原則
 

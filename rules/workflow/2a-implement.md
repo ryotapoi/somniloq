@@ -1,4 +1,4 @@
-# Step 2: 実装
+# Step 2a: 実装
 
 ## worktree チェック（worktree セッション時のみ）
 
@@ -17,3 +17,7 @@ Environment セクションの Primary working directory が `.claude/worktrees/
 
 - **TDD**: `/tdd` スキルに従う。テストを先に書き、失敗を確認し（RED）、最小の実装で通し（GREEN）、リファクタリングする。1テスト→1実装の垂直スライスで進める
 - **Go**: `go vet ./...` と `go test ./...` が通ることを確認する
+
+## 実装が完了したら
+
+次のサブステップに進む: rules/workflow/2b-verify.md を読む。
