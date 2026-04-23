@@ -55,7 +55,7 @@
 
 ### タスク（上から順に実装・コミット。まとめて v0.3.0 としてリリース）
 
-- [ ] **`repo_path` 解決関数を追加（DB 変更なし）**
+- [x] **`repo_path` 解決関数を追加（DB 変更なし）**
   - `internal/core/repo_path.go`（新規）に `ResolveRepoPath(cwd string) string` を実装
   - ロジックは上記「解決ロジック」の 1〜4
   - `git` 呼び出しは `os/exec` で `git -C <cwd> rev-parse --show-toplevel`。stderr 無視、非 0 終了は空扱い
