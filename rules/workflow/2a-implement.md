@@ -1,10 +1,12 @@
 # Step 2a: 実装
 
-## worktree チェック（worktree セッション時のみ）
+## worktree チェック
 
-Environment セクションの Primary working directory が `.claude/worktrees/` 配下のパスを指していることを確認する。メインリポジトリのパスを指していたら、作業を中断してユーザーに「Primary working directory がメインリポジトリを指しています。`claude -w` で再起動してください」と報告する。
+Primary working directory（Environment セクション）が `.claude/worktrees/` 配下を指している場合のみ、このセクションを実行する。メインリポジトリ配下を指している場合はスキップする。
 
-チェック結果をユーザーに出力すること: 「worktree: true/false, primary_working_directory: <パス>, check: ok/ng」
+Primary working directory と CWD（`pwd` などで得られる現在のカレントディレクトリ）が一致していることを確認する。Primary working directory は `.claude/worktrees/` 配下なのに CWD がそこと一致しない場合、作業を中断してユーザーに「Primary working directory と CWD が乖離しています（primary: <パス>, cwd: <パス>）。`claude -w` で再起動してください」と報告する。
+
+チェック結果をユーザーに出力すること: 「primary_working_directory: <パス>, cwd: <パス>, check: ok/ng/skip」
 
 ## 実装前の確認
 
