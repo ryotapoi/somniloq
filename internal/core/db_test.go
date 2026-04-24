@@ -1,6 +1,9 @@
 package core
 
 import (
+	"database/sql"
+	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -36,6 +39,82 @@ func TestOpenDB_CreatesSchema(t *testing.T) {
 	}
 }
 
+func TestOpenDB_HasRepoPathColumn(t *testing.T) {
+	db := testDB(t)
+
+	colType, present, err := sessionsColumnType(db.db, "repo_path")
+	if err != nil {
+		t.Fatalf("sessionsColumnType failed: %v", err)
+	}
+	if !present {
+		t.Fatal("repo_path column missing from sessions table")
+	}
+	if !strings.EqualFold(colType, "TEXT") {
+		t.Errorf("repo_path type: got %q, want TEXT", colType)
+	}
+}
+
+// legacySessionsSchema mirrors the sessions table definition before the
+// repo_path column was introduced. It is used by migration tests that exercise
+// ensureSessionsRepoPathColumn against a DB that still has the old shape.
+const legacySessionsSchema = `
+CREATE TABLE sessions (
+    session_id TEXT PRIMARY KEY,
+    project_dir TEXT NOT NULL,
+    cwd TEXT,
+    git_branch TEXT,
+    custom_title TEXT,
+    agent_name TEXT,
+    version TEXT,
+    started_at TEXT,
+    ended_at TEXT,
+    imported_at TEXT NOT NULL
+);`
+
+func openLegacyMemoryDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open failed: %v", err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { db.Close() })
+	if _, err := db.Exec(legacySessionsSchema); err != nil {
+		t.Fatalf("legacy schema exec failed: %v", err)
+	}
+	return db
+}
+
+func TestEnsureSessionsRepoPathColumn_AddsColumn(t *testing.T) {
+	db := openLegacyMemoryDB(t)
+
+	if err := ensureSessionsRepoPathColumn(db); err != nil {
+		t.Fatalf("ensureSessionsRepoPathColumn failed: %v", err)
+	}
+
+	colType, present, err := sessionsColumnType(db, "repo_path")
+	if err != nil {
+		t.Fatalf("sessionsColumnType failed: %v", err)
+	}
+	if !present {
+		t.Fatal("repo_path column should have been added")
+	}
+	if !strings.EqualFold(colType, "TEXT") {
+		t.Errorf("repo_path type: got %q, want TEXT", colType)
+	}
+}
+
+func TestEnsureSessionsRepoPathColumn_Idempotent(t *testing.T) {
+	db := openLegacyMemoryDB(t)
+
+	if err := ensureSessionsRepoPathColumn(db); err != nil {
+		t.Fatalf("first call failed: %v", err)
+	}
+	if err := ensureSessionsRepoPathColumn(db); err != nil {
+		t.Fatalf("second call should be a no-op, got: %v", err)
+	}
+}
+
 func TestUpsertSession(t *testing.T) {
 	db := testDB(t)
 
@@ -43,6 +122,7 @@ func TestUpsertSession(t *testing.T) {
 		SessionID:  "s1",
 		ProjectDir: "-Users-test",
 		CWD:        "/tmp",
+		RepoPath:   "/Users/test",
 		GitBranch:  "main",
 		Version:    "2.1.86",
 		StartedAt:  "2026-03-28T14:00:00Z",
@@ -52,14 +132,17 @@ func TestUpsertSession(t *testing.T) {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
 
-	var sid, projDir, startedAt string
-	err := db.db.QueryRow("SELECT session_id, project_dir, started_at FROM sessions WHERE session_id='s1'").
-		Scan(&sid, &projDir, &startedAt)
+	var sid, projDir, startedAt, repoPath string
+	err := db.db.QueryRow("SELECT session_id, project_dir, started_at, repo_path FROM sessions WHERE session_id='s1'").
+		Scan(&sid, &projDir, &startedAt, &repoPath)
 	if err != nil {
 		t.Fatalf("SELECT failed: %v", err)
 	}
 	if sid != "s1" || projDir != "-Users-test" || startedAt != "2026-03-28T14:00:00Z" {
 		t.Errorf("unexpected row: sid=%s projDir=%s startedAt=%s", sid, projDir, startedAt)
+	}
+	if repoPath != "/Users/test" {
+		t.Errorf("repo_path: got %q, want %q", repoPath, "/Users/test")
 	}
 
 	// Second upsert with later ended_at
@@ -67,6 +150,7 @@ func TestUpsertSession(t *testing.T) {
 		SessionID:  "s1",
 		ProjectDir: "-Users-test",
 		CWD:        "/tmp",
+		RepoPath:   "/Users/test",
 		StartedAt:  "2026-03-28T14:05:00Z",
 		EndedAt:    "2026-03-28T14:20:00Z",
 	}
@@ -85,6 +169,217 @@ func TestUpsertSession(t *testing.T) {
 	}
 	if endedAt != "2026-03-28T14:20:00Z" {
 		t.Errorf("ended_at should be MAX: got %s", endedAt)
+	}
+}
+
+func TestUpsertSession_RepoPath(t *testing.T) {
+	db := testDB(t)
+
+	// Use distinct values for every text column so that any order mismatch
+	// between the Go args and the SQL placeholders is immediately visible.
+	meta := SessionMeta{
+		SessionID:  "s-map",
+		ProjectDir: "projdir-val",
+		CWD:        "cwd-val",
+		RepoPath:   "repo-val",
+		GitBranch:  "branch-val",
+		Version:    "version-val",
+		StartedAt:  "started-val",
+		EndedAt:    "ended-val",
+	}
+	if err := db.UpsertSession(meta, "imported-val"); err != nil {
+		t.Fatalf("UpsertSession failed: %v", err)
+	}
+
+	var projDir, cwd, repoPath, branch, version, startedAt, endedAt string
+	err := db.db.QueryRow(`SELECT project_dir, cwd, repo_path, git_branch, version, started_at, ended_at FROM sessions WHERE session_id='s-map'`).
+		Scan(&projDir, &cwd, &repoPath, &branch, &version, &startedAt, &endedAt)
+	if err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	checks := []struct {
+		label, got, want string
+	}{
+		{"project_dir", projDir, "projdir-val"},
+		{"cwd", cwd, "cwd-val"},
+		{"repo_path", repoPath, "repo-val"},
+		{"git_branch", branch, "branch-val"},
+		{"version", version, "version-val"},
+		{"started_at", startedAt, "started-val"},
+		{"ended_at", endedAt, "ended-val"},
+	}
+	for _, c := range checks {
+		if c.got != c.want {
+			t.Errorf("%s: got %q, want %q", c.label, c.got, c.want)
+		}
+	}
+}
+
+func TestUpsertSession_RepoPath_EmptyInsertsNull(t *testing.T) {
+	db := testDB(t)
+
+	meta := SessionMeta{
+		SessionID:  "s1",
+		ProjectDir: "-test",
+		RepoPath:   "",
+	}
+	if err := db.UpsertSession(meta, "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession failed: %v", err)
+	}
+
+	var isNull int
+	if err := db.db.QueryRow("SELECT repo_path IS NULL FROM sessions WHERE session_id='s1'").Scan(&isNull); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if isNull != 1 {
+		t.Errorf("repo_path should be NULL for empty RepoPath on insert")
+	}
+}
+
+func TestUpsertSession_RepoPath_EmptyDoesNotOverwrite(t *testing.T) {
+	db := testDB(t)
+
+	if err := db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", RepoPath: "/Users/test/proj"}, "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("first UpsertSession failed: %v", err)
+	}
+	if err := db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", RepoPath: ""}, "2026-03-28T15:01:00Z"); err != nil {
+		t.Fatalf("second UpsertSession failed: %v", err)
+	}
+
+	var repoPath string
+	if err := db.db.QueryRow("SELECT repo_path FROM sessions WHERE session_id='s1'").Scan(&repoPath); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if repoPath != "/Users/test/proj" {
+		t.Errorf("repo_path should not be overwritten by empty value: got %q", repoPath)
+	}
+}
+
+func TestUpsertSession_RepoPath_AfterUpdateSessionTitle(t *testing.T) {
+	db := testDB(t)
+
+	// Scenario A: UpdateSessionTitle leaves repo_path NULL, later Upsert fills it.
+	must(t, db.UpdateSessionTitle("s1", "-test", "title", "2026-03-28T15:00:00Z"))
+
+	var isNull int
+	if err := db.db.QueryRow("SELECT repo_path IS NULL FROM sessions WHERE session_id='s1'").Scan(&isNull); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if isNull != 1 {
+		t.Fatalf("repo_path should be NULL after UpdateSessionTitle")
+	}
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", RepoPath: "/Users/test/proj"}, "2026-03-28T15:01:00Z"))
+	var repoPath string
+	if err := db.db.QueryRow("SELECT repo_path FROM sessions WHERE session_id='s1'").Scan(&repoPath); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if repoPath != "/Users/test/proj" {
+		t.Errorf("scenario A repo_path: got %q, want %q", repoPath, "/Users/test/proj")
+	}
+
+	// Scenario B: UpdateSessionTitle then Upsert with empty RepoPath → still NULL.
+	must(t, db.UpdateSessionTitle("s2", "-test", "title", "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-test", RepoPath: ""}, "2026-03-28T15:01:00Z"))
+
+	if err := db.db.QueryRow("SELECT repo_path IS NULL FROM sessions WHERE session_id='s2'").Scan(&isNull); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if isNull != 1 {
+		t.Errorf("scenario B repo_path should still be NULL")
+	}
+}
+
+func TestOpenDB_ReopenIsIdempotent(t *testing.T) {
+	tmp := t.TempDir()
+	dsn := filepath.Join(tmp, "test.db")
+
+	db1, err := OpenDB(dsn)
+	if err != nil {
+		t.Fatalf("first OpenDB failed: %v", err)
+	}
+	if err := db1.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession failed: %v", err)
+	}
+	if err := db1.Close(); err != nil {
+		t.Fatalf("Close failed: %v", err)
+	}
+
+	db2, err := OpenDB(dsn)
+	if err != nil {
+		t.Fatalf("second OpenDB failed: %v", err)
+	}
+	t.Cleanup(func() { db2.Close() })
+
+	// Second open must hit the "column already present" fast path without error.
+	if _, present, err := sessionsColumnType(db2.db, "repo_path"); err != nil || !present {
+		t.Fatalf("repo_path not present after reopen: present=%v err=%v", present, err)
+	}
+
+	rows, err := db2.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 || rows[0].SessionID != "s1" {
+		t.Errorf("session not retained across reopen: %+v", rows)
+	}
+}
+
+func TestOpenDB_MigratesLegacyFile(t *testing.T) {
+	tmp := t.TempDir()
+	dsn := filepath.Join(tmp, "legacy.db")
+
+	// Create a legacy-shaped DB file directly, without going through OpenDB.
+	raw, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("sql.Open failed: %v", err)
+	}
+	if _, err := raw.Exec(legacySessionsSchema); err != nil {
+		raw.Close()
+		t.Fatalf("legacy schema exec failed: %v", err)
+	}
+	if _, err := raw.Exec(
+		`INSERT INTO sessions (session_id, project_dir, imported_at) VALUES (?, ?, ?)`,
+		"legacy-s1", "-test", "2026-03-28T15:00:00Z",
+	); err != nil {
+		raw.Close()
+		t.Fatalf("legacy INSERT failed: %v", err)
+	}
+	if err := raw.Close(); err != nil {
+		t.Fatalf("raw.Close failed: %v", err)
+	}
+
+	db, err := OpenDB(dsn)
+	if err != nil {
+		t.Fatalf("OpenDB on legacy file failed: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	_, present, err := sessionsColumnType(db.db, "repo_path")
+	if err != nil {
+		t.Fatalf("sessionsColumnType failed: %v", err)
+	}
+	if !present {
+		t.Fatal("repo_path column should have been added to legacy DB")
+	}
+
+	var (
+		projDir, importedAt string
+		isNull              int
+	)
+	if err := db.db.QueryRow(
+		"SELECT project_dir, imported_at, repo_path IS NULL FROM sessions WHERE session_id='legacy-s1'",
+	).Scan(&projDir, &importedAt, &isNull); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if projDir != "-test" {
+		t.Errorf("project_dir mutated by migration: got %q, want %q", projDir, "-test")
+	}
+	if importedAt != "2026-03-28T15:00:00Z" {
+		t.Errorf("imported_at mutated by migration: got %q", importedAt)
+	}
+	if isNull != 1 {
+		t.Errorf("existing row should have repo_path IS NULL after migration")
 	}
 }
 

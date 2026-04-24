@@ -3,6 +3,7 @@ package core
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 
 	_ "modernc.org/sqlite"
@@ -30,13 +31,76 @@ func OpenDB(dsn string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// modernc.org/sqlite treats each connection to ":memory:" as a separate DB
+	// instance, so a shared *sql.DB can otherwise see different in-memory DBs
+	// across queries. Pinning to one physical connection avoids that.
+	db.SetMaxOpenConns(1)
 
 	if _, err := db.Exec(schema); err != nil {
 		db.Close()
 		return nil, err
 	}
+	if err := ensureSessionsRepoPathColumn(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 
 	return &DB{db: db}, nil
+}
+
+// ensureSessionsRepoPathColumn adds sessions.repo_path if it is missing.
+// Precondition: the sessions table exists.
+func ensureSessionsRepoPathColumn(db *sql.DB) error {
+	_, present, err := sessionsColumnType(db, "repo_path")
+	if err != nil {
+		return fmt.Errorf("inspect sessions table: %w", err)
+	}
+	if present {
+		return nil
+	}
+	if _, err := db.Exec("ALTER TABLE sessions ADD COLUMN repo_path TEXT"); err != nil {
+		// Belt-and-suspenders: re-check state rather than match driver-specific
+		// error strings. Covers the narrow cross-process race where another
+		// instance added the column between our inspect and ALTER. Only treat
+		// it as success when the column is actually present now — otherwise
+		// surface the original ALTER error.
+		if _, present2, pErr := sessionsColumnType(db, "repo_path"); pErr == nil && present2 {
+			return nil
+		}
+		return fmt.Errorf("migrate repo_path column: %w", err)
+	}
+	return nil
+}
+
+// sessionsColumnType looks up a column on the sessions table via PRAGMA
+// table_info and returns its declared type. Precondition: the sessions table
+// exists. The returned bool reports whether the column was found.
+func sessionsColumnType(db *sql.DB, column string) (string, bool, error) {
+	rows, err := db.Query("PRAGMA table_info(sessions)")
+	if err != nil {
+		return "", false, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var (
+			cid       int
+			name      string
+			colType   string
+			notnull   int
+			dfltValue sql.NullString
+			pk        int
+		)
+		if err := rows.Scan(&cid, &name, &colType, &notnull, &dfltValue, &pk); err != nil {
+			return "", false, err
+		}
+		if name == column {
+			return colType, true, nil
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", false, err
+	}
+	return "", false, nil
 }
 
 func (d *DB) Close() error {
@@ -53,16 +117,17 @@ func (d *DB) UpsertSession(meta SessionMeta, importedAt string) error {
 
 func upsertSession(e execer, meta SessionMeta, importedAt string) error {
 	_, err := e.Exec(`
-		INSERT INTO sessions (session_id, project_dir, cwd, git_branch, version, started_at, ended_at, imported_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+		INSERT INTO sessions (session_id, project_dir, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
+		VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id) DO UPDATE SET
 		  cwd = COALESCE(NULLIF(excluded.cwd, ''), sessions.cwd),
+		  repo_path = COALESCE(NULLIF(excluded.repo_path, ''), sessions.repo_path),
 		  git_branch = COALESCE(NULLIF(excluded.git_branch, ''), sessions.git_branch),
 		  version = COALESCE(NULLIF(excluded.version, ''), sessions.version),
 		  started_at = COALESCE(MIN(sessions.started_at, excluded.started_at), excluded.started_at, sessions.started_at),
 		  ended_at = COALESCE(MAX(sessions.ended_at, excluded.ended_at), excluded.ended_at, sessions.ended_at),
 		  imported_at = excluded.imported_at`,
-		meta.SessionID, meta.ProjectDir, meta.CWD, meta.GitBranch,
+		meta.SessionID, meta.ProjectDir, meta.CWD, meta.RepoPath, meta.GitBranch,
 		meta.Version, meta.StartedAt, meta.EndedAt, importedAt,
 	)
 	return err
@@ -381,6 +446,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
     project_dir TEXT NOT NULL,
     cwd TEXT,
+    repo_path TEXT,
     git_branch TEXT,
     custom_title TEXT,
     agent_name TEXT,

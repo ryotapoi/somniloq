@@ -44,6 +44,7 @@ type SessionMeta struct {
 	SessionID  string
 	ProjectDir string
 	CWD        string
+	RepoPath   string
 	GitBranch  string
 	Version    string
 	StartedAt  string

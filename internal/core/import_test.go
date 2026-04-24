@@ -101,6 +101,30 @@ func TestProcessFile(t *testing.T) {
 	}
 }
 
+func TestProcessFile_RepoPathStaysNull(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}
+`
+	path := filepath.Join(dir, "s1.jsonl")
+	os.WriteFile(path, []byte(jsonl), 0o644)
+
+	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("processFile failed: %v", err)
+	}
+
+	var isNull int
+	if err := db.db.QueryRow("SELECT repo_path IS NULL FROM sessions WHERE session_id='s1'").Scan(&isNull); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if isNull != 1 {
+		t.Errorf("repo_path should remain NULL after processFile (filled by a later commit)")
+	}
+}
+
 func TestProcessFile_EmptyFile(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()

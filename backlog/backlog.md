@@ -62,7 +62,7 @@
   - `internal/core/repo_path_test.go`: ロジック 1/2/4 はユニットテストで網羅、3 はテスト用一時 git リポジトリで最低 1 ケース
   - この時点では誰も呼ばない（次コミットから使う）
 
-- [ ] **スキーママイグレーション（`repo_path` カラム追加）**
+- [x] **スキーママイグレーション（`repo_path` カラム追加）**
   - `db.go` の `schema` に `repo_path TEXT` を追加（新規 DB 用）
   - `OpenDB` で既存 DB 向けに `PRAGMA table_info(sessions)` を見て `repo_path` が無ければ `ALTER TABLE sessions ADD COLUMN repo_path TEXT` を実行
   - `SessionMeta` に `RepoPath` フィールド追加、`upsertSession` の INSERT/UPDATE で扱う（`COALESCE(NULLIF(excluded.repo_path, ''), sessions.repo_path)`）
