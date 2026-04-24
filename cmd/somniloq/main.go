@@ -32,6 +32,7 @@ Usage:
 
 Commands:
   import     Import session logs from JSONL files
+  backfill   Resolve repo_path for legacy sessions
   sessions   List sessions
   show       Show session content in Markdown
   projects   List projects
@@ -56,6 +57,8 @@ Flags:
 	switch args[0] {
 	case "import":
 		runImport(*dbPath, defaultProjectsDir, args[1:])
+	case "backfill":
+		runBackfill(*dbPath, args[1:])
 	case "sessions":
 		runSessions(*dbPath, args[1:])
 	case "show":
@@ -120,6 +123,27 @@ func runImport(dbPath, projectsDir string, args []string) {
 	if result.FilesFailed > 0 {
 		os.Exit(1)
 	}
+}
+
+func runBackfill(dbPath string, args []string) {
+	fs := flag.NewFlagSet("backfill", flag.ExitOnError)
+	setUsage(fs, "Resolve repo_path for legacy sessions", "somniloq backfill")
+	fs.Parse(args)
+
+	if fs.NArg() != 0 {
+		fmt.Fprintln(os.Stderr, "error: unexpected arguments")
+		os.Exit(1)
+	}
+
+	db := openDB(dbPath)
+	defer db.Close()
+
+	resolved, unresolved, err := core.BackfillRepoPaths(db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+	fmt.Printf("Backfilled %d sessions (%d unresolved)\n", resolved, unresolved)
 }
 
 func runSessions(dbPath string, args []string) {

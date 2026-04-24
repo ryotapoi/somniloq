@@ -74,13 +74,12 @@
   - 同一 `cwd` の連続行が多いので、`processFile` スコープで `map[string]string` でメモ化
   - テスト: JSONL に cwd を含むケースで `sessions.repo_path` が埋まることを確認
 
-- [ ] **既存セッションのバックフィル**
-  - `somniloq import` 実行時（`OpenDB` ではない）に、`repo_path` が NULL または空のセッションに対して、`cwd` から `ResolveRepoPath` で解決して UPDATE
-  - 差分 import 本体の前段として走らせる（同一 import 実行内で既存分を埋めてから新規分を取り込む）
-  - `cwd` 単位でメモ化
-  - 解決不能（cwd 空・`.claude/worktrees/` 非該当・`git` 失敗）は空のまま。表示は従来フォールバックに落ちる
-  - バックフィルは 1 回走れば十分だが、idempotent に書く（NULL/空だけ対象にすれば自然に達成）
-  - テスト: `repo_path` NULL のセッションを用意してバックフィル後に埋まることを確認
+- [x] **既存セッションのバックフィル**
+  - 専用サブコマンド `somniloq backfill` として提供（当初案の `import` 内自動実行は Codex レビューで破棄: 解決失敗の一時/恒久を区別できず、毎回再試行コストがかさむ）
+  - `internal/core/backfill.go` に `BackfillRepoPaths(db *DB) (resolved, unresolved int, err error)` を追加
+  - `repo_path IS NULL AND cwd IS NOT NULL AND cwd != ''` が対象。cwd 単位でメモ化
+  - 解決不能セッションは NULL のまま残り、ユーザーが再実行すれば次回再試行される（マーカーは書かない）
+  - テスト: `internal/core/backfill_test.go` で境界条件・冪等性・同一 cwd 重複・実 git 解決を検証
 
 - [ ] **表示ロジックを `repo_path` / `repo_name` ベースに切り替え、`--short` の意味を変更**
   - `cmd/somniloq` の表示ロジックを以下に変更:

@@ -15,6 +15,13 @@
   - `--yes` で確認をスキップ
   - 非対話環境（パイプ、CI 等）では `--yes` が必須
 
+### バックフィル（backfill）
+
+- v0.3 より前に取り込まれた既存セッションの `repo_path` を解決して埋める
+- 対象は `repo_path IS NULL` かつ `cwd` が NULL でも空文字でもないセッション
+- 解決不能なセッションは NULL のまま残り、再実行で再試行される（マーカーは書かない）
+- `import` からは独立。v0.3 へアップグレード後に一度叩くことを想定
+
 ### セッション一覧（sessions）
 
 - セッション一覧を表示
@@ -50,6 +57,7 @@
 somniloq import                          # 全 JSONL を差分取り込み
 somniloq import --full                   # 全件再取り込み（確認あり）
 somniloq import --full --yes             # 確認なしで全件再取り込み
+somniloq backfill                        # 既存セッションの repo_path を解決
 somniloq sessions                        # セッション一覧
 somniloq sessions --since 24h            # 直近24時間
 somniloq sessions --since 2026-03-28     # 3/28 以降
