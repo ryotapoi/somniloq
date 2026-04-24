@@ -69,7 +69,7 @@
   - この時点では import 側は `RepoPath` を埋めないので全セッション NULL のまま。表示も変更なし
   - マイグレーションテスト: 既存スキーマの DB を開いて `repo_path` カラムが追加されることを確認
 
-- [ ] **import 時に `repo_path` を解決して保存**
+- [x] **import 時に `repo_path` を解決して保存**
   - `import.go` の `processFile` で `SessionMeta` 組み立て時に `ResolveRepoPath(rec.CWD)` を呼んで `RepoPath` に入れる
   - 同一 `cwd` の連続行が多いので、`processFile` スコープで `map[string]string` でメモ化
   - テスト: JSONL に cwd を含むケースで `sessions.repo_path` が埋まることを確認

@@ -113,6 +113,8 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 	}
 	defer tx.Rollback()
 
+	repoCache := map[string]string{}
+
 	for {
 		line, err := reader.ReadBytes('\n')
 		if len(line) > 0 {
@@ -133,10 +135,16 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 				if perr != nil {
 					continue
 				}
+				repo, ok := repoCache[rec.CWD]
+				if !ok {
+					repo = ResolveRepoPath(rec.CWD)
+					repoCache[rec.CWD] = repo
+				}
 				meta := SessionMeta{
 					SessionID:  rec.SessionID,
 					ProjectDir: file.ProjectDir,
 					CWD:        rec.CWD,
+					RepoPath:   repo,
 					GitBranch:  rec.GitBranch,
 					Version:    rec.Version,
 					StartedAt:  rec.Timestamp,

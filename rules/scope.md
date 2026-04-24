@@ -8,6 +8,7 @@
 - `import_state` と照合し、未取り込み or サイズ増加分を検出（差分取り込み）
 - 各 JSONL を行単位で読み、`type` でフィルタ
 - `user`/`assistant` → messages テーブルへ（text 部分のみ抽出）
+- `user`/`assistant` の `cwd` から `repo_path` を解決して sessions に保存（解決不能なら NULL）
 - `custom-title`/`agent-name` → sessions テーブルの該当カラム更新
 - `import_state` を更新
 - `--full` フラグで全件再取り込み（確認プロンプトあり、デフォルト No）
@@ -83,6 +84,7 @@ CREATE TABLE sessions (
     session_id TEXT PRIMARY KEY,  -- UUID
     project_dir TEXT NOT NULL,    -- プロジェクトディレクトリ名
     cwd TEXT,                     -- 作業ディレクトリ
+    repo_path TEXT,               -- 解決済みリポジトリパス（cwd から解決）
     git_branch TEXT,
     custom_title TEXT,            -- custom-title レコードから
     agent_name TEXT,              -- agent-name レコードから

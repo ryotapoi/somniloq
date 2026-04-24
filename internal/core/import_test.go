@@ -67,8 +67,8 @@ func TestProcessFile(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
 
-	jsonl := `{"type":"user","uuid":"u1","parentUuid":"p1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"hi there"}]}}
+	jsonl := `{"type":"user","uuid":"u1","parentUuid":"p1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"hi there"}]}}
 {"type":"custom-title","customTitle":"test session","sessionId":"s1"}
 `
 	path := filepath.Join(dir, "s1.jsonl")
@@ -101,27 +101,72 @@ func TestProcessFile(t *testing.T) {
 	}
 }
 
-func TestProcessFile_RepoPathStaysNull(t *testing.T) {
+func TestProcessFile_ResolvesRepoPath(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
 
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"hi"}]}}
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/Users/test/projA/.claude/worktrees/feature-x","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+{"type":"user","uuid":"u2","sessionId":"s2","timestamp":"2026-03-28T14:01:00Z","cwd":"/Users/test/projB/.claude/worktrees/feature-y","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"world"}}
+{"type":"user","uuid":"u3","sessionId":"s3","timestamp":"2026-03-28T14:02:00Z","cwd":"","gitBranch":"","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
 `
-	path := filepath.Join(dir, "s1.jsonl")
+	path := filepath.Join(dir, "s.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s"}
 	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
 
+	for _, c := range []struct {
+		sessionID string
+		want      string
+	}{
+		{"s1", "/Users/test/projA"},
+		{"s2", "/Users/test/projB"},
+	} {
+		var repoPath string
+		if err := db.db.QueryRow("SELECT COALESCE(repo_path, '') FROM sessions WHERE session_id=?", c.sessionID).Scan(&repoPath); err != nil {
+			t.Fatalf("%s SELECT failed: %v", c.sessionID, err)
+		}
+		if repoPath != c.want {
+			t.Errorf("%s repo_path: got %q, want %q", c.sessionID, repoPath, c.want)
+		}
+	}
+
 	var isNull int
-	if err := db.db.QueryRow("SELECT repo_path IS NULL FROM sessions WHERE session_id='s1'").Scan(&isNull); err != nil {
-		t.Fatalf("SELECT failed: %v", err)
+	if err := db.db.QueryRow("SELECT repo_path IS NULL FROM sessions WHERE session_id='s3'").Scan(&isNull); err != nil {
+		t.Fatalf("s3 SELECT failed: %v", err)
 	}
 	if isNull != 1 {
-		t.Errorf("repo_path should remain NULL after processFile (filled by a later commit)")
+		t.Errorf("s3 repo_path should be NULL for empty cwd, got non-NULL")
+	}
+}
+
+func TestImport_FillsRepoPath(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	projDir := filepath.Join(dir, "-Users-test-proj")
+	os.MkdirAll(projDir, 0o755)
+
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/Users/test/proj/.claude/worktrees/feature","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
+`
+	os.WriteFile(filepath.Join(projDir, "s1.jsonl"), []byte(jsonl), 0o644)
+
+	res, err := Import(db, ImportOptions{ProjectsDir: dir})
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+	if res.FilesImported != 1 || len(res.Errors) != 0 {
+		t.Fatalf("Import result: imported=%d errors=%v", res.FilesImported, res.Errors)
+	}
+
+	var repoPath string
+	if err := db.db.QueryRow("SELECT COALESCE(repo_path, '') FROM sessions WHERE session_id='s1'").Scan(&repoPath); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if repoPath != "/Users/test/proj" {
+		t.Errorf("repo_path: got %q, want /Users/test/proj", repoPath)
 	}
 }
 
@@ -147,7 +192,7 @@ func TestProcessFile_NoTrailingNewline(t *testing.T) {
 	dir := t.TempDir()
 
 	// No trailing newline
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}`
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}`
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
@@ -172,8 +217,8 @@ func TestProcessFile_SkipsEmptyContent(t *testing.T) {
 	dir := t.TempDir()
 
 	// tool_use only message: ExtractText returns "" for this content
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}}
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}}
 `
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
@@ -203,8 +248,8 @@ func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
 
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":"   \n  "}}
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":"   \n  "}}
 `
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
@@ -230,8 +275,8 @@ func TestImport_Incremental(t *testing.T) {
 	os.MkdirAll(projDir, 0o755)
 
 	// First import: 2 messages
-	jsonl1 := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"first"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"reply1"}]}}
+	jsonl1 := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"first"}}
+{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"reply1"}]}}
 `
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl1), 0o644)
@@ -245,7 +290,7 @@ func TestImport_Incremental(t *testing.T) {
 	}
 
 	// Append 1 more message
-	jsonl2 := jsonl1 + `{"type":"user","uuid":"u2","sessionId":"s1","timestamp":"2026-03-28T14:02:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"second"}}
+	jsonl2 := jsonl1 + `{"type":"user","uuid":"u2","sessionId":"s1","timestamp":"2026-03-28T14:02:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"second"}}
 `
 	os.WriteFile(path, []byte(jsonl2), 0o644)
 
@@ -272,8 +317,8 @@ func TestImport_FileShrink(t *testing.T) {
 	os.MkdirAll(projDir, 0o755)
 
 	// First import with larger file
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"original"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"reply"}]}}
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"original"}}
+{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"reply"}]}}
 `
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
@@ -281,7 +326,7 @@ func TestImport_FileShrink(t *testing.T) {
 	Import(db, ImportOptions{ProjectsDir: dir})
 
 	// Shrink file (simulate truncate/recreate)
-	smallJsonl := `{"type":"user","uuid":"u3","sessionId":"s1","timestamp":"2026-03-28T15:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"new"}}
+	smallJsonl := `{"type":"user","uuid":"u3","sessionId":"s1","timestamp":"2026-03-28T15:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"new"}}
 `
 	os.WriteFile(path, []byte(smallJsonl), 0o644)
 
@@ -305,7 +350,7 @@ func TestImport_Full(t *testing.T) {
 	projDir := filepath.Join(dir, "-test-proj")
 	os.MkdirAll(projDir, 0o755)
 
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
 `
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
