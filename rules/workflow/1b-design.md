@@ -6,10 +6,7 @@
 
 - 変更対象のコードを Read で読み、現在の実装を把握する
 - 変更対象から呼び出している・呼び出されている関連コードを確認する
-- 関連する rules/ の仕様を Read で確認する
-  - `rules/architecture.md` — モジュール配置・依存方向の制約
-  - `rules/mission.md` / `rules/scope.md` — プロダクト目的・主要機能
-  - `rules/information-management.md` — 情報管理の原則
+- `rules/` を読む（必要な資料はタスクによって変わるので、関連するものを Read で読む）
 - 既存の類似実装パターンを Grep で探す
 - `references/knowledge.md` — 関連するハマりどころがないか確認する
 
