@@ -97,6 +97,6 @@ Proposed | Accepted | Deprecated | Superseded by ADR NNNN
 
 ## Consequences
 
-この判断によって何が容易になり、何が困難に��るか。
+この判断によって何が容易になり、何が困難になるか。
 肯定的・否定的・中立的な影響をすべて列挙する。
 ```
