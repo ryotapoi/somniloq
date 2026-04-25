@@ -1,6 +1,6 @@
 ---
 name: review-plan-all
-description: プランレビューの全チェーンを実行する。プランの記述が完了したら、ExitPlanMode を呼ぶ前に必ず実行すること。プランを書き終えた、レビューに進む、ExitPlanMode する、といった文脈で自動的にこのスキルを起動する。個別のレビュースキル（/review-plan, /review-plan-codex 等）を直接呼ばず、このスキルを使う。
+description: プランレビューの全チェーンを実行する。IMPORTANT: プランモードでプランの記述が完了したら、ExitPlanMode を呼ぶ前に必ずこのスキルを実行すること。ExitPlanMode を直接呼んではならない — 先にこのスキルでレビューを通す。プランを書き終えた、レビューに進む、ExitPlanMode する、といった文脈で自動的にこのスキルを起動する。個別のレビュースキル（/review-plan, /review-plan-codex 等）を直接呼ばず、このスキルを使う。
 argument-hint: [plan-file-path]
 ---
 
@@ -10,7 +10,7 @@ argument-hint: [plan-file-path]
 **各ステップは前のステップの完了を待ってから実行すること。同時実行は禁止。**
 **明示的に「ユーザーに確認」と記載されたステップ以外は、ユーザー確認なしで次のステップへ自動的に進む。**
 
-ユーザーが codex スキップを指示している場合、手順5-6をスキップする。
+ユーザーが codex スキップを指示している場合、手順 6-7 をスキップする。
 
 ## 手順
 
@@ -29,20 +29,24 @@ argument-hint: [plan-file-path]
 
 引数（`$ARGUMENTS`）があればそのまま渡す。
 
-### 2. 新規の 🔴 MUST / 🟡 SHOULD 指摘をプランに反映する
+### 2. `/review-plan-go` を Skill tool で実行する
+
+引数があればそのまま渡す。
+
+### 3. `/review-plan-somniloq` を Skill tool で実行する
+
+引数があればそのまま渡す。
+
+### 4. 新規の 🔴 MUST / 🟡 SHOULD 指摘をプランに反映する
 
 - 前回対処済みの指摘の再表現（「もっと明示的に」「セクションに切り出せ」等）は新規とみなさない
 - 判断が必要な指摘は AskUserQuestion でユーザーに確認する
 
-### 3. 新規指摘があった場合 → 手順1に戻る
+### 5. 新規指摘があった場合 → 手順 1 に戻る
 
-新規 MUST/SHOULD がゼロになるまでループする（手順 0 には戻らない。粒度判定は初回のみ）。
+新規 MUST/SHOULD がゼロになるまで codex 以外のレビュー群（手順 1〜3）でループする（手順 0 には戻らない。粒度判定は初回のみ）。
 
-### 4. `/review-plan-somniloq` を Skill tool で実行する
-
-引数（`$ARGUMENTS`）があればそのまま渡す。新規 MUST/SHOULD 指摘があれば反映し、手順1に戻る。
-
-### 5. `/review-plan-codex` を Skill tool で実行する
+### 6. `/review-plan-codex` を Skill tool で実行する
 
 **引数は自然言語で渡すこと**（harness 制約により `--resume` や `--flag` 形式のフラグは `$ARGUMENTS` 全体を空にしてしまう）:
 
@@ -53,10 +57,12 @@ argument-hint: [plan-file-path]
 
 Codex の出力に 🔴 MUST / 🟡 SHOULD / 🔵 NIT の指摘がある場合（LGTM でない場合）、`/codex-findings-append` スキルを Skill tool で実行して追記する。引数: `plan somniloq "<変更概要>"`
 
-### 6. 新規指摘があれば反映し、手順1に戻る
+### 7. 新規指摘があった場合 → 手順 1 に戻る
 
-Codex レビューが2回目の場合、自動で反映せず指摘内容をユーザーに提示する。ユーザーがさらにループするか終了するか判断する。
+Codex の指摘を反映した場合、整合性を取るためにもう一度 codex 以外のレビュー群（手順 1〜3）を全部走らせる。
 
-### 7. 新規指摘なし → 完了
+Codex レビューが 2 回目の場合、自動で反映せず指摘内容をユーザーに提示する。ユーザーがさらにループするか終了するか判断する。
+
+### 8. 新規指摘なし → 完了
 
 「プランレビュー完了。ExitPlanMode で承認を求めてください。」と報告する。
