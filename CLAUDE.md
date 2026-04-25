@@ -20,6 +20,7 @@ go build -o bin/somniloq ./cmd/somniloq      # バイナリビルド
 - プロダクト目的・非目標: rules/mission.md
 - 主要機能・CLI・テーブル設計: rules/scope.md
 - モジュール構成と依存方向: rules/architecture.md
+- 技術的制約・禁止事項: rules/constraints.md
 - 開発ワークフロー: rules/workflow/
 - 情報管理の原則（フォルダ構成・情報分類・SSoT）: rules/information-management.md
 
