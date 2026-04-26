@@ -26,17 +26,21 @@ go build -o bin/somniloq ./cmd/somniloq      # バイナリビルド
 
 ## 開発ワークフロー
 
-IMPORTANT: 各ステップの詳細ファイルを、**ステップに入る前**に Read で読むこと。CLAUDE.md の要約で済ませず、毎回実ファイルを読む。
+IMPORTANT: 各フェーズに入る時点で、そのフェーズに含まれる詳細ファイルをまとめて Read で読むこと。CLAUDE.md の要約で済ませず、毎回実ファイルを読む。
+
+- **計画フェーズ着手時**: rules/workflow/1a-ux-scenario.md / 1b-design.md / 1c-plan.md をまとめて Read してから 1a に入る
+- **実装フェーズ着手時**: rules/workflow/2a-implement.md / 2b-verify.md / 2c-review.md / 3-finish.md をまとめて Read してから 2a に入る（実装〜コミットはセッションを分断しないため、3 もここで一緒に読む）
+- 計画と実装はセッションを分断するため、計画フェーズで 2a 以降を先読みしない
 
 1. **計画（プランモード）**
-   1. **UX シナリオ** — rules/workflow/1a-ux-scenario.md を読んでから着手
-   2. **調査・設計判断** — rules/workflow/1b-design.md を読んでから着手
-   3. **プラン作成・レビュー** — rules/workflow/1c-plan.md を読んでから着手
+   1. **UX シナリオ** — 1a-ux-scenario.md
+   2. **調査・設計判断** — 1b-design.md
+   3. **プラン作成・レビュー** — 1c-plan.md
 2. **実装**
-   1. **実装** — rules/workflow/2a-implement.md を読んでから着手
-   2. **動作確認** — rules/workflow/2b-verify.md を読む
-   3. **レビュー** — rules/workflow/2c-review.md を読む
-3. **コミット** — rules/workflow/3-finish.md に従う
+   1. **実装** — 2a-implement.md
+   2. **動作確認** — 2b-verify.md
+   3. **レビュー** — 2c-review.md
+3. **コミット** — 3-finish.md
 
 ### 進行の原則
 
