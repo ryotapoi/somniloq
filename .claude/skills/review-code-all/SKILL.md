@@ -2,6 +2,8 @@
 name: review-code-all
 description: 実装レビューの全チェーンを実行する。実装・テスト完了後、コミット前に必ず実行すること。実装が終わった、レビューに進む、コミットする、といった文脈で自動的にこのスキルを起動する。個別のレビュースキル（/review-code, /review-code-go, /review-code-codex 等）を直接呼ばず、このスキルを使う。
 argument-hint: [plan-file-path]
+model: sonnet
+effort: high
 ---
 
 # Implementation Review — Full Chain

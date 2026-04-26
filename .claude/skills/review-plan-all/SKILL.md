@@ -2,6 +2,8 @@
 name: review-plan-all
 description: プランレビューの全チェーンを実行する。IMPORTANT: プランモードでプランの記述が完了したら、ExitPlanMode を呼ぶ前に必ずこのスキルを実行すること。ExitPlanMode を直接呼んではならない — 先にこのスキルでレビューを通す。プランを書き終えた、レビューに進む、ExitPlanMode する、といった文脈で自動的にこのスキルを起動する。個別のレビュースキル（/review-plan, /review-plan-codex 等）を直接呼ばず、このスキルを使う。
 argument-hint: [plan-file-path]
+model: sonnet
+effort: high
 ---
 
 # Plan Review — Full Chain
