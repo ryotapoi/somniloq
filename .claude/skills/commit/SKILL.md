@@ -54,7 +54,6 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 
 - コミットメッセージは必ず HEREDOC で渡す（改行の安全な扱いのため）
 - `.env` や credentials を含むファイルはコミット対象から除外する
-- `--amend` はユーザーが明示的に指示した場合のみ使用する
 
 ## ADR 判断基準
 
