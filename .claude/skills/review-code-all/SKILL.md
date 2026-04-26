@@ -53,8 +53,7 @@ go test ./...
 
 ### 7. 新規の 🔴 MUST / 🟡 SHOULD 指摘を実装に反映する
 
-- 前回対処済みの指摘の再表現は新規とみなさない
-- 判断が必要な指摘は AskUserQuestion でユーザーに確認する
+判断が必要な指摘は AskUserQuestion でユーザーに確認する。収束判定は `rules/workflow/2c-review.md` の「レビューの収束条件」に従う。
 
 ### 8. 新規指摘があった場合 → ループ
 
