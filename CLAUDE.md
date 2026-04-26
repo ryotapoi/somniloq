@@ -7,15 +7,13 @@ somniloq は Claude Code のセッションログ（JSONL）を読み取り、SQ
 ## ビルド・テストコマンド
 
 ```bash
-go test ./...                          # 全テスト実行
-go test ./internal/...                 # 特定パッケージのテスト実行
-go test ./internal/... -run TestImport # 特定テストのみ実行
+go test ./...                                # 全テスト実行
 go build -o bin/somniloq ./cmd/somniloq      # バイナリビルド
 ```
 
 ## rules/
 
-計画・実装時に必ず Read で参照すること。CLAUDE.md の要約で済ませず、実ファイルを読んで判断する。
+計画・実装時に Read で参照する。
 
 - プロダクト目的・非目標: rules/mission.md
 - 主要機能・CLI・テーブル設計: rules/scope.md
@@ -32,14 +30,14 @@ IMPORTANT: 各フェーズに入る時点で、そのフェーズに含まれる
 - **実装フェーズ着手時**: rules/workflow/2a-implement.md / 2b-verify.md / 2c-review.md / 3-finish.md をまとめて Read してから 2a に入る（実装〜コミットはセッションを分断しないため、3 もここで一緒に読む）
 
 1. **計画（プランモード）**
-   1. **UX シナリオ** — 1a-ux-scenario.md
-   2. **調査・設計判断** — 1b-design.md
-   3. **プラン作成・レビュー** — 1c-plan.md
+   1. **UX シナリオ**
+   2. **調査・設計判断**
+   3. **プラン作成・レビュー**
 2. **実装**
-   1. **実装** — 2a-implement.md
-   2. **動作確認** — 2b-verify.md
-   3. **レビュー** — 2c-review.md
-3. **コミット** — 3-finish.md
+   1. **実装**
+   2. **動作確認**
+   3. **レビュー**
+3. **コミット**
 
 ### 進行の原則
 
@@ -67,7 +65,6 @@ IMPORTANT: 各フェーズに入る時点で、そのフェーズに含まれる
 判断軸:
 
 - 回数ではなく「結果の量」「全体像把握が要るか」「main コンテキストを汚すか」で判断する
-- 複数 subagent の並列起動は、論理的に独立したタスクが同時にあるときだけ行う
 - 1 サブエージェント = 1 タスクに絞り、焦点を明確にする
 - Agent ツールの prompt には、worktree で作業中の場合「git worktree で作業している。作業ディレクトリは <Primary working directory のフルパス> であり、このパス配下のファイルを参照すること」と明記する
 
