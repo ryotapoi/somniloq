@@ -27,7 +27,7 @@ effort: xhigh
 
 ### 2. Plan サブエージェントを起動する
 
-Task ツールで `subagent_type: Plan, model: "sonnet"` を使う。
+Task ツールで `subagent_type: Plan, model: "claude-sonnet-4-6"` を使う。
 
 エージェントのプロンプトには、手順1で取得済みの以下の値を埋め込む:
 - `{GIT_DIFF}`: 手順1で取得した変更差分（git diff + git diff --cached の結合出力）

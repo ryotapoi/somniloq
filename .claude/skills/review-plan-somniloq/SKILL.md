@@ -30,7 +30,7 @@ effort: xhigh
 
 ### 3. Plan サブエージェントを起動する
 
-Task ツールで `subagent_type: Plan, model: "sonnet"` を使う。
+Task ツールで `subagent_type: Plan, model: "claude-sonnet-4-6"` を使う。
 
 エージェントには以下を渡す:
 - プランの全文
