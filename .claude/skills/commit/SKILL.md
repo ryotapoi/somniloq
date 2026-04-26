@@ -2,8 +2,6 @@
 name: commit
 description: Conventional Commits 形式でコミットを作成する
 disable-model-invocation: false
-model: sonnet
-effort: high
 ---
 
 # Commit スキル
