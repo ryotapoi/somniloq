@@ -2,7 +2,7 @@
 name: review-code-somniloq
 description: somniloq 固有の設計制約に基づく実装レビュー。通常はチェーンスキルから呼ばれる。
 argument-hint: <plan-file-path>
-allowed-tools: Read, Glob, Grep, Bash(git diff *), Bash(git log *), Bash(git status *), Task
+allowed-tools: Read, Glob, Grep, Bash(git diff *), Bash(git log *), Bash(git status *), Bash(mkdir:*), Bash(printf:*), Bash(date:*), Write, Task
 context: fork
 model: opus
 effort: xhigh
@@ -83,9 +83,45 @@ Task ツールで `subagent_type: Plan, model: "claude-sonnet-4-6"` を使う。
 - 問題がなければ「somniloq 固有の指摘なし」と記載する
 ```
 
-### 3. 結果を出力する
+### 3. 結果ファイルを書き出して返り値を返す
 
-エージェントの結果を以下の形式でユーザーに表示する:
+1. 結果保存先ディレクトリを作成: Bash で `mkdir -p /tmp/claude/claude-review-results`
+2. 結果ファイル名を組み立てる: Bash で
+
+   ```bash
+   printf '%s/review-code-somniloq-%s-%04x.md' \
+     /tmp/claude/claude-review-results \
+     "$(date +%Y%m%d-%H%M%S)" \
+     "$RANDOM"
+   ```
+
+   出力されたパスを `RESULT_PATH` とする
+3. Write ツールで `RESULT_PATH` にエージェント結果を書き出す（フォーマットは下の「結果ファイルの中身」参照）
+4. 集計: 🔴 MUST / 🟡 SHOULD / 🔵 NIT の件数を数え、`must`, `should`, `nit` の値を決める。`needs_action` は `must + should > 0` なら `YES`、それ以外は `NO`
+5. ユーザーに返す text は以下の 2 行のみ:
+
+   ```
+   RESULT_FILE: <RESULT_PATH>
+   SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>
+   ```
+
+   `<1行サマリ>` は LGTM 時は「somniloq 固有の指摘なし」、指摘ありの場合は最重要指摘の要旨を 1 行で。エージェント本文は text に貼り付けない。
+
+#### フォールバック
+
+mkdir / Write のいずれかが失敗した場合、以下の形式で text を返す:
+
+```
+RESULT_FILE: ERROR — <失敗理由を1行で>
+
+<従来形式のエージェント本文（下の「結果ファイルの中身」と同じ構造）>
+```
+
+main 側は `RESULT_FILE: ERROR` を検出したら本文を直接読む。
+
+### 4. 結果ファイルの中身
+
+`RESULT_PATH` に書き出すレビュー本文は以下の形式:
 
 ```
 ## 自己レビュー結果（somniloq 固有）
