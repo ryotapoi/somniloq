@@ -42,20 +42,18 @@ argument-hint: [plan-file-path]
 | スキル | 出力形式 |
 | --- | --- |
 | `/review-plan` | **結果ファイル化** |
-| `/review-plan-go` | 従来形式 |
+| `/review-plan-go` | **結果ファイル化** |
 | `/review-plan-somniloq` | **結果ファイル化** |
 
-各スキルの戻り値テキストから:
-- 結果ファイル化対象（review-plan / review-plan-somniloq）: `^RESULT_FILE: ` 行と `^SUMMARY: ` 行を抽出する
-  - `RESULT_FILE:` の値が `ERROR` で始まる場合、本文がそのまま戻り値内に含まれているのでフォールバックとして扱う（戻り値本文を読む）
-- 従来形式（review-plan-go）: 戻り値本文をそのまま指摘として扱う
+各スキルの戻り値テキストから `^RESULT_FILE: ` 行と `^SUMMARY: ` 行を抽出する。
+- `RESULT_FILE:` の値が `ERROR` で始まる場合、本文がそのまま戻り値内に含まれているのでフォールバックとして扱う（戻り値本文を読む）
 
 **指摘反映の進め方**:
 1. 全スキル実行が完了するまで結果ファイルは Read しない（戻り値の `RESULT_FILE` / `SUMMARY` 行のみ受け取る）
-2. 全スキル完了後、結果ファイル化対象のうち `SUMMARY: ... needs_action=YES ...` のものについて、`RESULT_FILE` のパスを Read で読み込む
+2. 全スキル完了後、`SUMMARY: ... needs_action=YES ...` のものについて、`RESULT_FILE` のパスを Read で読み込む
    - パスが `/tmp/claude/claude-review-results/` 配下であることを確認してから Read する（パス検証）
    - `needs_action=NO` のスキルの結果ファイルは Read しない
-3. 従来形式スキル（review-plan-go）の本文と合わせて全指摘を一覧し、🔴 MUST / 🟡 SHOULD 指摘の対応方針を決定する。対応方針の判断は呼び出し元 workflow（`rules/workflow/1c-plan.md`）の「レビュー指摘への対応」「レビューの収束条件」に従う
+3. 全指摘を一覧し、🔴 MUST / 🟡 SHOULD 指摘の対応方針を決定する。対応方針の判断は呼び出し元 workflow（`rules/workflow/1c-plan.md`）の「レビュー指摘への対応」「レビューの収束条件」に従う
 4. 対応方針が決まったら Edit に入る。隣接セクションへの修正は 1 つの Edit にまとめる。離れたセクションへの修正は別 Edit のまま（diff レビュー粒度を保つため）
 5. 反映完了後、結果ファイルは再 Read しない（古い Read 結果は履歴から自然に流れる）
 

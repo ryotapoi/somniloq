@@ -55,20 +55,20 @@ CLI 動作確認は `2b-verify.md` の段階で既に通過している前提。
 | --- | --- |
 | `/simplify` | 従来形式 |
 | `/review-code` | **結果ファイル化** |
-| `/review-code-go` | 従来形式 |
+| `/review-code-go` | **結果ファイル化** |
 | `/review-code-somniloq` | **結果ファイル化** |
 
 各スキルの戻り値テキストから:
-- 結果ファイル化対象（review-code / review-code-somniloq）: `^RESULT_FILE: ` 行と `^SUMMARY: ` 行を抽出する
+- 結果ファイル化対象（review-code / review-code-go / review-code-somniloq）: `^RESULT_FILE: ` 行と `^SUMMARY: ` 行を抽出する
   - `RESULT_FILE:` の値が `ERROR` で始まる場合、本文がそのまま戻り値内に含まれているのでフォールバックとして扱う（戻り値本文を読む）
-- 従来形式（simplify / review-code-go）: 戻り値本文をそのまま指摘として扱う
+- 従来形式（simplify）: 戻り値本文をそのまま指摘として扱う
 
 **指摘反映の進め方**:
 1. 全スキル実行が完了するまで結果ファイルは Read しない（戻り値の `RESULT_FILE` / `SUMMARY` 行のみ受け取る）
 2. 全スキル完了後、結果ファイル化対象のうち `SUMMARY: ... needs_action=YES ...` のものについて、`RESULT_FILE` のパスを Read で読み込む
    - パスが `/tmp/claude/claude-review-results/` 配下であることを確認してから Read する（パス検証）
    - `needs_action=NO` のスキルの結果ファイルは Read しない
-3. 従来形式スキル（simplify / review-code-go）の本文と合わせて全指摘を一覧し、🔴 MUST / 🟡 SHOULD 指摘の対応方針を決定する。対応方針の判断と収束条件は呼び出し元 workflow（`rules/workflow/2c-review.md`）に従う
+3. 従来形式スキル（simplify）の本文と合わせて全指摘を一覧し、🔴 MUST / 🟡 SHOULD 指摘の対応方針を決定する。対応方針の判断と収束条件は呼び出し元 workflow（`rules/workflow/2c-review.md`）に従う
 4. 対応方針が決まったら Edit に入る。隣接セクションへの修正は 1 つの Edit にまとめる。離れたセクションへの修正は別 Edit のまま
 5. 反映完了後、結果ファイルは再 Read しない
 
