@@ -172,10 +172,7 @@ func runSessions(dbPath string, args []string) {
 
 	for _, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
-		proj := normalizeProjectDir(r.ProjectDir)
-		if *short {
-			proj = shortenProject(r.ProjectDir)
-		}
+		proj := resolveDisplayName(r.ProjectDir, *short)
 		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%d\n",
 			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), proj, title, r.MessageCount)
 	}
@@ -250,10 +247,7 @@ func runShow(dbPath string, args []string) {
 			fmt.Fprintf(os.Stderr, "error: session not found: %s\n", sessionID)
 			os.Exit(1)
 		}
-		session.ProjectDir = normalizeProjectDir(session.ProjectDir)
-		if *short {
-			session.ProjectDir = shortenProject(session.ProjectDir)
-		}
+		session.ProjectDir = resolveDisplayName(session.ProjectDir, *short)
 		messages, err := getMessages(sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -280,11 +274,7 @@ func runShow(dbPath string, args []string) {
 	}
 
 	for i := range sessions {
-		if *short {
-			sessions[i].ProjectDir = shortenProject(sessions[i].ProjectDir)
-		} else {
-			sessions[i].ProjectDir = normalizeProjectDir(sessions[i].ProjectDir)
-		}
+		sessions[i].ProjectDir = resolveDisplayName(sessions[i].ProjectDir, *short)
 	}
 
 	if err := formatSessions(os.Stdout, sessions, getMessages, time.Local); err != nil {
@@ -324,10 +314,7 @@ func runProjects(dbPath string, args []string) {
 
 	rows = mergeProjects(rows)
 	for _, r := range rows {
-		name := r.ProjectDir
-		if *short {
-			name = shortenProject(r.ProjectDir)
-		}
+		name := resolveDisplayName(r.ProjectDir, *short)
 		fmt.Fprintf(os.Stdout, "%s\t%d\n", name, r.SessionCount)
 	}
 }

@@ -60,3 +60,10 @@ func mergeProjects(rows []core.ProjectRow) []core.ProjectRow {
 	}
 	return result
 }
+
+func resolveDisplayName(projectDir string, short bool) string {
+	if short {
+		return shortenProject(projectDir)
+	}
+	return normalizeProjectDir(projectDir)
+}

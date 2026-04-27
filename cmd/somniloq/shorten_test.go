@@ -106,6 +106,48 @@ func TestShortenProject(t *testing.T) {
 	}
 }
 
+func TestResolveDisplayName(t *testing.T) {
+	tests := []struct {
+		name       string
+		projectDir string
+		short      bool
+		want       string
+	}{
+		{
+			name:       "plain path, short=false",
+			projectDir: "-Users-ryota-Sources-Brimday",
+			short:      false,
+			want:       "-Users-ryota-Sources-Brimday",
+		},
+		{
+			name:       "plain path, short=true",
+			projectDir: "-Users-ryota-Sources-Brimday",
+			short:      true,
+			want:       "Brimday",
+		},
+		{
+			name:       "worktree path, short=false",
+			projectDir: "-Users-ryota-Sources-Brimday--claude-worktrees-x",
+			short:      false,
+			want:       "-Users-ryota-Sources-Brimday",
+		},
+		{
+			name:       "worktree path, short=true",
+			projectDir: "-Users-ryota-Sources-Brimday--claude-worktrees-x",
+			short:      true,
+			want:       "Brimday",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := resolveDisplayName(tt.projectDir, tt.short)
+			if got != tt.want {
+				t.Errorf("resolveDisplayName(%q, %v) = %q, want %q", tt.projectDir, tt.short, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestMergeProjects(t *testing.T) {
 	tests := []struct {
 		name string

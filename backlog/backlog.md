@@ -81,7 +81,7 @@
   - 解決不能セッションは NULL のまま残り、ユーザーが再実行すれば次回再試行される（マーカーは書かない）
   - テスト: `internal/core/backfill_test.go` で境界条件・冪等性・同一 cwd 重複・実 git 解決を検証
 
-- [ ] **表示名解決ロジックを `cmd/somniloq/shorten.go` のヘルパーに集約するリファクタ**
+- [x] **表示名解決ロジックを `cmd/somniloq/shorten.go` のヘルパーに集約するリファクタ**
   - 現状 `runSessions` / `runShow` / `runProjects` の 3 関数 7 箇所に `normalizeProjectDir` / `shortenProject` の呼び出しが散在している（Refactor Guard で散弾銃手術と判定）
   - `resolveDisplayName(projectDir string, short bool) string` 相当のヘルパーを `shorten.go` に追加し、3 関数からの呼び出しを 1 行に置き換える
   - 既存の `normalizeProjectDir` / `shortenProject` / `mergeProjects` は内部実装として残す
