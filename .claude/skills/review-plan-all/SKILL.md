@@ -18,12 +18,16 @@ argument-hint: [plan-file-path]
 
 引数（`$ARGUMENTS`）があればそのまま渡す。プランの粒度を判定する。
 
-- **判定が ✅ 分割不要**: 次の手順 1 に進む
-- **判定が ⛔ 分割推奨**: 検出シグナルをユーザーに提示し、`AskUserQuestion` で以下を尋ねる:
+戻り値テキストから `^RESULT_FILE: ` / `^SUMMARY: ` 行を抽出する。
+
+- **`SUMMARY: ... needs_action=NO ...`（✅ 分割不要）**: 結果ファイルは Read せず、次の手順 1 に進む
+- **`SUMMARY: ... needs_action=YES ...`（⛔ 分割推奨）**: `RESULT_FILE` のパスを Read で読み込み（`/tmp/claude/claude-review-results/` 配下であることを確認）、検出シグナルをユーザーに提示し、`AskUserQuestion` で以下を尋ねる:
   - 選択肢 1: 「backlog に分割して Plan モードを抜ける」
   - 選択肢 2: 「このまま 1 プランで進める（分割しない理由をプランに明記する）」
 
   選択肢 1 の場合、以降のレビュー（手順 1 以降）は**全てスキップ**し、呼び出し元に「分割のため Plan モードを抜けてください」と伝えて終了する。選択肢 2 の場合は次の手順 1 に進む（プラン本文に「分割しないと判断した理由」を追記してから）。
+
+`RESULT_FILE:` の値が `ERROR` で始まる場合、本文がそのまま戻り値内に含まれているのでフォールバックとして扱う。
 
 ### 1. `/review-plan` を Skill tool で実行する
 
@@ -72,7 +76,12 @@ argument-hint: [plan-file-path]
 
 `<PLAN_PATH>` は手順 1 で受け取ったプランファイルの絶対パスに置換する。
 
-Codex の出力に 🔴 MUST / 🟡 SHOULD / 🔵 NIT の指摘がある場合（LGTM でない場合）、`/codex-findings-append` スキルを Skill tool で実行して追記する。引数: `plan somniloq "<変更概要>"`
+戻り値テキストの 1 行目は `plan mode: ...` のカナリア。続く行から `^RESULT_FILE: ` / `^SUMMARY: ` を抽出する:
+
+- **`RESULT_FILE:` 行が存在し `SUMMARY: ... needs_action=YES ...` の場合**: `RESULT_FILE` のパスを Read で読み込み（`/tmp/claude/claude-review-results/` 配下であることを確認）、指摘を確認した上で `/codex-findings-append` を実行する。引数: `plan somniloq "<変更概要>"`
+- **`RESULT_FILE:` 行が存在し `SUMMARY: ... needs_action=NO ...` の場合**: LGTM。結果ファイルは Read せず、`/codex-findings-append` も呼ばない
+- **`RESULT_FILE:` 行が存在しない場合**: 失敗系（PLAN_PATH 抽出失敗・タイムアウト・再試行失敗）。戻り値本文をそのまま読み、ユーザーに状況を報告する
+- **`RESULT_FILE:` の値が `ERROR` で始まる場合**: 書き出し失敗のフォールバック。戻り値本文を直接読む
 
 ### 7. 新規指摘があった場合 → 手順 1 に戻る
 

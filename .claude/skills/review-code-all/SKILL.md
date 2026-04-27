@@ -91,7 +91,12 @@ CLI 動作確認は `2b-verify.md` の段階で既に通過している前提。
 - 初回（プランなし）: `args: "プランなしで git diff をレビューしてください"`
 - 2 回目以降: `args: "<上記初回文> を前回の続きで再レビューしてください"`
 
-Codex の出力に 🔴 MUST / 🟡 SHOULD / 🔵 NIT の指摘がある場合（LGTM でない場合）、`/codex-findings-append` スキルを Skill tool で実行して追記する。引数: `code somniloq "<変更概要>"`
+戻り値テキストの 1 行目は `plan mode: ...` のカナリア。続く行から `^RESULT_FILE: ` / `^SUMMARY: ` を抽出する:
+
+- **`RESULT_FILE:` 行が存在し `SUMMARY: ... needs_action=YES ...` の場合**: `RESULT_FILE` のパスを Read で読み込み（`/tmp/claude/claude-review-results/` 配下であることを確認）、指摘を確認した上で `/codex-findings-append` を実行する。引数: `code somniloq "<変更概要>"`
+- **`RESULT_FILE:` 行が存在し `SUMMARY: ... needs_action=NO ...` の場合**: LGTM。結果ファイルは Read せず、`/codex-findings-append` も呼ばない
+- **`RESULT_FILE:` 行が存在しない場合**: 失敗系（タイムアウト・再試行失敗）。戻り値本文をそのまま読み、ユーザーに状況を報告する
+- **`RESULT_FILE:` の値が `ERROR` で始まる場合**: 書き出し失敗のフォールバック。戻り値本文を直接読む
 
 ### 11. 新規指摘があれば反映し、手順 8 と同じルールでループ先を判断する
 
