@@ -1,10 +1,7 @@
 package main
 
 import (
-	"reflect"
 	"testing"
-
-	"github.com/ryotapoi/somniloq/internal/core"
 )
 
 func TestNormalizeProjectDir(t *testing.T) {
@@ -110,97 +107,65 @@ func TestResolveDisplayName(t *testing.T) {
 	tests := []struct {
 		name       string
 		projectDir string
+		repoPath   string
 		short      bool
 		want       string
 	}{
 		{
-			name:       "plain path, short=false",
+			name:       "repo_path present, short=false",
 			projectDir: "-Users-ryota-Sources-Brimday",
+			repoPath:   "/Users/ryota/Sources/Brimday",
 			short:      false,
-			want:       "-Users-ryota-Sources-Brimday",
+			want:       "/Users/ryota/Sources/Brimday",
 		},
 		{
-			name:       "plain path, short=true",
+			name:       "repo_path present, short=true",
 			projectDir: "-Users-ryota-Sources-Brimday",
+			repoPath:   "/Users/ryota/Sources/Brimday",
 			short:      true,
 			want:       "Brimday",
 		},
 		{
-			name:       "worktree path, short=false",
-			projectDir: "-Users-ryota-Sources-Brimday--claude-worktrees-x",
+			name:       "repo_path with hyphen, short=true preserves hyphen",
+			projectDir: "-Users-ryota-Sources-my-repo",
+			repoPath:   "/Users/ryota/Sources/my-repo",
+			short:      true,
+			want:       "my-repo",
+		},
+		{
+			name:       "repo_path empty, plain path, short=false",
+			projectDir: "-Users-ryota-Sources-Brimday",
+			repoPath:   "",
 			short:      false,
 			want:       "-Users-ryota-Sources-Brimday",
 		},
 		{
-			name:       "worktree path, short=true",
+			name:       "repo_path empty, plain path, short=true",
+			projectDir: "-Users-ryota-Sources-Brimday",
+			repoPath:   "",
+			short:      true,
+			want:       "Brimday",
+		},
+		{
+			name:       "repo_path empty, worktree path, short=false",
 			projectDir: "-Users-ryota-Sources-Brimday--claude-worktrees-x",
+			repoPath:   "",
+			short:      false,
+			want:       "-Users-ryota-Sources-Brimday",
+		},
+		{
+			name:       "repo_path empty, worktree path, short=true",
+			projectDir: "-Users-ryota-Sources-Brimday--claude-worktrees-x",
+			repoPath:   "",
 			short:      true,
 			want:       "Brimday",
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := resolveDisplayName(tt.projectDir, tt.short)
+			got := resolveDisplayName(tt.projectDir, tt.repoPath, tt.short)
 			if got != tt.want {
-				t.Errorf("resolveDisplayName(%q, %v) = %q, want %q", tt.projectDir, tt.short, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestMergeProjects(t *testing.T) {
-	tests := []struct {
-		name string
-		in   []core.ProjectRow
-		want []core.ProjectRow
-	}{
-		{
-			name: "root and worktree merged",
-			in: []core.ProjectRow{
-				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 5},
-				{ProjectDir: "-Users-ryota-Sources-Brimday--claude-worktrees-cheerful-sprouting-globe", SessionCount: 3},
-			},
-			want: []core.ProjectRow{
-				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 8},
-			},
-		},
-		{
-			name: "worktree first then root",
-			in: []core.ProjectRow{
-				{ProjectDir: "-Users-ryota-Sources-Brimday--claude-worktrees-cheerful-sprouting-globe", SessionCount: 3},
-				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 5},
-			},
-			want: []core.ProjectRow{
-				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 8},
-			},
-		},
-		{
-			name: "no merge needed",
-			in: []core.ProjectRow{
-				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 5},
-				{ProjectDir: "-Users-ryota-Sources-Other", SessionCount: 3},
-			},
-			want: []core.ProjectRow{
-				{ProjectDir: "-Users-ryota-Sources-Brimday", SessionCount: 5},
-				{ProjectDir: "-Users-ryota-Sources-Other", SessionCount: 3},
-			},
-		},
-		{
-			name: "empty input",
-			in:   []core.ProjectRow{},
-			want: []core.ProjectRow{},
-		},
-		{
-			name: "nil input",
-			in:   nil,
-			want: []core.ProjectRow{},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got := mergeProjects(tt.in)
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("mergeProjects() = %v, want %v", got, tt.want)
+				t.Errorf("resolveDisplayName(%q, %q, %v) = %q, want %q", tt.projectDir, tt.repoPath, tt.short, got, tt.want)
 			}
 		})
 	}

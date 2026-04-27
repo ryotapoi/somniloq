@@ -27,16 +27,17 @@
 - セッション一覧を表示
 - `--since`/`--until` で時刻フィルタ（相対: `24h`, `7d`、絶対: `2026-03-28`, `2026-03-28T15:00`）。絶対日付はローカルタイム。出力のタイムスタンプもローカルタイム（`2006-01-02 15:04` 形式）
 - 時刻は `started_at ~ ended_at` の範囲形式で表示。ended_at がない場合は `started_at ~`
-- `--project` でプロジェクト名フィルタ
-- デフォルト表示では worktree サフィックス（`--claude-worktrees-*`）を除去して正規化
-- `--short` で `project_dir` の最後のハイフン区切り要素のみに短縮表示
+- `--project` で `repo_path` と `project_dir` の両方に対する substring マッチ（`COALESCE(repo_path, project_dir)` で片方だけを検索するのではなく、両カラムを OR で並べて両側にマッチさせる）。`repo_path` 経由で `/` セグメントを跨ぐマッチ（例: `--project Sources/ryot`）も可能
+- デフォルト表示は `repo_path` 非空ならそれをそのまま、空なら従来の `project_dir` 生値（worktree サフィックスは除去して正規化）
+- `--short` は `repo_path` 非空なら `filepath.Base(repo_path)`（ハイフン保持）、空なら従来の最後のハイフン要素
 
 ### プロジェクト一覧（projects）
 
 - プロジェクト一覧をセッション数とともに表示
 - `--since`/`--until` で時刻フィルタ（`started_at` 基準、sessions と同じ）
-- worktree セッションはルートプロジェクトにマージし、セッション数を合算
-- `--short` で `project_dir` の最後のハイフン区切り要素のみに短縮表示
+- 集約キーは `COALESCE(NULLIF(repo_path, ''), <worktree サフィックスを除いた project_dir>)`。worktree とサブディレクトリ起動は SQL 側で本体リポジトリの行に集約される（cmd 層での後段マージは行わない）
+- 出力 1 列目は集約グループの `repo_path` が非空ならそれ、空なら正規化後 `project_dir` のフォールバック値
+- `--short` で `repo_path` 非空なら `filepath.Base(repo_path)`、空なら従来の最後のハイフン要素
 - ソート: 直近セッション開始順（降順）
 
 ### 内容表示（show）
@@ -46,8 +47,8 @@
 - `--since`/`--until` で期間指定して一括表示
 - `--summary N` で各セッションの user メッセージ先頭 N 件を表示（`/clear` と `<local-command-caveat>` はスキップ）。`0` または未指定で従来の全文表示
 - `--include-clear` で `/clear`・caveat のスキップを無効化（`--summary >= 1` が前提）
-- デフォルト表示では worktree サフィックスを除去して正規化
-- `--short` で `project_dir` の最後のハイフン区切り要素のみに短縮表示
+- メタデータ `Project` 行は sessions と同じ規則（`repo_path` 優先、空なら `project_dir`）
+- `--short` で `repo_path` 非空なら `filepath.Base(repo_path)`、空なら従来の最後のハイフン要素
 - `--format markdown` でフォーマット指定
 
 
@@ -122,6 +123,11 @@ CREATE TABLE import_state (
     imported_at TEXT NOT NULL
 );
 ```
+
+## Known limitations
+
+- `--project` の値は SQLite LIKE のメタ文字（`%`、`_`）を素通しでクエリに渡す（既存挙動の継承）。例: `--project my_repo` は `_` が 1 文字ワイルドカードとして解釈されるため `myXrepo` のような値にも誤マッチする可能性がある
+- 同一 `project_dir`（normalize 後）のセッション群で一部だけ `repo_path` が解決済み・残りが NULL という状態だと、`projects` 出力で「`repo_path` 集約行」と「`project_dir` フォールバック行」の 2 行に分裂する。`somniloq backfill` の再実行で解消できるケースと、`custom-title` / `agent-name` 由来のメタセッション（`cwd` を持たないため backfill 対象外）が恒久的に NULL のままになるケースがある
 
 ## スキーマ変更への対応方針
 

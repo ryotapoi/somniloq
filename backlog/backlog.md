@@ -88,7 +88,7 @@
   - 振る舞いは変えない（既存の shorten_test.go / format_test.go が通る）
   - このリファクタを先に済ませてから次の「表示ロジックを `repo_path` / `repo_name` ベースに切り替え」タスクに入る
 
-- [ ] **表示ロジックを `repo_path` / `repo_name` ベースに切り替え、`--short` の意味を変更**
+- [x] **表示ロジックを `repo_path` / `repo_name` ベースに切り替え、`--short` の意味を変更**
   - `cmd/somniloq` の表示ロジックを以下に変更:
     - デフォルト: `repo_path` が非空なら `repo_path`、空なら従来の `project_dir` 生値フォールバック
     - `--short`: `repo_path` が非空なら `filepath.Base(repo_path)`、空なら従来の「最後のハイフン要素」フォールバック
@@ -103,6 +103,11 @@
   - テスト: `repo_path` が埋まっているセッション / 空のセッション双方でデフォルト・`--short` 出力を確認。`projects` では worktree セッションが本体リポジトリと同じ行に集約されることも確認
   - `rules/scope.md` の表示仕様説明を更新
 
+- [ ] **`backfill` の対象条件緩和**
+  - 現状の `backfill` は `cwd IS NULL` のメタセッション（`custom-title` / `agent-name` 由来）を対象外としているため、同一 `project_dir` に通常セッションとメタセッションが両方あると `projects` 出力で恒久的に分裂する
+  - 同一 `project_dir` の他セッションから `repo_path` を引き継ぐ補完規則を追加することで、メタセッションも正しく集約される
+
 - [ ] **ドキュメント更新**
   - `README.md` / `README.ja.md` のデフォルト出力・`--short` 説明を更新（breaking change を明記）
+  - `examples/skills/somniloq/SKILL.md` の Quick start で「v0.3 以降の旧データ表示には `somniloq backfill` も必要」と一言添える（必要なら程度）
   - `references/knowledge.md` に「Claude Code の JSONL `cwd` は worktree でも実パスを保持している」「`project_dir` キーは `/` と `-` を区別できない」等の知見を追記

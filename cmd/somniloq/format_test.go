@@ -75,7 +75,7 @@ func TestFormatSession_WithTitle(t *testing.T) {
 		{UUID: "m2", Role: "assistant", Content: "done", Timestamp: "2026-03-28T10:01:00Z"},
 	}
 
-	formatSession(&buf, session, messages, time.UTC)
+	formatSession(&buf, session, session.ProjectDir, messages, time.UTC)
 	got := buf.String()
 
 	// Check h2 uses custom_title
@@ -114,7 +114,7 @@ func TestFormatSession_EmptyTitle(t *testing.T) {
 		StartedAt:  "2026-03-28T10:00:00Z",
 	}
 
-	formatSession(&buf, session, nil, time.UTC)
+	formatSession(&buf, session, session.ProjectDir, nil, time.UTC)
 	got := buf.String()
 
 	// Should fallback to session_id
@@ -137,7 +137,7 @@ func TestFormatSession_SkipsSidechain(t *testing.T) {
 		{UUID: "m3", Role: "assistant", Content: "visible reply", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false},
 	}
 
-	formatSession(&buf, session, messages, time.UTC)
+	formatSession(&buf, session, session.ProjectDir, messages, time.UTC)
 	got := buf.String()
 
 	if strings.Contains(got, "sidechain thought") {
@@ -169,7 +169,8 @@ func TestFormatSessions_Multiple(t *testing.T) {
 		"s2": {{UUID: "m2", Role: "user", Content: "world", Timestamp: "2026-03-28T10:00:00Z"}},
 	}
 
-	if err := formatSessions(&buf, sessions, stubGetMessages(msgs), time.UTC); err != nil {
+	displayNames := []string{sessions[0].ProjectDir, sessions[1].ProjectDir}
+	if err := formatSessions(&buf, sessions, displayNames, stubGetMessages(msgs), time.UTC); err != nil {
 		t.Fatalf("formatSessions failed: %v", err)
 	}
 	got := buf.String()
@@ -201,7 +202,8 @@ func TestFormatSessions_Single(t *testing.T) {
 		"s1": {{UUID: "m1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}},
 	}
 
-	if err := formatSessions(&buf, sessions, stubGetMessages(msgs), time.UTC); err != nil {
+	displayNames := []string{sessions[0].ProjectDir}
+	if err := formatSessions(&buf, sessions, displayNames, stubGetMessages(msgs), time.UTC); err != nil {
 		t.Fatalf("formatSessions failed: %v", err)
 	}
 	got := buf.String()
@@ -221,7 +223,7 @@ func TestFormatSession_TitleWithNewline(t *testing.T) {
 		CustomTitle: "line1\nline2",
 	}
 
-	formatSession(&buf, session, nil, time.UTC)
+	formatSession(&buf, session, session.ProjectDir, nil, time.UTC)
 	got := buf.String()
 
 	// Newline in title should be replaced with space

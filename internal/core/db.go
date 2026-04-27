@@ -9,6 +9,13 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+// ProjectDirWorktreeMarker is the substring Claude Code embeds inside
+// project_dir to denote a git worktree (e.g.
+// "-Users-ryota-Sources-Brimday--claude-worktrees-foo"). It is shared by the
+// SQL-side aggregation in ListProjects and the cmd-side normalization helper
+// so they stay in lockstep.
+const ProjectDirWorktreeMarker = "--claude-worktrees-"
+
 type DB struct {
 	db *sql.DB
 }
@@ -221,6 +228,7 @@ type SessionRow struct {
 	SessionID    string
 	ProjectDir   string
 	CWD          string
+	RepoPath     string
 	StartedAt    string
 	EndedAt      string
 	CustomTitle  string
@@ -235,7 +243,7 @@ type SessionFilter struct {
 
 func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	query := `
-		SELECT s.session_id, s.project_dir, COALESCE(s.cwd, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+		SELECT s.session_id, s.project_dir, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
 		FROM sessions s
 		LEFT JOIN messages m ON s.session_id = m.session_id`
 
@@ -250,8 +258,8 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 		args = append(args, filter.Until)
 	}
 	if filter.Project != "" {
-		conditions = append(conditions, "s.project_dir LIKE '%' || ? || '%'")
-		args = append(args, filter.Project)
+		conditions = append(conditions, "(COALESCE(s.repo_path, '') LIKE '%' || ? || '%' OR s.project_dir LIKE '%' || ? || '%')")
+		args = append(args, filter.Project, filter.Project)
 	}
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
@@ -268,7 +276,7 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	result := []SessionRow{}
 	for rows.Next() {
 		var r SessionRow
-		if err := rows.Scan(&r.SessionID, &r.ProjectDir, &r.CWD, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount); err != nil {
+		if err := rows.Scan(&r.SessionID, &r.ProjectDir, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount); err != nil {
 			return nil, err
 		}
 		result = append(result, r)
@@ -280,12 +288,33 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 }
 
 type ProjectRow struct {
+	// ProjectDir is a per-group representative; used for display only when RepoPath is empty.
 	ProjectDir   string
+	RepoPath     string
 	SessionCount int
 }
 
 func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
-	query := `SELECT s.project_dir, COUNT(*)
+	// projectDirNormalized strips the trailing ProjectDirWorktreeMarker suffix
+	// from project_dir at the SQL layer, mirroring cmd/somniloq's
+	// normalizeProjectDir. We aggregate by the normalized value so that, for
+	// rows with NULL repo_path (legacy data, meta sessions), worktree variants
+	// collapse into the same group as their body project_dir instead of
+	// surfacing as duplicate rows that share a display name.
+	projectDirNormalized := fmt.Sprintf(`CASE
+		WHEN instr(s.project_dir, '%[1]s') > 0
+			THEN substr(s.project_dir, 1, instr(s.project_dir, '%[1]s') - 1)
+		ELSE s.project_dir
+	END`, ProjectDirWorktreeMarker)
+
+	// When repo_path is non-empty, ProjectDir is unused at display time, so we
+	// only compute the project_dir fallback for empty-repo_path groups.
+	// MIN(s.repo_path) is safe because all rows in a non-empty-repo_path group
+	// share the same value (that value is the GROUP BY key).
+	query := `SELECT
+		CASE WHEN COALESCE(MIN(s.repo_path), '') = '' THEN COALESCE(MIN(` + projectDirNormalized + `), '') ELSE '' END,
+		COALESCE(MIN(s.repo_path), ''),
+		COUNT(*)
 	FROM sessions s`
 
 	var conditions []string
@@ -302,7 +331,7 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	query += " GROUP BY s.project_dir ORDER BY MAX(s.started_at) DESC"
+	query += " GROUP BY COALESCE(NULLIF(s.repo_path, ''), " + projectDirNormalized + ") ORDER BY MAX(s.started_at) DESC"
 
 	rows, err := d.db.Query(query, args...)
 	if err != nil {
@@ -313,7 +342,7 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	result := []ProjectRow{}
 	for rows.Next() {
 		var r ProjectRow
-		if err := rows.Scan(&r.ProjectDir, &r.SessionCount); err != nil {
+		if err := rows.Scan(&r.ProjectDir, &r.RepoPath, &r.SessionCount); err != nil {
 			return nil, err
 		}
 		result = append(result, r)
@@ -335,13 +364,13 @@ type MessageRow struct {
 func (d *DB) GetSession(sessionID string) (*SessionRow, error) {
 	var r SessionRow
 	err := d.db.QueryRow(`
-		SELECT s.session_id, s.project_dir, COALESCE(s.cwd, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+		SELECT s.session_id, s.project_dir, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
 		FROM sessions s
 		LEFT JOIN messages m ON s.session_id = m.session_id
 		WHERE s.session_id = ?
 		GROUP BY s.session_id`,
 		sessionID,
-	).Scan(&r.SessionID, &r.ProjectDir, &r.CWD, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount)
+	).Scan(&r.SessionID, &r.ProjectDir, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

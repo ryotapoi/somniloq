@@ -1,17 +1,16 @@
 package main
 
 import (
+	"path/filepath"
 	"strings"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const projectWorktreeMarker = "--claude-worktrees-"
-
 // normalizeProjectDir strips the worktree suffix from a project_dir string.
 // e.g. "-Users-ryota-Sources-Brimday--claude-worktrees-xyz" → "-Users-ryota-Sources-Brimday"
 func normalizeProjectDir(projectDir string) string {
-	if idx := strings.Index(projectDir, projectWorktreeMarker); idx > 0 {
+	if idx := strings.Index(projectDir, core.ProjectDirWorktreeMarker); idx > 0 {
 		return projectDir[:idx]
 	}
 	return projectDir
@@ -31,37 +30,14 @@ func shortenProject(projectDir string) string {
 	return normalized
 }
 
-// mergeProjects normalizes project_dir values and merges rows that share the
-// same normalized name. Session counts are summed; the first occurrence's
-// position in the slice is preserved.
-func mergeProjects(rows []core.ProjectRow) []core.ProjectRow {
-	type entry struct {
-		row core.ProjectRow
-	}
-	seen := make(map[string]*entry, len(rows))
-	var order []string
-
-	for _, r := range rows {
-		key := normalizeProjectDir(r.ProjectDir)
-		if e, ok := seen[key]; ok {
-			e.row.SessionCount += r.SessionCount
-		} else {
-			seen[key] = &entry{row: core.ProjectRow{
-				ProjectDir:   key,
-				SessionCount: r.SessionCount,
-			}}
-			order = append(order, key)
+// resolveDisplayName prefers repoPath; falls back to project_dir-based normalization.
+func resolveDisplayName(projectDir, repoPath string, short bool) string {
+	if repoPath != "" {
+		if short {
+			return filepath.Base(repoPath)
 		}
+		return repoPath
 	}
-
-	result := make([]core.ProjectRow, len(order))
-	for i, key := range order {
-		result[i] = seen[key].row
-	}
-	return result
-}
-
-func resolveDisplayName(projectDir string, short bool) string {
 	if short {
 		return shortenProject(projectDir)
 	}

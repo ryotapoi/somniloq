@@ -27,7 +27,7 @@ func formatTimeRange(startedAt, endedAt string, loc *time.Location) string {
 
 var titleSanitizer = strings.NewReplacer("\n", " ", "\r", " ")
 
-func formatSession(w io.Writer, session core.SessionRow, messages []core.MessageRow, loc *time.Location) {
+func formatSession(w io.Writer, session core.SessionRow, displayName string, messages []core.MessageRow, loc *time.Location) {
 	title := session.CustomTitle
 	if title == "" {
 		title = session.SessionID
@@ -36,7 +36,7 @@ func formatSession(w io.Writer, session core.SessionRow, messages []core.Message
 
 	fmt.Fprintf(w, "## %s\n\n", title)
 	fmt.Fprintf(w, "- **Session**: `%s`\n", session.SessionID)
-	fmt.Fprintf(w, "- **Project**: `%s`\n", session.ProjectDir)
+	fmt.Fprintf(w, "- **Project**: `%s`\n", displayName)
 	fmt.Fprintf(w, "- **Started**: `%s`\n", formatTimeRange(session.StartedAt, session.EndedAt, loc))
 
 	for _, msg := range messages {
@@ -51,7 +51,8 @@ func formatSession(w io.Writer, session core.SessionRow, messages []core.Message
 	}
 }
 
-func formatSessions(w io.Writer, sessions []core.SessionRow, getMessages func(sessionID string) ([]core.MessageRow, error), loc *time.Location) error {
+// formatSessions requires len(displayNames) == len(sessions).
+func formatSessions(w io.Writer, sessions []core.SessionRow, displayNames []string, getMessages func(sessionID string) ([]core.MessageRow, error), loc *time.Location) error {
 	for i, session := range sessions {
 		if i > 0 {
 			fmt.Fprint(w, "\n---\n\n")
@@ -60,7 +61,7 @@ func formatSessions(w io.Writer, sessions []core.SessionRow, getMessages func(se
 		if err != nil {
 			return err
 		}
-		formatSession(w, session, msgs, loc)
+		formatSession(w, session, displayNames[i], msgs, loc)
 	}
 	return nil
 }

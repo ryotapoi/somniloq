@@ -650,6 +650,177 @@ func TestListSessions_ProjectFilter(t *testing.T) {
 	}
 }
 
+func TestListSessions_RepoPath(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-Brimday", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].RepoPath != "/Users/test/Brimday" {
+		t.Errorf("RepoPath: got %q, want %q", rows[0].RepoPath, "/Users/test/Brimday")
+	}
+}
+
+func TestListSessions_RepoPath_NullReturnsEmpty(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].RepoPath != "" {
+		t.Errorf("RepoPath should be empty for NULL, got %q", rows[0].RepoPath)
+	}
+}
+
+func TestGetSession_RepoPath(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-Brimday", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	got, err := db.GetSession("s1")
+	if err != nil {
+		t.Fatalf("GetSession failed: %v", err)
+	}
+	if got == nil {
+		t.Fatal("expected non-nil session")
+	}
+	if got.RepoPath != "/Users/test/Brimday" {
+		t.Errorf("RepoPath: got %q, want %q", got.RepoPath, "/Users/test/Brimday")
+	}
+}
+
+func TestListSessions_ProjectFilter_MatchesRepoPath(t *testing.T) {
+	db := testDB(t)
+
+	// project_dir contains no substring "Repo123", so a match here proves the
+	// repo_path side of the OR-LIKE is wired up.
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "s1",
+		ProjectDir: "-Users-foo-dev-Other",
+		RepoPath:   "/Users/foo/dev/Repo123",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{Project: "Repo123"})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row matching repo_path, got %d", len(rows))
+	}
+	if rows[0].SessionID != "s1" {
+		t.Errorf("expected s1, got %s", rows[0].SessionID)
+	}
+}
+
+func TestListSessions_ProjectFilter_LikeMetacharKnownLimitation(t *testing.T) {
+	// Pin the documented Known limitation: LIKE wildcards in --project are not
+	// escaped, so a literal "%" in the filter degenerates into a "match anything"
+	// segment. This test catches a future change that decides to escape them.
+	// Rename signal: if escape is added, rename/repurpose this test instead of
+	// silently treating the new behavior as a regression.
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "s1",
+		ProjectDir: "-Users-test-Brimday",
+		RepoPath:   "/Users/test/Brimday",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{Project: "Brim%day"})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row (LIKE %% wildcard passthrough), got %d", len(rows))
+	}
+}
+
+func TestListSessions_ProjectFilter_SlashSpan(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "s1",
+		ProjectDir: "-Users-ryota-Sources-ryotapoi-somniloq",
+		RepoPath:   "/Users/ryota/Sources/ryotapoi/somniloq",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{Project: "Sources/ryot"})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row matching slash-span, got %d", len(rows))
+	}
+	if rows[0].SessionID != "s1" {
+		t.Errorf("expected s1, got %s", rows[0].SessionID)
+	}
+}
+
+func TestListSessions_ProjectFilter_BindsBothSides(t *testing.T) {
+	db := testDB(t)
+
+	// repo_path side only
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "repo-only",
+		ProjectDir: "-Users-other-foo",
+		RepoPath:   "/Users/test/UniqRepo",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+	// project_dir side only
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "projdir-only",
+		ProjectDir: "-Users-test-UniqProj",
+		RepoPath:   "/Users/other/baz",
+		StartedAt:  "2026-03-28T11:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+	// both sides
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "both",
+		ProjectDir: "-Users-test-Common",
+		RepoPath:   "/Users/test/Common",
+		StartedAt:  "2026-03-28T12:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	cases := []struct {
+		name   string
+		filter string
+		want   string
+	}{
+		{"repo_path side", "UniqRepo", "repo-only"},
+		{"project_dir side", "UniqProj", "projdir-only"},
+		{"both sides", "Common", "both"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			rows, err := db.ListSessions(SessionFilter{Project: c.filter})
+			if err != nil {
+				t.Fatalf("ListSessions failed: %v", err)
+			}
+			if len(rows) != 1 {
+				t.Fatalf("expected 1 row, got %d", len(rows))
+			}
+			if rows[0].SessionID != c.want {
+				t.Errorf("filter %q: got %s, want %s", c.filter, rows[0].SessionID, c.want)
+			}
+		})
+	}
+}
+
 func TestListSessions_CombinedFilter(t *testing.T) {
 	db := testDB(t)
 
@@ -993,6 +1164,171 @@ func TestListProjects_SinceAndUntilFilter(t *testing.T) {
 	}
 	if rows[0].ProjectDir != "-Users-test-mid" {
 		t.Errorf("expected -Users-test-mid, got %s", rows[0].ProjectDir)
+	}
+}
+
+func TestListProjects_GroupByRepoPath(t *testing.T) {
+	// Worktree and body sessions share the same repo_path; they must collapse
+	// into one row. For non-empty-repo_path groups, ProjectDir is left empty
+	// because the display layer prefers RepoPath.
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "body",
+		ProjectDir: "-Users-test-Brimday",
+		RepoPath:   "/Users/test/Brimday",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "worktree",
+		ProjectDir: "-Users-test-Brimday--claude-worktrees-foo",
+		RepoPath:   "/Users/test/Brimday",
+		StartedAt:  "2026-03-28T11:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 aggregated row, got %d", len(rows))
+	}
+	if rows[0].RepoPath != "/Users/test/Brimday" {
+		t.Errorf("RepoPath: got %q, want %q", rows[0].RepoPath, "/Users/test/Brimday")
+	}
+	if rows[0].SessionCount != 2 {
+		t.Errorf("SessionCount: got %d, want 2", rows[0].SessionCount)
+	}
+	if rows[0].ProjectDir != "" {
+		t.Errorf("ProjectDir should be empty when RepoPath is set, got %q", rows[0].ProjectDir)
+	}
+}
+
+func TestListProjects_NullRepoPath_WorktreeSuffixCollapses(t *testing.T) {
+	// When repo_path is NULL for both body and worktree sessions, the SQL-side
+	// normalization must strip the "--claude-worktrees-..." suffix from
+	// project_dir so they collapse into one group instead of surfacing as two
+	// rows that share a display name in cmd output.
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "body",
+		ProjectDir: "-Users-test-Brimday",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "worktree",
+		ProjectDir: "-Users-test-Brimday--claude-worktrees-foo",
+		StartedAt:  "2026-03-28T11:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 collapsed row, got %d", len(rows))
+	}
+	if rows[0].SessionCount != 2 {
+		t.Errorf("SessionCount: got %d, want 2", rows[0].SessionCount)
+	}
+	if rows[0].ProjectDir != "-Users-test-Brimday" {
+		t.Errorf("ProjectDir: got %q, want %q", rows[0].ProjectDir, "-Users-test-Brimday")
+	}
+}
+
+func TestListProjects_MixedRepoPathSplitsGroups(t *testing.T) {
+	// Pin the documented Known limitation: when the same project_dir has some
+	// sessions with repo_path resolved and others still NULL (e.g. meta
+	// sessions that never run `backfill`), the GROUP BY key
+	// COALESCE(NULLIF(repo_path, ''), project_dir) splits them into two rows.
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "resolved",
+		ProjectDir: "-Users-test-Brimday",
+		RepoPath:   "/Users/test/Brimday",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "unresolved",
+		ProjectDir: "-Users-test-Brimday",
+		StartedAt:  "2026-03-28T11:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 split rows (resolved + unresolved), got %d", len(rows))
+	}
+}
+
+func TestListProjects_FallbackProjectDirWhenRepoPathEmpty(t *testing.T) {
+	// When repo_path is empty for the entire group, ProjectDir falls back to
+	// MIN(project_dir) so the display layer has something to render.
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "s1",
+		ProjectDir: "-Users-test-Brimday",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].RepoPath != "" {
+		t.Errorf("RepoPath should be empty, got %q", rows[0].RepoPath)
+	}
+	if rows[0].ProjectDir != "-Users-test-Brimday" {
+		t.Errorf("ProjectDir fallback: got %q, want %q", rows[0].ProjectDir, "-Users-test-Brimday")
+	}
+}
+
+func TestListProjects_GroupByRepoPath_OrderByLatest(t *testing.T) {
+	// Two repo_path groups; the one whose latest session is newer must come first.
+	db := testDB(t)
+
+	// Body session for repo A, older.
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "a-body",
+		ProjectDir: "-Users-test-RepoA",
+		RepoPath:   "/Users/test/RepoA",
+		StartedAt:  "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+	// Worktree session for repo A, newer than any repo B session.
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "a-wt",
+		ProjectDir: "-Users-test-RepoA--claude-worktrees-foo",
+		RepoPath:   "/Users/test/RepoA",
+		StartedAt:  "2026-03-28T16:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+	// Repo B session in between.
+	must(t, db.UpsertSession(SessionMeta{
+		SessionID:  "b1",
+		ProjectDir: "-Users-test-RepoB",
+		RepoPath:   "/Users/test/RepoB",
+		StartedAt:  "2026-03-28T12:00:00Z",
+	}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects failed: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows, got %d", len(rows))
+	}
+	if rows[0].RepoPath != "/Users/test/RepoA" {
+		t.Errorf("first row RepoPath: got %q, want %q", rows[0].RepoPath, "/Users/test/RepoA")
+	}
+	if rows[1].RepoPath != "/Users/test/RepoB" {
+		t.Errorf("second row RepoPath: got %q, want %q", rows[1].RepoPath, "/Users/test/RepoB")
 	}
 }
 

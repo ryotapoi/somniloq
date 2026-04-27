@@ -150,8 +150,8 @@ func runSessions(dbPath string, args []string) {
 	fs := flag.NewFlagSet("sessions", flag.ExitOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	project := fs.String("project", "", "filter sessions by project name (substring match)")
-	short := fs.Bool("short", false, "shorten project name to last hyphen-separated element")
+	project := fs.String("project", "", "filter by repo path or project_dir name (substring match)")
+	short := fs.Bool("short", false, "shorten project to repo basename (or last hyphen element if repo unresolved)")
 	setUsage(fs, "List sessions", "somniloq sessions [flags]")
 	fs.Parse(args)
 
@@ -172,7 +172,7 @@ func runSessions(dbPath string, args []string) {
 
 	for _, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
-		proj := resolveDisplayName(r.ProjectDir, *short)
+		proj := resolveDisplayName(r.ProjectDir, r.RepoPath, *short)
 		fmt.Fprintf(os.Stdout, "%s\t%s\t%s\t%s\t%d\n",
 			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), proj, title, r.MessageCount)
 	}
@@ -185,8 +185,8 @@ func runShow(dbPath string, args []string) {
 	fs := flag.NewFlagSet("show", flag.ExitOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	project := fs.String("project", "", "filter sessions by project name (substring match)")
-	short := fs.Bool("short", false, "shorten project name to last hyphen-separated element")
+	project := fs.String("project", "", "filter by repo path or project_dir name (substring match)")
+	short := fs.Bool("short", false, "shorten project to repo basename (or last hyphen element if repo unresolved)")
 	summary := fs.Int("summary", 0, "show first N user messages skipping /clear and local-command-caveat (0 disables)")
 	includeClear := fs.Bool("include-clear", false, "keep /clear and local-command-caveat messages in --summary output (requires --summary >= 1)")
 	format := fs.String("format", "markdown", "output format (markdown)")
@@ -247,13 +247,13 @@ func runShow(dbPath string, args []string) {
 			fmt.Fprintf(os.Stderr, "error: session not found: %s\n", sessionID)
 			os.Exit(1)
 		}
-		session.ProjectDir = resolveDisplayName(session.ProjectDir, *short)
+		proj := resolveDisplayName(session.ProjectDir, session.RepoPath, *short)
 		messages, err := getMessages(sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		formatSession(os.Stdout, *session, messages, time.Local)
+		formatSession(os.Stdout, *session, proj, messages, time.Local)
 		return
 	}
 
@@ -273,11 +273,12 @@ func runShow(dbPath string, args []string) {
 		return
 	}
 
+	displayNames := make([]string, len(sessions))
 	for i := range sessions {
-		sessions[i].ProjectDir = resolveDisplayName(sessions[i].ProjectDir, *short)
+		displayNames[i] = resolveDisplayName(sessions[i].ProjectDir, sessions[i].RepoPath, *short)
 	}
 
-	if err := formatSessions(os.Stdout, sessions, getMessages, time.Local); err != nil {
+	if err := formatSessions(os.Stdout, sessions, displayNames, getMessages, time.Local); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
 	}
@@ -287,7 +288,7 @@ func runProjects(dbPath string, args []string) {
 	fs := flag.NewFlagSet("projects", flag.ExitOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	short := fs.Bool("short", false, "shorten project names to last hyphen-separated element")
+	short := fs.Bool("short", false, "shorten project names to repo basename (or last hyphen element if repo unresolved)")
 	setUsage(fs, "List projects", "somniloq projects [flags]")
 	fs.Parse(args)
 
@@ -312,9 +313,8 @@ func runProjects(dbPath string, args []string) {
 		os.Exit(1)
 	}
 
-	rows = mergeProjects(rows)
 	for _, r := range rows {
-		name := resolveDisplayName(r.ProjectDir, *short)
+		name := resolveDisplayName(r.ProjectDir, r.RepoPath, *short)
 		fmt.Fprintf(os.Stdout, "%s\t%d\n", name, r.SessionCount)
 	}
 }
