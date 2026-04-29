@@ -1,113 +1,70 @@
 # Backlog
 
-## v0.3
+## v0.3 — repo_path 設計のやり直し
 
-### 背景（全タスク共通）
+v0.3 は未リリース。実装途中の commit はそのまま使い、ここから追加コミットで新方針に揃える。
 
-- 現状 `--short` は DB の `project_dir`（例: `-Users-name-Sources-org-my-repo`）から最後の `-` 以降を切り出して返している
-- `project_dir` は Claude Code が生成するキーで、元パスの `/` を `-` に置換したもの。`/` 区切りと `-` 区切りの区別がつかない。リポジトリ名にハイフンを含むと一部だけが返る（期待: `my-repo` / 実際: `repo`）
-- Claude Code は project dir 名生成時に `_` → `-` に変換している形跡もあり、`project_dir` から元パスの完全復元は不可能
-- デフォルト表示（`--short` なし）は `project_dir` の生値で、読みにくい。`--short` の動機自体が「`project_dir` が読みにくい」の回避だった
-- **解決**: JSONL の `cwd`（実パス）を使って本体リポジトリの絶対パス `repo_path` を解決し、DB に持たせる。デフォルト表示を `repo_path` に、`--short` を `repo_path` の basename に変更する
+### 背景
 
-### 事前調査で判明している事実（再調査不要）
+`sessions` テーブルが「`project_dir` で集計」と「`repo_path` で集計」を同居させている。worktree 配下で別 repo を触ったセッションが 1 件でも混じると、1 `project_dir` 内に複数 `repo_path` が並び、メタセッション（`custom-title` / `agent-name` 由来で `cwd` を持たない行）の集約先をどれに寄せても誤集約が起きる。
 
-- `internal/core/jsonl.go:14` `RawRecord.CWD` は既に JSONL からパース済み
-- `internal/core/import.go:140` で `SessionMeta.CWD` として upsert に渡っている
-- `sessions` テーブルには**既に `cwd` カラムが存在**（`db.go:383` `schema`）
-- `upsertSession` (`db.go:54`) は `COALESCE(NULLIF(excluded.cwd, ''), sessions.cwd)` で既存 cwd を上書きしない
-- 実 DB（`~/.somniloq/somniloq.db`）の実測:
-  - 既存セッションの大半は `cwd` に実パスを保持しており、欠損はごく少数（custom-title 専用のメタセッション等、JSONL に cwd が無いケース）
-  - `project_dir` と `cwd` の対応例:
-    - `-Users-name-Sources-org-my-repo` → `/Users/name/Sources/org/my-repo`
-  - worktree の cwd は `/<repo>/.claude/worktrees/<name>` を含む
-  - サブディレクトリで起動されたセッションでは `cwd` がリポジトリ root より深いこともある
-  - 同一 `project_dir` に対して複数の `cwd` が紐づくケースあり（worktree・サブディレクトリ起動）
-- → **DB 内バックフィルで完結できる（再 import 不要）**
+### 新方針
 
-### `repo_path` 解決ロジック（全タスクで共通の仕様）
+1. **会話のあるセッションだけ DB に保存する**。`custom-title` / `agent-name` 単独のメタセッションは保存しない（`cwd` を持たないので `repo_path` 解決手段がない）
+2. **`ResolveRepoPath` の手順 4 を「cwd を返す」に変える**。git 配下外でも cwd 自体を一意キーとして採用
+3. **`projects` の集計キーを `repo_path` 一本に絞る**。`project_dir` フォールバックは削除
+4. → 同 `project_dir` 内 `repo_path` 持ち / NULL の混在も、メタセッション分裂も発生しなくなる
 
-入力は `cwd` 文字列。以下を上から試す:
+### 役割分担（migration vs backfill）
 
-1. `cwd` が空 → 空文字を返す
-2. `cwd` が `/.claude/worktrees/` を含む → `/.claude/worktrees/` の直前までの絶対パスを返す（ディスクアクセス不要・削除済み worktree でも解ける。worktree 本体のリポジトリパス）
-3. `git -C <cwd> rev-parse --show-toplevel` を実行し成功したら標準出力のパスを返す
-4. どれも失敗 → 空文字
-
-表示時の派生値 `repo_name` は `filepath.Base(repo_path)`。
-
-### 表示仕様
-
-- **デフォルト**（フラグなし）: `repo_path` を表示。`repo_path` が空なら従来の `project_dir` 生値にフォールバック
-- **`--short`**: `repo_name`（`filepath.Base(repo_path)`）を表示。`repo_path` が空なら従来の「最後のハイフン要素」フォールバック
-
-対象サブコマンド: `sessions` / `show` / `projects`
-
-### リリース後のユーザー体験
-
-新バイナリを入れて `somniloq import` を 1 回叩くだけ：
-
-1. `OpenDB` 初回起動時にスキーママイグレーション（`ALTER TABLE sessions ADD COLUMN repo_path TEXT`）が自動で走る
-2. `somniloq import` 実行時に、既存セッションの `cwd` を読んで `repo_path` を一括バックフィル（cwd 単位メモ化で数秒）
-3. 同じ import 実行で通常の差分 import も走る（新規セッションは import 時に `repo_path` も保存）
-
-以後、デフォルト出力が `repo_path` ベース、`--short` が `repo_name` ベースに変わる。
+- **`OpenDB` 起動時 migration（自動・冪等）**: スキーマ操作のみ（`repo_path` カラム追加は既に存在）。データを破壊しない
+- **`somniloq backfill`（ユーザー明示実行）**: 既存 DB の v0.2.x 由来データ歪みを正す処理を全部ここに寄せる。バックアップ案内を README に明記
 
 ### タスク（上から順に実装・コミット。まとめて v0.3.0 としてリリース）
 
-- [x] **`repo_path` 解決関数を追加（DB 変更なし）**
-  - `internal/core/repo_path.go`（新規）に `ResolveRepoPath(cwd string) string` を実装
-  - ロジックは上記「解決ロジック」の 1〜4
-  - `git` 呼び出しは `os/exec` で `git -C <cwd> rev-parse --show-toplevel`。stderr 無視、非 0 終了は空扱い
-  - `internal/core/repo_path_test.go`: ロジック 1/2/4 はユニットテストで網羅、3 はテスト用一時 git リポジトリで最低 1 ケース
-  - この時点では誰も呼ばない（次コミットから使う）
+- [ ] **`rules/scope.md` の更新**（実装より先に SSoT を更新）
+  - `projects` 集計キーを「`repo_path` 一本」に
+  - 「同一 `project_dir` のセッション群で一部だけ `repo_path` 解決済み・残り NULL」の Known limitation を削除
+  - メタセッション（cwd なし）が DB に保存されない仕様を追記
+  - `backfill` の役割（v0.2.x からのアップグレード時に 1 回叩く / `messages` を持たない行の DELETE と `repo_path` 補完を兼ねる）を明記
 
-- [x] **スキーママイグレーション（`repo_path` カラム追加）**
-  - `db.go` の `schema` に `repo_path TEXT` を追加（新規 DB 用）
-  - `OpenDB` で既存 DB 向けに `PRAGMA table_info(sessions)` を見て `repo_path` が無ければ `ALTER TABLE sessions ADD COLUMN repo_path TEXT` を実行
-  - `SessionMeta` に `RepoPath` フィールド追加、`upsertSession` の INSERT/UPDATE で扱う（`COALESCE(NULLIF(excluded.repo_path, ''), sessions.repo_path)`）
-  - この時点では import 側は `RepoPath` を埋めないので全セッション NULL のまま。表示も変更なし
-  - マイグレーションテスト: 既存スキーマの DB を開いて `repo_path` カラムが追加されることを確認
+- [ ] **`ResolveRepoPath` の手順 4 を「cwd 返却」に変更**
+  - `internal/core/repo_path.go`: 手順 4 を「`cwd` をそのまま返す」に変更（現状は空文字）
+  - 関数コメントの評価順を更新
+  - `internal/core/repo_path_test.go`: 手順 4 のケース（git 配下外の一時ディレクトリ）の期待値を「cwd 自体」に変更
 
-- [x] **import 時に `repo_path` を解決して保存**
-  - `import.go` の `processFile` で `SessionMeta` 組み立て時に `ResolveRepoPath(rec.CWD)` を呼んで `RepoPath` に入れる
-  - 同一 `cwd` の連続行が多いので、`processFile` スコープで `map[string]string` でメモ化
-  - テスト: JSONL に cwd を含むケースで `sessions.repo_path` が埋まることを確認
+- [ ] **import 時のメタ前置 INSERT を削除（会話レコードのみが session 行を作る）**
+  - `internal/core/db.go` `updateSessionTitle` / `updateSessionAgentName`（`db.go:161-174` / `db.go:180-193`）の前置 INSERT を削除し、UPDATE のみにする（行が無ければ何もしない）
+  - JSONL 内では `custom-title` が `user`/`assistant` より前に出現するケースがあるため、`internal/core/import.go` の `processFile` 内で `custom-title` / `agent-name` をいったんバッファに溜め、ファイル末尾で UPDATE を流す
+  - テスト: タイトルだけで発話なしのセッションは sessions 行が作られないこと、会話 + タイトルの順序が逆でも `custom_title` / `agent_name` が正しく入ること
 
-- [x] **既存セッションのバックフィル**
-  - 専用サブコマンド `somniloq backfill` として提供（当初案の `import` 内自動実行は Codex レビューで破棄: 解決失敗の一時/恒久を区別できず、毎回再試行コストがかさむ）
-  - `internal/core/backfill.go` に `BackfillRepoPaths(db *DB) (resolved, unresolved int, err error)` を追加
-  - `repo_path IS NULL AND cwd IS NOT NULL AND cwd != ''` が対象。cwd 単位でメモ化
-  - 解決不能セッションは NULL のまま残り、ユーザーが再実行すれば次回再試行される（マーカーは書かない）
-  - テスト: `internal/core/backfill_test.go` で境界条件・冪等性・同一 cwd 重複・実 git 解決を検証
+- [ ] **`projects` の集計キーを `repo_path` 一本に絞る**
+  - `internal/core/db.go` `ListProjects`: `GROUP BY` を `repo_path` 一本にする。`project_dir` フォールバック（`projectDirNormalized` の SQL 分岐）を削除
+  - `ProjectRow.ProjectDir` が不要になったら struct から削る
+  - `cmd/somniloq` 側の表示ロジックも `repo_path` 前提で簡略化（`resolveDisplayName` のフォールバックは削除可）
+  - 既存の `projects_test.go` / `format_test.go` / `shorten_test.go` を新仕様に合わせて更新
 
-- [x] **表示名解決ロジックを `cmd/somniloq/shorten.go` のヘルパーに集約するリファクタ**
-  - 現状 `runSessions` / `runShow` / `runProjects` の 3 関数 7 箇所に `normalizeProjectDir` / `shortenProject` の呼び出しが散在している（Refactor Guard で散弾銃手術と判定）
-  - `resolveDisplayName(projectDir string, short bool) string` 相当のヘルパーを `shorten.go` に追加し、3 関数からの呼び出しを 1 行に置き換える
-  - 既存の `normalizeProjectDir` / `shortenProject` / `mergeProjects` は内部実装として残す
-  - 振る舞いは変えない（既存の shorten_test.go / format_test.go が通る）
-  - このリファクタを先に済ませてから次の「表示ロジックを `repo_path` / `repo_name` ベースに切り替え」タスクに入る
-
-- [x] **表示ロジックを `repo_path` / `repo_name` ベースに切り替え、`--short` の意味を変更**
-  - `cmd/somniloq` の表示ロジックを以下に変更:
-    - デフォルト: `repo_path` が非空なら `repo_path`、空なら従来の `project_dir` 生値フォールバック
-    - `--short`: `repo_path` が非空なら `filepath.Base(repo_path)`、空なら従来の「最後のハイフン要素」フォールバック
-  - 対象サブコマンド: `sessions` / `projects` / `show`
-  - `SessionRow` / `ProjectRow` に `RepoPath` を含め、`ListSessions` / `ListProjects` / `GetSession` の SELECT に `COALESCE(s.repo_path, '')` を追加
-  - `projects` は **集計キーを `repo_path` に切り替える**:
-    - `repo_path` が非空のセッションは `repo_path` でグルーピング
-    - `repo_path` が空のセッションは従来どおり `project_dir` でグルーピング（フォールバック）
-    - SQL 的には `GROUP BY COALESCE(NULLIF(repo_path, ''), project_dir)` 相当
-    - 同一 `project_dir` に worktree やサブディレクトリ起動で複数の `cwd` がぶら下がっていても、`repo_path` は同じ値に解決されるので 1 行にまとまる
-  - `--short` のヘルプ文を「shorten to repository basename」等に更新
-  - テスト: `repo_path` が埋まっているセッション / 空のセッション双方でデフォルト・`--short` 出力を確認。`projects` では worktree セッションが本体リポジトリと同じ行に集約されることも確認
-  - `rules/scope.md` の表示仕様説明を更新
-
-- [ ] **`backfill` の対象条件緩和**
-  - 現状の `backfill` は `cwd IS NULL` のメタセッション（`custom-title` / `agent-name` 由来）を対象外としているため、同一 `project_dir` に通常セッションとメタセッションが両方あると `projects` 出力で恒久的に分裂する
-  - 同一 `project_dir` の他セッションから `repo_path` を引き継ぐ補完規則を追加することで、メタセッションも正しく集約される
+- [ ] **`backfill` を「データ補正の単一窓口」に拡張**
+  - `BackfillRepoPaths` 内で以下を順に実行する:
+    1. `messages` を持たない `sessions` 行を DELETE（v0.2.x 時代に作られた cwd NULL のメタセッション残骸を消す）
+    2. `repo_path NULL AND cwd 持ち` の行を `ResolveRepoPath` で埋める（手順 4 が cwd 返却になったので全件解決される）
+  - 関数名は `BackfillRepoPaths` のままでもいいし、役割が広がるなら `Backfill` 等にリネーム検討
+  - 戻り値に「削除した行数」「解決した行数」を含める（CLI で報告）
+  - DELETE は破壊的なので、`somniloq backfill` 起動時に対象件数を表示し確認プロンプトを出す（`--yes` でスキップ可能、import の `--full` と同じ作法）
+  - pass-2（同 project_dir からの引き継ぎ）は導入しない
+  - テスト: `backfill_test.go` を更新
+    - 「git 配下外 cwd は cwd 自体が入る」（手順 4 変更）
+    - 「`messages` を持たない sessions 行が DELETE される」
+    - 冪等性（2 回叩いても同じ結果）
 
 - [ ] **ドキュメント更新**
-  - `README.md` / `README.ja.md` のデフォルト出力・`--short` 説明を更新（breaking change を明記）
-  - `examples/skills/somniloq/SKILL.md` の Quick start で「v0.3 以降の旧データ表示には `somniloq backfill` も必要」と一言添える（必要なら程度）
-  - `references/knowledge.md` に「Claude Code の JSONL `cwd` は worktree でも実パスを保持している」「`project_dir` キーは `/` と `-` を区別できない」等の知見を追記
+  - `README.md` / `README.ja.md`: アップグレード手順を追記
+    - バックアップ推奨（backfill が DELETE を含むため）
+    - 新バイナリ → `somniloq backfill` で既存 DB を補正
+    - 過去 JSONL を残してある場合の差分コピー手順（`cp -rn /path/to/old-projects/. ~/.claude/projects/` で現行に無い分だけ補充 → `somniloq import --full --yes`）
+  - `examples/skills/somniloq/SKILL.md` の Quick start を必要に応じて更新
+  - `references/knowledge.md` に新方針の知見を追記
+
+## 関連ファイル
+
+- `decisions/0003-backfill-as-separate-subcommand.md` — backfill サブコマンド化の ADR（v0.3 で役割再定義が入る）
