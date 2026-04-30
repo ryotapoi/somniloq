@@ -8,8 +8,10 @@
 - `import_state` と照合し、未取り込み or サイズ増加分を検出（差分取り込み）
 - 各 JSONL を行単位で読み、`type` でフィルタ
 - `user`/`assistant` → messages テーブルへ（text 部分のみ抽出）
-- `user`/`assistant` の `cwd` から `repo_path` を解決して sessions に保存（解決不能なら NULL）
-- `custom-title`/`agent-name` → sessions テーブルの該当カラム更新
+- `user`/`assistant` レコードが初出のときだけ `sessions` 行を作成する（`messages` 0 件で残るケースの扱いはバックフィル節参照）
+- メタセッション（`custom-title` / `agent-name` 単独で `user`/`assistant` を持たない）は DB に保存しない（増分 import 跨ぎでの取りこぼし制約は Known limitations 参照）
+- `user`/`assistant` の `cwd` から `repo_path` を解決して sessions に保存。`cwd` は会話レコードでは通常非空のため、会話セッションでは `repo_path` も通常非空（`ResolveRepoPath` 手順 4 で `cwd` 自体を返すため、`cwd` 非空なら必ず解決される）
+- `custom-title` / `agent-name` レコードは、ファイル走査終了時点で対応する `sessions` 行が存在するときのみ反映する
 - `import_state` を更新
 - `--full` フラグで全件再取り込み（確認プロンプトあり、デフォルト No）
   - `--yes` で確認をスキップ
@@ -17,27 +19,32 @@
 
 ### バックフィル（backfill）
 
-- v0.3 より前に取り込まれた既存セッションの `repo_path` を解決して埋める
-- 対象は `repo_path IS NULL` かつ `cwd` が NULL でも空文字でもないセッション
-- 解決不能なセッションは NULL のまま残り、再実行で再試行される（マーカーは書かない）
-- `import` からは独立。v0.3 へアップグレード後に一度叩くことを想定
+v0.2.x 由来データの補正窓口。以下を順に実行する。
+
+- `messages` を持たない `sessions` 行を DELETE
+  - 主目的は v0.2.x 由来のメタ前置 INSERT 残骸の除去
+  - 副次的に、text 抽出結果が空の `user`/`assistant` レコードしか持たないセッション（`tool_use` のみ・添付のみ・空白のみ）も消える。取り込み側は text 非空判定の前に `upsertSession` を呼ぶため `messages` 0 件で残る仕様で、show / sessions 一覧で実体が無く実害はほぼゼロ。`--full` で再取り込みすれば戻る
+- `repo_path IS NULL` かつ `cwd` 非空 の行を `ResolveRepoPath` で埋める（手順 4 が cwd 返却になったため `cwd` 非空なら必ず解決される）
+- DELETE 対象が 1 件以上ある場合のみ件数を起動時に表示し確認プロンプトを出す（デフォルト No）。0 件なら無確認で進む。`--yes` で確認をスキップ。非対話環境（パイプ・CI 等）では DELETE 対象 1 件以上のとき `--yes` 必須（`import --full` と同じ作法）
+- `import` から独立。v0.3 へアップグレード後に一度叩く想定
 
 ### セッション一覧（sessions）
 
 - セッション一覧を表示
 - `--since`/`--until` で時刻フィルタ（相対: `24h`, `7d`、絶対: `2026-03-28`, `2026-03-28T15:00`）。絶対日付はローカルタイム。出力のタイムスタンプもローカルタイム（`2006-01-02 15:04` 形式）
 - 時刻は `started_at ~ ended_at` の範囲形式で表示。ended_at がない場合は `started_at ~`
-- `--project` で `repo_path` と `project_dir` の両方に対する substring マッチ（`COALESCE(repo_path, project_dir)` で片方だけを検索するのではなく、両カラムを OR で並べて両側にマッチさせる）。`repo_path` 経由で `/` セグメントを跨ぐマッチ（例: `--project Sources/ryot`）も可能
-- デフォルト表示は `repo_path` 非空ならそれをそのまま、空なら従来の `project_dir` 生値（worktree サフィックスは除去して正規化）
-- `--short` は `repo_path` 非空なら `filepath.Base(repo_path)`（ハイフン保持）、空なら従来の最後のハイフン要素
+- `--project` は `repo_path` への substring マッチ。`project_dir` は対象としない（LIKE のターゲットは `repo_path` のみ。LIKE メタ文字の扱いは Known limitations 参照）
+- `repo_path` は絶対パスのため、`/` セグメントを跨いだ部分一致（例: `--project Sources/ryot`）も可能
+- デフォルト表示は `repo_path` をそのまま
+- `--short` は `filepath.Base(repo_path)`（ハイフン保持）
 
 ### プロジェクト一覧（projects）
 
 - プロジェクト一覧をセッション数とともに表示
 - `--since`/`--until` で時刻フィルタ（`started_at` 基準、sessions と同じ）
-- 集約キーは `COALESCE(NULLIF(repo_path, ''), <worktree サフィックスを除いた project_dir>)`。worktree とサブディレクトリ起動は SQL 側で本体リポジトリの行に集約される（cmd 層での後段マージは行わない）
-- 出力 1 列目は集約グループの `repo_path` が非空ならそれ、空なら正規化後 `project_dir` のフォールバック値
-- `--short` で `repo_path` 非空なら `filepath.Base(repo_path)`、空なら従来の最後のハイフン要素
+- 集約キーは `repo_path` 一本。worktree とサブディレクトリ起動は SQL 側で本体リポジトリの行に集約される（cmd 層での後段マージは行わない）
+- 出力 1 列目は `repo_path` そのもの
+- `--short` で `filepath.Base(repo_path)`
 - ソート: 直近セッション開始順（降順）
 
 ### 内容表示（show）
@@ -47,8 +54,9 @@
 - `--since`/`--until` で期間指定して一括表示
 - `--summary N` で各セッションの user メッセージ先頭 N 件を表示（`/clear` と `<local-command-caveat>` はスキップ）。`0` または未指定で従来の全文表示
 - `--include-clear` で `/clear`・caveat のスキップを無効化（`--summary >= 1` が前提）
-- メタデータ `Project` 行は sessions と同じ規則（`repo_path` 優先、空なら `project_dir`）
-- `--short` で `repo_path` 非空なら `filepath.Base(repo_path)`、空なら従来の最後のハイフン要素
+- メタデータ `Project` 行は `repo_path` をそのまま表示
+- `--short` で `filepath.Base(repo_path)`
+- `--project` は sessions と同じフィルタ規則（`repo_path` 単独 substring。`project_dir` は対象外）
 - `--format markdown` でフォーマット指定
 
 
@@ -58,7 +66,8 @@
 somniloq import                          # 全 JSONL を差分取り込み
 somniloq import --full                   # 全件再取り込み（確認あり）
 somniloq import --full --yes             # 確認なしで全件再取り込み
-somniloq backfill                        # 既存セッションの repo_path を解決
+somniloq backfill                        # 既存セッションの補正（DELETE 対象があれば確認）
+somniloq backfill --yes                  # 確認なしで補正
 somniloq sessions                        # セッション一覧
 somniloq sessions --since 24h            # 直近24時間
 somniloq sessions --since 2026-03-28     # 3/28 以降
@@ -91,9 +100,9 @@ somniloq --version                          # バージョン表示
 -- セッション単位のメタデータ
 CREATE TABLE sessions (
     session_id TEXT PRIMARY KEY,  -- UUID
-    project_dir TEXT NOT NULL,    -- プロジェクトディレクトリ名
-    cwd TEXT,                     -- 作業ディレクトリ
-    repo_path TEXT,               -- 解決済みリポジトリパス（cwd から解決）
+    project_dir TEXT NOT NULL,    -- 取り込み時の書き込みは継続するが、v0.3 完成時点ではクエリ側（フィルタ・集約・表示）で使わない。JSONL ファイルパス由来の出自情報として保持。撤去はリリース後に再評価（backlog 参照）
+    cwd TEXT,                     -- 作業ディレクトリ。会話レコードでは通常非空
+    repo_path TEXT,               -- ResolveRepoPath（internal/core/repo_path.go）で解決したリポジトリパス。会話セッションでは通常非空
     git_branch TEXT,
     custom_title TEXT,            -- custom-title レコードから
     agent_name TEXT,              -- agent-name レコードから
@@ -126,8 +135,25 @@ CREATE TABLE import_state (
 
 ## Known limitations
 
+### 移行期限定（v0.2.x → v0.3）
+
+データ補正完了が一般化したら本書から削除する。
+
+- 過去に `repo_path NULL` のまま取り込まれた v0.2.x 由来セッションが DB に残っている（= `somniloq backfill` を未実行）状態だと、以下の影響が出る:
+  - `projects` 集約で `repo_path` キーが空のグループに、複数の異なるリポジトリの NULL セッションがまとめて潰れて 1 行表示される（`GROUP BY repo_path` 一本のため）
+  - `sessions` / `projects` / `show` の通常表示で「Project 列が空欄になる」（フォールバック削除によるストレートな退行）
+  - `--short` 表示も空のままになり得る
+  - `sessions --project <repo>` および `show --project <repo>` フィルタでヒットしない（`repo_path IS NULL` の行は LIKE にマッチしないため。旧仕様では `project_dir` 経由で引けていた）
+  - `somniloq backfill` 実行で `repo_path` 補完と `messages` を持たない残骸の DELETE が同時に走り、上記すべて解消する
+
+### 恒久的な制約
+
+- Claude Code が将来 `cwd` 空の `user`/`assistant` レコードを生成する仕様になった場合、somniloq 側ではそのまま `repo_path` 空で保存する。`projects` 集約で「複数リポジトリが空グループに潰れる」上記の問題と同根。その時点で対応方針を再検討する
+- 増分 import（`import_state.last_offset` からの差分読み）と「会話レコード初出のときだけ sessions 行を作成」仕様の組み合わせで、`custom-title` / `agent-name` が取りこぼされるケースがある:
+  - 同一 JSONL 内で `custom-title` / `agent-name` が `user`/`assistant` より先に出現し、かつメタ行を読み終えた時点で会話行が未追加のまま `somniloq import` が実行されると、メタ行は last_offset 内に入るが sessions 行は作られず、後続 import で会話だけ追記されても `custom_title` / `agent_name` は永続的に NULL のまま残る（取り込み節のメタ反映バッファはファイル単位で、import コマンド呼び出し境界を跨いで保持されない）
+  - 通常運用（セッション完了後にまとめて import）では起きないが、セッション進行中に import を叩く運用や file watcher 由来の auto-import では発生し得る
+  - 暫定の回避策は `somniloq import --full` で再取り込みすること。恒久対応は backlog の「未紐付けメタの永続バッファ化」タスクで扱う
 - `--project` の値は SQLite LIKE のメタ文字（`%`、`_`）を素通しでクエリに渡す（既存挙動の継承）。例: `--project my_repo` は `_` が 1 文字ワイルドカードとして解釈されるため `myXrepo` のような値にも誤マッチする可能性がある
-- 同一 `project_dir`（normalize 後）のセッション群で一部だけ `repo_path` が解決済み・残りが NULL という状態だと、`projects` 出力で「`repo_path` 集約行」と「`project_dir` フォールバック行」の 2 行に分裂する。`somniloq backfill` の再実行で解消できるケースと、`custom-title` / `agent-name` 由来のメタセッション（`cwd` を持たないため backfill 対象外）が恒久的に NULL のままになるケースがある
 
 ## スキーマ変更への対応方針
 
