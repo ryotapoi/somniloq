@@ -8,6 +8,7 @@
   - `rules/` のうち関連するものを Read（必要な資料はタスクによる）
   - `references/knowledge.md` を Read してハマりどころがないか確認する
   - 類似実装パターンは Grep で探す
+  - Explore subagent を呼ぶ場合、グローバル `~/.claude/CLAUDE.md` の `Constraints / Explore subagent への prompt 定型`（事実のみ・代表 1 件）を不変ルールとして必ず守る。加えて、**ピンポイント型調査**（欲しい情報が事前に決まっている、比較対象が明確）では Acceptance に出力フォーマット（項目別の行数・形式・禁止項目）を明示する。**地図型調査**（関連箇所の洗い出し、未知領域のファンアウト探索）ではフォーマット指定はせず、事実列挙のみを縛る
 - **Acceptance**: 現状実装・関連コード・既存パターン・既知のハマりどころを把握した状態
 - **Relevant**: rules/, references/knowledge.md, rules/architecture.md
 
