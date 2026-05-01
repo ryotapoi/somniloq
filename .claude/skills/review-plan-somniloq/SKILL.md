@@ -150,7 +150,9 @@ Task ツールで `subagent_type: Plan, model: "claude-sonnet-4-6"` を使う。
    ```
 
    出力されたパスを `RESULT_PATH` とする
-3. Write ツールで `RESULT_PATH` に検証結果本文を書き出す（フォーマットは下の「結果ファイルの中身」参照）
+3. Write ツールで `RESULT_PATH` に検証結果本文を書き出す（フォーマットは下の「結果ファイルの中身」参照）。
+
+   **プランモード中でも書ける**: `/tmp/claude/claude-review-results/*` は `~/.claude/settings.json` の permissions.allow で `Write` が明示許可されているため、プランモードでもこのパス配下への Write ツールは通る。「プランモードだから Write は禁止」と推測でフォールバックに入らず、必ず Write を試すこと（fallback はあくまで mkdir / Write が**実際に**失敗した時のセーフティネット）
 4. 集計: 🔴 MUST / 🟡 SHOULD / 🔵 NIT の件数を数え、`must`, `should`, `nit` の値を決める。`needs_action` は `must + should > 0` なら `YES`、それ以外は `NO`。再レビュー時に ⚠️（前回対処の問題）が 1 件以上ある場合も `needs_action=YES` 扱いとする（対処側の重要度に揃えて `must` または `should` にカウント）。✅ のみは `needs_action=NO`
 5. ユーザーに返す text は以下の 2 行のみ:
 
