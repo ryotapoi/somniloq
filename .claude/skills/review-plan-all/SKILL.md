@@ -1,19 +1,29 @@
 ---
 name: review-plan-all
-description: プランレビューの全チェーンを実行する。IMPORTANT: プランモードでプランの記述が完了したら、ExitPlanMode を呼ぶ前に必ずこのスキルを実行すること。ExitPlanMode を直接呼んではならない — 先にこのスキルでレビューを通す。プランを書き終えた、レビューに進む、ExitPlanMode する、といった文脈で自動的にこのスキルを起動する。個別のレビュースキル（/review-plan, /review-plan-codex 等）を直接呼ばず、このスキルを使う。
+description: プランレビューを実行する司令塔。ExitPlanMode を呼ぶ前に、リスクに応じた深さでレビューを通す（L0 self-check / L1 領域固有 / L2 別視点）。プランを書き終えた、レビューに進む、ExitPlanMode する、といった文脈で起動する。個別のレビュースキル（/review-plan, /review-plan-codex 等）を直接呼ばず、このスキルを使う。Small な plan は L0 で済ませてよい。
 argument-hint: [plan-file-path]
 ---
 
-# Plan Review — Full Chain
+# Plan Review — Risk-Based
 
-プランレビューを以下の構造で実行する:
+プランレビューを、作業のリスクに応じた深さで実行する。
+**準備手順と並列レビューは順次実行。同一手順内の個別レビューは並列起動する。**
+**明示的に「ユーザーに確認」と記載されたステップ以外は、ユーザー確認なしで自動進行する。**
 
-- **手順 0**: `/review-plan-split` を単独で実施。分割推奨ならここで停止
-- **手順 1**: 全観点を並列起動（codex 含む）。戻りを全部受け取ってから main で統合・反映
-- **手順 2..N**: 前周で「指摘あり観点」のみ並列再実施。LGTM 観点はスキップ。最大 3 周
-- **最終念押し判定**: 全観点 LGTM 達成時、累積修正の規模で「直近で回さなかった観点を最終 1 周回すか」を判定
+ユーザーが codex スキップを指示している場合、`/review-plan-codex` を並列リストから除外する。
 
-ユーザーが codex スキップを指示している場合、手順 1〜N の並列起動から `/review-plan-codex` を除外する。
+## Review Depth の選択
+
+最初に main 側で plan の risk profile を判定し、Depth を選ぶ。判定が揺れたら一段深い側に倒す。
+
+- **L0 self-check**: Small 変更（typo、docs、テスト追加だけ、1 ファイルの明確な修正）。main で plan を読み直し、acceptance と照合するだけ。手順 0〜5 はスキップして「self-check 完了。ExitPlanMode で承認を求めてください。」と報告
+- **L1 targeted**: 通常の変更。手順 0（split） + 領域固有レビューを実施
+- **L2 external**: High-risk、設計判断が重い、曖昧、または L1 で重大な指摘が出た。L1 に加えて Codex を入れる
+
+判定例:
+- typo / docs / test 追加だけ → L0
+- 通常の機能追加・バグ修正・複数ファイル変更 → L1
+- SQLite スキーマ・マイグレーション・`backfill` 破壊的処理・SQL 集約意味変更・CLI 破壊的変更・JSONL 取り込み境界・並行性・公開 API 削除・外部連携 → L2
 
 ## 用語
 
@@ -24,7 +34,7 @@ argument-hint: [plan-file-path]
 
 ## 手順
 
-### 0. `/review-plan-split` を Skill tool で実行する
+### 0. `/review-plan-split` を Skill tool で実行する（L1 / L2）
 
 引数（`$ARGUMENTS`）があればそのまま渡す。プランの粒度を判定する。
 
@@ -35,18 +45,22 @@ argument-hint: [plan-file-path]
   - 選択肢 1: 「backlog でタスク分割する（ExitPlanMode → backlog 更新 → 再計画）」
   - 選択肢 2: 「このまま 1 プランで進める（分割しない理由をプランに明記する）」
 
-  選択肢 1 の場合、以降のレビュー（手順 1 以降）は**全てスキップ**し、`rules/workflow/1c-plan.md` の「プラン段階で分割が必要と判明した場合の手順」に従って ExitPlanMode をユーザーに依頼する旨を伝えて終了する。選択肢 2 の場合は次の手順 1 に進む（プラン本文に「分割しないと判断した理由」を追記してから）。
+  選択肢 1 の場合、以降のレビュー（手順 1 以降）は**全てスキップ**し、ExitPlanMode をユーザーに依頼する旨を伝えて終了する。選択肢 2 の場合は次の手順 1 に進む（プラン本文に「分割しないと判断した理由」を追記してから）。
 
 `RESULT_FILE:` の値が `ERROR` で始まる場合、本文がそのまま戻り値内に含まれているのでフォールバックとして扱う。
 
-### 1. 全観点並列実施（1 周目）
+split は手順 0 でのみ実施する。再実施ループには戻らない。
 
-以下の個別レビュースキルを **同一ターンで Skill tool 並列起動** する。引数（`$ARGUMENTS`）はそれぞれにそのまま渡す:
+### 1. リスクに応じた観点を並列で実施する（1 周目）
 
-- `/review-plan`
-- `/review-plan-go`
-- `/review-plan-somniloq`
-- `/review-plan-codex`（codex スキップ指示がある場合は除外）
+Depth と plan の内容に応じて並列起動するスキルを選ぶ。**選んだものを 1 つのメッセージで Skill tool 並列起動** する。引数（`$ARGUMENTS`）はそれぞれにそのまま渡す。
+
+| スキル | いつ含めるか | 出力形式 |
+| --- | --- | --- |
+| `/review-plan` | L1 / L2 で常時 | 結果ファイル化 |
+| `/review-plan-somniloq` | L1 / L2 で常時（somniloq 制約は常に確認） | 結果ファイル化 |
+| `/review-plan-go` | Go コードに触る変更（実質常時） | 結果ファイル化 |
+| `/review-plan-codex` | L2 のみ（codex スキップ指示がある場合は除外） | 結果ファイル化 |
 
 各スキルの戻り値テキストから `^RESULT_FILE: ` 行と `^SUMMARY: ` 行を抽出する。
 - `RESULT_FILE:` の値が `ERROR` で始まる場合、本文がそのまま戻り値内に含まれているのでフォールバックとして扱う（戻り値本文を読む）
@@ -61,7 +75,7 @@ argument-hint: [plan-file-path]
 2. 全スキル完了後、`SUMMARY: ... needs_action=YES ...` のものについて、`RESULT_FILE` のパスを Read で読み込む
    - パスが `/tmp/claude/claude-review-results/` 配下であることを確認してから Read する（パス検証）
    - `needs_action=NO` のスキルの結果ファイルは Read しない
-3. 全指摘を一覧し、🔴 MUST / 🟡 SHOULD 指摘の対応方針を決定する。対応方針の判断は呼び出し元 workflow（`rules/workflow/1c-plan.md`）の「レビュー指摘への対応」「レビューの収束条件」に従う
+3. 全指摘を一覧し、🔴 MUST / 🟡 SHOULD 指摘の対応方針を決定する。対応方針の判断は呼び出し元 workflow（`.claude/workflow/plan.md`）に従う
 4. 対応方針が決まったら Edit に入る。隣接セクションへの修正は 1 つの Edit にまとめる。離れたセクションへの修正は別 Edit のまま（diff レビュー粒度を保つため）
 5. 反映完了後、結果ファイルは再 Read しない（古い Read 結果は履歴から自然に流れる）
 

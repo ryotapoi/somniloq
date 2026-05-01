@@ -4,16 +4,25 @@
 
 somniloq は Claude Code のセッションログ（JSONL）を読み取り、SQLite に保存・検索する CLI ツール。詳細: rules/mission.md
 
-## ワークフロー全体の ICAR
+## ワークフロー入口
 
-- **Intent**: プラン → 実装 → 動作確認 → レビュー → コミット を、各ステップで ICAR を満たした状態で進める
-- **Constraints**:
-  - 各ステップに入る前に該当する `rules/workflow/*.md` を Read で読む（CLAUDE.md の要約で済ませない）
-  - 不明点があれば止まってユーザーに確認する。それ以外は自動進行
-  - コミットまで終えたら止まる。次のタスクはユーザー指示を待つ
-  - コミットは workflow 内外を問わず必ず `/commit` スキル経由
-- **Acceptance**: コミット完了 + 動作確認通過 + レビュー LGTM
-- **Relevant**: rules/mission.md, rules/scope.md, rules/architecture.md, rules/constraints.md, rules/workflow/, rules/information-management.md
+タスクを始める時は `.claude/workflow/default.md` を最初に Read する。
+そこから Intake 分類（Small / Normal / High-risk / Exploratory）を判定し、必要な phase ファイルへ進む。
+
+phase ファイル一覧（`.claude/workflow/`）:
+
+- `default.md` — 入口、Intake、Routing
+- `investigate.md` — Exploratory 用の事実集め
+- `plan.md` — 計画作成（省略可条件含む）
+- `implement.md` — 実装
+- `verify.md` — 動作確認
+- `review.md` — リスクベースの review depth 選択
+- `finish.md` — コミット
+- `maintenance.md` — L3、節目で呼ぶ構造棚卸し
+
+各 phase ファイルは入る前に Read で読む（CLAUDE.md の要約で済ませない）。
+不明点があれば止まってユーザーに確認。なければ自動進行。
+コミットまで終えたら止まる。次のタスクはユーザー指示待ち。
 
 ## ビルド・テストコマンド
 
@@ -21,20 +30,6 @@ somniloq は Claude Code のセッションログ（JSONL）を読み取り、SQ
 go test ./...                                # 全テスト実行
 go build -o bin/somniloq ./cmd/somniloq      # バイナリビルド
 ```
-
-## 開発ワークフロー
-
-各ステップの詳細ファイルを、**ステップに入る前**に Read で読むこと。
-
-1. **計画（プランモード）**
-   1. **UX シナリオ** — rules/workflow/1a-ux-scenario.md
-   2. **調査・設計判断** — rules/workflow/1b-design.md
-   3. **プラン作成・レビュー** — rules/workflow/1c-plan.md
-2. **実装**
-   1. **実装** — rules/workflow/2a-implement.md
-   2. **動作確認** — rules/workflow/2b-verify.md
-   3. **レビュー** — rules/workflow/2c-review.md
-3. **コミット** — rules/workflow/3-finish.md
 
 ## Constraints / サブエージェント活用
 

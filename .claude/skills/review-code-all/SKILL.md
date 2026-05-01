@@ -1,20 +1,29 @@
 ---
 name: review-code-all
-description: 実装レビューの全チェーンを実行する。実装・テスト完了後、コミット前に必ず実行すること。実装が終わった、レビューに進む、コミットする、といった文脈で自動的にこのスキルを起動する。個別のレビュースキル（/review-code, /review-code-go, /review-code-codex 等）を直接呼ばず、このスキルを使う。
+description: 実装レビューを実行する司令塔。実装・テスト完了後、コミット前にリスクに応じた深さでレビューを通す（L0 self-check / L1 領域固有 / L2 別視点）。実装が終わった、レビューに進む、コミットする、といった文脈で起動する。個別のレビュースキル（/review-code, /review-code-go, /review-code-codex 等）を直接呼ばず、このスキルを使う。Small な変更は L0 で済ませてよい。
 argument-hint: [plan-file-path]
 ---
 
-# Implementation Review — Full Chain
+# Implementation Review — Risk-Based
 
-実装レビューを以下の構造で実行する:
+実装レビューを、作業のリスクに応じた深さで実行する。
+**準備手順と並列レビューは順次実行。同一手順内の個別レビューは並列起動する。**
+**明示的に「ユーザーに確認」と記載されたステップ以外は、ユーザー確認なしで自動進行する。**
 
-- **手順 0**: ビルド・テスト + diff サイズ確認 + プラン更新（前提整備）
-- **手順 1**: 全観点を並列起動（codex 含む。simplify は 1 周目のみ）。戻りを全部受け取ってから main で統合・反映
-- **手順 2..N**: 前周で「指摘あり観点」のみ並列再実施。LGTM 観点はスキップ。最大 3 周
-- **最終念押し判定**: 全観点 LGTM 達成時、累積修正の規模で「直近で回さなかった観点を最終 1 周回すか」を判定
-- **手順 N+1**: CLI 動作確認の再判定 → `/commit`
+ユーザーが codex スキップを指示している、または手順 0 の diff サイズ確認でユーザーが Codex No と答えた場合、`/review-code-codex` を並列リストから除外する。
 
-ユーザーが codex スキップを指示している、または手順 0 の diff サイズ確認でユーザーが Codex No と答えた場合、手順 1〜N の並列起動から `/review-code-codex` を除外する。
+## Review Depth の選択
+
+最初に main 側で diff の risk profile を判定し、Depth を選ぶ。判定が揺れたら一段深い側に倒す。
+
+- **L0 self-check**: Small 変更（typo、docs、テスト追加だけ、1 ファイルの明確な修正）。main で diff を読み直し、acceptance と照合するだけ。手順 0 のビルド・テストを通したら手順 7 (commit) に直接進む
+- **L1 targeted**: 通常の変更。手順 0〜2 + 領域固有レビューを実施
+- **L2 external**: High-risk、設計判断が重い、曖昧、または L1 で重大な指摘が出た。L1 に加えて Codex を入れる
+
+判定例:
+- typo / docs / test 追加だけ / 1 ファイルの明確なバグ修正 → L0
+- 通常の機能追加・バグ修正・複数ファイル変更 → L1
+- SQLite スキーマ・マイグレーション・`backfill` 破壊的処理・SQL 集約意味変更・CLI 破壊的変更・JSONL 取り込み境界・並行性・公開 API 削除・外部連携 → L2
 
 ## 用語
 
@@ -38,9 +47,9 @@ go test ./...
 
 失敗したら修正してから次へ進む。
 
-CLI 動作確認は `2b-verify.md` の段階で既に通過している前提。このスキルでは実行しない（最後の手順でレビュー対応の差分について再判定する）。
+CLI 動作確認は `.claude/workflow/verify.md` の段階で既に通過している前提。このスキルでは実行しない（最後の手順でレビュー対応の差分について再判定する）。
 
-#### 0-b. diff サイズ確認（既存の保護機構 — そのまま残す）
+#### 0-b. diff サイズ確認（L2 のみ）
 
 `git diff --stat` で変更行数を確認する。合計が 1000 行を超える場合、`AskUserQuestion` で「diff が大きいため Codex レビュー（/review-code-codex）でレート制限に当たる可能性があります。Codex レビューも実行しますか？」と確認する。ユーザーが No なら以降の手順 1〜N の並列起動から `/review-code-codex` を除外する。
 
@@ -48,18 +57,20 @@ CLI 動作確認は `2b-verify.md` の段階で既に通過している前提。
 
 プランから意図的に変更した箇所がある場合、プランファイルを更新する（該当 Step に変更内容と理由を追記）。
 
-### 1. 全観点並列実施（1 周目）
+### 1. リスクに応じた観点を並列で実施する（1 周目）
 
-以下の個別レビュースキルを **同一ターンで Skill tool 並列起動** する。引数（`$ARGUMENTS`）はそれぞれにそのまま渡す:
+Depth と diff の内容に応じて並列起動するスキルを選ぶ。**選んだものを 1 つのメッセージで Skill tool 並列起動** する。引数（`$ARGUMENTS`）はそれぞれにそのまま渡す。
 
-- `/simplify`（**1 周目のみ**。再実施では含めない）
-- `/review-code`
-- `/review-code-go`
-- `/review-code-somniloq`
-- `/review-code-codex`（codex スキップ指示 / 0-b で No 回答の場合は除外）
+| スキル | いつ含めるか | 出力形式 | 備考 |
+| --- | --- | --- | --- |
+| `/simplify` | L1 / L2 で常時 | 従来形式 | **1 周目のみ実施。再実施対象から除外** |
+| `/review-code` | L1 / L2 で常時 | 結果ファイル化 | |
+| `/review-code-somniloq` | L1 / L2 で常時（somniloq 制約は常に確認） | 結果ファイル化 | |
+| `/review-code-go` | Go コードに触る変更（実質常時） | 結果ファイル化 | |
+| `/review-code-codex` | L2 のみ（codex スキップ指示 / 0-b で No 回答の場合は除外） | 結果ファイル化 | |
 
 各スキルの戻り値テキストから:
-- 結果ファイル化対象（review-code / review-code-go / review-code-somniloq / review-code-codex）: `^RESULT_FILE: ` 行と `^SUMMARY: ` 行を抽出する
+- 結果ファイル化対象: `^RESULT_FILE: ` 行と `^SUMMARY: ` 行を抽出する
   - `RESULT_FILE:` の値が `ERROR` で始まる場合、本文がそのまま戻り値内に含まれているのでフォールバックとして扱う（戻り値本文を読む）
 - 従来形式（simplify）: 戻り値本文をそのまま指摘として扱う
 
@@ -73,7 +84,7 @@ CLI 動作確認は `2b-verify.md` の段階で既に通過している前提。
 2. 全スキル完了後、結果ファイル化対象のうち `SUMMARY: ... needs_action=YES ...` のものについて、`RESULT_FILE` のパスを Read で読み込む
    - パスが `/tmp/claude/claude-review-results/` 配下であることを確認してから Read する（パス検証）
    - `needs_action=NO` のスキルの結果ファイルは Read しない
-3. 従来形式スキル（simplify）の本文と合わせて全指摘を一覧し、🔴 MUST / 🟡 SHOULD 指摘の対応方針を決定する。対応方針の判断と収束条件は呼び出し元 workflow（`rules/workflow/2c-review.md`）に従う
+3. 従来形式スキル（simplify）の本文と合わせて全指摘を一覧し、🔴 MUST / 🟡 SHOULD 指摘の対応方針を決定する。対応方針の判断と収束条件は呼び出し元 workflow（`.claude/workflow/review.md`）に従う
 4. 対応方針が決まったら Edit に入る。隣接セクションへの修正は 1 つの Edit にまとめる。離れたセクションへの修正は別 Edit のまま
 5. 反映完了後、結果ファイルは再 Read しない
 
