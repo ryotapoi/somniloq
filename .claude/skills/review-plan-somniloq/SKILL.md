@@ -22,7 +22,10 @@ effort: xhigh
   - 「前回の続き」「再レビュー」「前回の指摘」を検出したら再レビューモードとして `$ARGUMENTS` 全文を `PRIOR_REVIEW_BLOCK` としてプロンプトに埋め込む
   - 結果ファイルは `/tmp/claude/claude-review-results/` 配下に書く。ユーザー返却 text は `RESULT_FILE:` と `SUMMARY:` の 2 行のみ（本文を貼らない）
   - mkdir / Write 失敗時のみ `RESULT_FILE: ERROR — ...` のフォールバック形式で本文を直接返す
-- **Acceptance**: `RESULT_PATH` に検証本文が書き出され、`SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>` を返した状態
+- **Acceptance**:
+  - 結果ファイルが `/tmp/claude/claude-review-results/` 配下に書き出されている
+  - 戻り値テキストに `RESULT_FILE: <path>` と `SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>` が含まれている
+  - mkdir / Write 失敗時はフォールバック形式（`RESULT_FILE: ERROR — ...` + 本文）で返す
 - **Relevant**: rules/architecture.md, rules/scope.md, rules/constraints.md（プロンプト内の「somniloq 設計制約」リスト）
 
 ## 手順

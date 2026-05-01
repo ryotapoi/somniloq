@@ -10,12 +10,12 @@ disable-model-invocation: false
 
 - **Intent**: 変更をレビュー済みの状態で、Conventional Commits 形式の英語コミットメッセージとしてリポジトリに記録する
 - **Constraints**:
-  - コミットメッセージは必ず HEREDOC で渡す（改行の安全な扱いのため）
+  - **Conventional Commits 形式に従う**（type は `feat` / `fix` / `docs` / `test` / `refactor` / `chore` / `perf` から選ぶ。scope は Conventional Commits の規約に従って必要なら使う）
+  - メッセージ言語は英語、summary は小文字始まり・末尾ピリオドなし・70 文字以内
   - `.env` や credentials を含むファイルはコミット対象から除外する
-  - `--amend` はユーザーが明示した場合のみ使う
-  - 言語は英語、summary は小文字始まり・末尾ピリオドなし・70 文字以内
-  - 該当があれば ADR 作成・`references/knowledge.md` 追記・`backlog/backlog.md` の `[x]` 更新を先に済ませる
-- **Acceptance**: コミットが作成され、`git status` で確認済みの状態
+- **Acceptance**:
+  - 該当があれば ADR 作成・`references/knowledge.md` 追記・`backlog/backlog.md` の `[x]` 更新が済んでいる
+  - コミットが作成され、`git status` でクリーンな状態を確認済み
 - **Relevant**: 下記「コミットメッセージ形式」「Type 一覧」「ADR テンプレート」, `references/knowledge.md`, `backlog/backlog.md`
 
 ## コミットメッセージ形式
@@ -44,10 +44,6 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 | `chore` | ビルド、CI、依存関係、設定などの雑務 |
 | `perf` | パフォーマンス改善 |
 
-## Scope
-
-現時点では scope は使わない。パッケージが増えて区別が必要になったら導入する。
-
 ## 手順
 
 1. 判断記録（ADR）が必要か判断する（下記「ADR 判断基準」参照。不要ならスキップ）
@@ -57,11 +53,6 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 5. `backlog/backlog.md` に今回のコミットで完了した項目があれば `[x]` に更新する
 6. ファイルを stage してコミットする
 7. コミット後 `git status` で結果を確認する
-
-## 注意
-
-- コミットメッセージは必ず HEREDOC で渡す（改行の安全な扱いのため）
-- `.env` や credentials を含むファイルはコミット対象から除外する
 
 ## ADR 判断基準
 
