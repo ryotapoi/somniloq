@@ -17,7 +17,7 @@ const worktreePathFragment = "/.claude/worktrees/"
 //  1. cwd が空 → 空文字
 //  2. cwd が worktreePathFragment を含む → その直前までの絶対パス
 //  3. git -C <cwd> rev-parse --show-toplevel の成功出力
-//  4. どれも失敗 → 空文字
+//  4. どれも失敗 → cwd をそのまま返す（git 配下外でも cwd を一意キーとして採用するため）
 //
 // 空 cwd は最初に弾くこと。git -C "" rev-parse はカレントディレクトリ扱いで
 // 呼び出し元プロセスの実リポジトリを誤って引いてしまうため。
@@ -41,8 +41,8 @@ func ResolveRepoPath(cwd string) string {
 	cmd.Stderr = io.Discard
 	out, err := cmd.Output()
 	if err != nil {
-		// 非 0 終了 / chdir 失敗 / git 不在などをすべて空文字に集約（仕様 4）。
-		return ""
+		// git 失敗は cwd 返却に集約（仕様 4）。
+		return cwd
 	}
 	// git rev-parse --show-toplevel は末尾に改行を付ける。先頭/末尾の空白を
 	// 含む正当なパス（例: "/tmp/dir with trailing space / ..."）を壊さないよう

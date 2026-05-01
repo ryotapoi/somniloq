@@ -83,13 +83,12 @@ func TestResolveRepoPath_Worktree(t *testing.T) {
 		})
 	}
 
-	// 文字列処理の回帰防止: 類似文字列 (/.claude/worktreesXYZ/) は worktree マッチに
-	// 切れないこと。外側の unsetAllGitEnv と存在しない cwd の組み合わせで、
-	// git 経路も空文字を返すため結果は "" に固定できる。
+	// 文字列処理の回帰防止: `/.claude/worktreesXYZ/` は worktree 接頭辞として扱われない
+	// （仕様 2 にマッチしない）。仕様 4 に落ちて cwd 自体が返ることで担保する。
 	t.Run("similar but not exact does not match", func(t *testing.T) {
 		cwd := "/foo/bar/.claude/worktreesXYZ/baz"
-		if got := ResolveRepoPath(cwd); got != "" {
-			t.Errorf("ResolveRepoPath(%q) = %q, want empty", cwd, got)
+		if got := ResolveRepoPath(cwd); got != cwd {
+			t.Errorf("ResolveRepoPath(%q) = %q, want %q", cwd, got, cwd)
 		}
 	})
 }
@@ -162,6 +161,9 @@ func TestResolveRepoPath_GitToplevel_PreservesTrailingSpace(t *testing.T) {
 	}
 }
 
+// TestResolveRepoPath_NotGitRepo は仕様 4（git 経路が失敗したケースで cwd 自体が
+// 返る）を担保する。非 git ディレクトリ・実在しないパスのいずれも、cwd 引数が
+// そのまま返ってくる（symlink 解決などのラップは挟まない）。
 func TestResolveRepoPath_NotGitRepo(t *testing.T) {
 	unsetAllGitEnv(t)
 
@@ -173,15 +175,26 @@ func TestResolveRepoPath_NotGitRepo(t *testing.T) {
 	tests := []struct {
 		name string
 		cwd  string
+		want string
 	}{
-		{"non-git directory", nonGit},
-		{"nonexistent path", missing},
+		{"non-git directory", nonGit, nonGit},
+		{"nonexistent path", missing, missing},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := ResolveRepoPath(tc.cwd); got != "" {
-				t.Errorf("ResolveRepoPath(%q) = %q, want empty", tc.cwd, got)
+			if got := ResolveRepoPath(tc.cwd); got != tc.want {
+				t.Errorf("ResolveRepoPath(%q) = %q, want %q", tc.cwd, got, tc.want)
 			}
 		})
 	}
+
+	// trailing-space を含む cwd でも仕様 4 は cwd をそのまま返す。手順 3（git 経路）
+	// の同様テスト TestResolveRepoPath_GitToplevel_PreservesTrailingSpace と対称。
+	// 将来 filepath.Clean 等でラップした際の退行を捕まえる。
+	t.Run("nonexistent path with trailing space", func(t *testing.T) {
+		cwd := filepath.Join(t.TempDir(), "missing dir ") // 末尾スペース入り
+		if got := ResolveRepoPath(cwd); got != cwd {
+			t.Errorf("ResolveRepoPath(%q) = %q, want %q", cwd, got, cwd)
+		}
+	})
 }

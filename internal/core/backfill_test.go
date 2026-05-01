@@ -136,7 +136,10 @@ func TestBackfillRepoPaths_SkipsEmptyCWD(t *testing.T) {
 	}
 }
 
-func TestBackfillRepoPaths_LeavesUnresolvedNull(t *testing.T) {
+// TestBackfillRepoPaths_FillsNonGitCWDVerbatim は仕様 4（git 失敗時は cwd を
+// そのまま返す）により、git 配下外の cwd でも repo_path が cwd 自体で埋まることを
+// 担保する。
+func TestBackfillRepoPaths_FillsNonGitCWDVerbatim(t *testing.T) {
 	unsetAllGitEnv(t)
 
 	db, err := OpenDB(":memory:")
@@ -152,16 +155,16 @@ func TestBackfillRepoPaths_LeavesUnresolvedNull(t *testing.T) {
 	if err != nil {
 		t.Fatalf("BackfillRepoPaths: %v", err)
 	}
-	if resolved != 0 || unresolved != 1 {
-		t.Errorf("counts = (%d, %d), want (0, 1)", resolved, unresolved)
+	if resolved != 1 || unresolved != 0 {
+		t.Errorf("counts = (%d, %d), want (1, 0)", resolved, unresolved)
 	}
 
 	got, err := queryRepoPath(t, db, "s1")
 	if err != nil {
 		t.Fatalf("queryRepoPath: %v", err)
 	}
-	if got.Valid {
-		t.Errorf("repo_path = %+v, want NULL", got)
+	if !got.Valid || got.String != missing {
+		t.Errorf("repo_path = %+v, want {%q, valid}", got, missing)
 	}
 }
 
@@ -215,16 +218,16 @@ func TestBackfillRepoPaths_Idempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first BackfillRepoPaths: %v", err)
 	}
-	if resolved != 1 || unresolved != 1 {
-		t.Errorf("first counts = (%d, %d), want (1, 1)", resolved, unresolved)
+	if resolved != 2 || unresolved != 0 {
+		t.Errorf("first counts = (%d, %d), want (2, 0)", resolved, unresolved)
 	}
 
 	resolved, unresolved, err = BackfillRepoPaths(db)
 	if err != nil {
 		t.Fatalf("second BackfillRepoPaths: %v", err)
 	}
-	if resolved != 0 || unresolved != 1 {
-		t.Errorf("second counts = (%d, %d), want (0, 1)", resolved, unresolved)
+	if resolved != 0 || unresolved != 0 {
+		t.Errorf("second counts = (%d, %d), want (0, 0)", resolved, unresolved)
 	}
 }
 

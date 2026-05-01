@@ -28,8 +28,9 @@ func selectBackfillTargets(db *DB) ([]backfillTarget, error) {
 }
 
 // BackfillRepoPaths resolves repo_path for sessions where it is still NULL and
-// cwd is populated. It is idempotent: sessions whose cwd cannot be resolved
-// stay NULL and will be retried on the next invocation (no marker is written).
+// cwd is populated. Idempotent: re-running is a no-op because SELECT filters by
+// repo_path IS NULL. The `unresolved` branch guards against residual pathological
+// inputs (e.g. cwd starts with the worktree fragment → step 2 returns "").
 func BackfillRepoPaths(db *DB) (resolved, unresolved int, err error) {
 	todo, err := selectBackfillTargets(db)
 	if err != nil {
