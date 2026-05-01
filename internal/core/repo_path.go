@@ -7,8 +7,6 @@ import (
 )
 
 // worktreePathFragment は cwd（実パス）内の Claude Code worktree マーカー。
-// cmd/somniloq/shorten.go の projectWorktreeMarker とは別物（あちらは
-// project_dir のハイフン置換済みキー "--claude-worktrees-" 用で値自体が異なる）。
 const worktreePathFragment = "/.claude/worktrees/"
 
 // ResolveRepoPath は Claude Code JSONL の cwd から実リポジトリパスを解決する。
