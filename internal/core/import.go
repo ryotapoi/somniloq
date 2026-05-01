@@ -114,6 +114,15 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 	defer tx.Rollback()
 
 	repoCache := map[string]string{}
+	titles := map[string]string{}
+	agentNames := map[string]string{}
+	// Tracks whether any user/assistant record has been seen in this file
+	// (across all imports, since meta-only files don't advance import_state).
+	// If false at EOF, no sessions row exists yet and the buffered title /
+	// agent-name UPDATEs would all be 0-row no-ops, permanently losing the
+	// values. In that case we skip the flush and import_state advance so the
+	// next import re-reads from offset 0.
+	hasBody := offset > 0
 
 	for {
 		line, err := reader.ReadBytes('\n')
@@ -153,6 +162,7 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 				if uerr := upsertSession(tx, meta, importedAt); uerr != nil {
 					return offset, fmt.Errorf("upsert session: %w", uerr)
 				}
+				hasBody = true
 				if strings.TrimSpace(msg.Content) == "" {
 					continue
 				}
@@ -160,13 +170,9 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 					return offset, fmt.Errorf("insert message: %w", ierr)
 				}
 			case "custom-title":
-				if uerr := updateSessionTitle(tx, rec.SessionID, file.ProjectDir, rec.CustomTitle, importedAt); uerr != nil {
-					return offset, fmt.Errorf("update title: %w", uerr)
-				}
+				titles[rec.SessionID] = rec.CustomTitle
 			case "agent-name":
-				if uerr := updateSessionAgentName(tx, rec.SessionID, file.ProjectDir, rec.AgentName, importedAt); uerr != nil {
-					return offset, fmt.Errorf("update agent name: %w", uerr)
-				}
+				agentNames[rec.SessionID] = rec.AgentName
 			}
 		}
 
@@ -175,6 +181,25 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 				break
 			}
 			return offset, err
+		}
+	}
+
+	if !hasBody {
+		// Meta-only file: no sessions row exists yet, so flushing titles /
+		// agent-names would silently no-op. Skip the flush and the import_state
+		// advance so the next import re-reads these meta records from offset 0
+		// after a body record finally appears.
+		return offset, nil
+	}
+
+	for sid, t := range titles {
+		if uerr := updateSessionTitle(tx, sid, t, importedAt); uerr != nil {
+			return offset, fmt.Errorf("flush title: %w", uerr)
+		}
+	}
+	for sid, name := range agentNames {
+		if uerr := updateSessionAgentName(tx, sid, name, importedAt); uerr != nil {
+			return offset, fmt.Errorf("flush agent name: %w", uerr)
 		}
 	}
 

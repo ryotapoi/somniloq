@@ -258,35 +258,25 @@ func TestUpsertSession_RepoPath_EmptyDoesNotOverwrite(t *testing.T) {
 func TestUpsertSession_RepoPath_AfterUpdateSessionTitle(t *testing.T) {
 	db := testDB(t)
 
-	// Scenario A: UpdateSessionTitle leaves repo_path NULL, later Upsert fills it.
-	must(t, db.UpdateSessionTitle("s1", "-test", "title", "2026-03-28T15:00:00Z"))
+	// UpdateSessionTitle on an existing row only touches custom_title/imported_at,
+	// not repo_path.
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", RepoPath: "/Users/test/proj"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpdateSessionTitle("s1", "title", "2026-03-28T15:01:00Z"))
 
-	var isNull int
-	if err := db.db.QueryRow("SELECT repo_path IS NULL FROM sessions WHERE session_id='s1'").Scan(&isNull); err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if isNull != 1 {
-		t.Fatalf("repo_path should be NULL after UpdateSessionTitle")
-	}
-
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", RepoPath: "/Users/test/proj"}, "2026-03-28T15:01:00Z"))
 	var repoPath string
 	if err := db.db.QueryRow("SELECT repo_path FROM sessions WHERE session_id='s1'").Scan(&repoPath); err != nil {
 		t.Fatalf("SELECT failed: %v", err)
 	}
 	if repoPath != "/Users/test/proj" {
-		t.Errorf("scenario A repo_path: got %q, want %q", repoPath, "/Users/test/proj")
+		t.Errorf("repo_path: got %q, want %q", repoPath, "/Users/test/proj")
 	}
 
-	// Scenario B: UpdateSessionTitle then Upsert with empty RepoPath → still NULL.
-	must(t, db.UpdateSessionTitle("s2", "-test", "title", "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-test", RepoPath: ""}, "2026-03-28T15:01:00Z"))
-
-	if err := db.db.QueryRow("SELECT repo_path IS NULL FROM sessions WHERE session_id='s2'").Scan(&isNull); err != nil {
+	var title string
+	if err := db.db.QueryRow("SELECT custom_title FROM sessions WHERE session_id='s1'").Scan(&title); err != nil {
 		t.Fatalf("SELECT failed: %v", err)
 	}
-	if isNull != 1 {
-		t.Errorf("scenario B repo_path should still be NULL")
+	if title != "title" {
+		t.Errorf("custom_title: got %q, want %q", title, "title")
 	}
 }
 
@@ -424,8 +414,8 @@ func TestInsertMessage(t *testing.T) {
 func TestUpdateSessionTitle(t *testing.T) {
 	db := testDB(t)
 
-	// UpdateSessionTitle on non-existent session should create minimal row
-	if err := db.UpdateSessionTitle("s1", "-test", "my title", "2026-03-28T15:00:00Z"); err != nil {
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test"}, "2026-03-28T15:00:00Z"))
+	if err := db.UpdateSessionTitle("s1", "my title", "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionTitle failed: %v", err)
 	}
 
@@ -436,6 +426,22 @@ func TestUpdateSessionTitle(t *testing.T) {
 	}
 	if title != "my title" {
 		t.Errorf("got %q, want %q", title, "my title")
+	}
+}
+
+func TestUpdateSessionTitle_NoRow_IsNoop(t *testing.T) {
+	db := testDB(t)
+
+	if err := db.UpdateSessionTitle("ghost", "title", "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("UpdateSessionTitle should not error on missing row: %v", err)
+	}
+
+	var count int
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id='ghost'").Scan(&count); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("UpdateSessionTitle should not create rows; got %d", count)
 	}
 }
 
@@ -578,8 +584,9 @@ func TestListSessions_NullStartedAt(t *testing.T) {
 	// Session with started_at (normal)
 	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	// Session created via title-only update (no started_at)
-	must(t, db.UpdateSessionTitle("s2", "-test", "title only", "2026-03-28T15:00:00Z"))
+	// Session created via UpsertSession with no StartedAt, then title applied.
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-test"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpdateSessionTitle("s2", "title only", "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {
@@ -988,7 +995,7 @@ func TestGetSession_Found(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpdateSessionTitle("s1", "-Users-test-proj", "my session", "2026-03-28T15:00:00Z"))
+	must(t, db.UpdateSessionTitle("s1", "my session", "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
 	got, err := db.GetSession("s1")
@@ -1338,8 +1345,8 @@ func TestListProjects_NullStartedAt(t *testing.T) {
 	// Normal session
 	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-normal", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	// Session with NULL started_at (title-only)
-	must(t, db.UpdateSessionTitle("s2", "-Users-test-titleonly", "title", "2026-03-28T15:00:00Z"))
+	// Session with NULL started_at
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-Users-test-titleonly"}, "2026-03-28T15:00:00Z"))
 
 	// No filter: both projects should appear
 	rows, err := db.ListProjects(SessionFilter{})
@@ -1610,7 +1617,8 @@ func TestGetSummaryMessages_MillisecondTimestamp(t *testing.T) {
 func TestUpdateSessionAgentName(t *testing.T) {
 	db := testDB(t)
 
-	if err := db.UpdateSessionAgentName("s1", "-test", "agent1", "2026-03-28T15:00:00Z"); err != nil {
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test"}, "2026-03-28T15:00:00Z"))
+	if err := db.UpdateSessionAgentName("s1", "agent1", "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionAgentName failed: %v", err)
 	}
 
@@ -1621,6 +1629,22 @@ func TestUpdateSessionAgentName(t *testing.T) {
 	}
 	if name != "agent1" {
 		t.Errorf("got %q, want %q", name, "agent1")
+	}
+}
+
+func TestUpdateSessionAgentName_NoRow_IsNoop(t *testing.T) {
+	db := testDB(t)
+
+	if err := db.UpdateSessionAgentName("ghost", "agent", "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("UpdateSessionAgentName should not error on missing row: %v", err)
+	}
+
+	var count int
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id='ghost'").Scan(&count); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("UpdateSessionAgentName should not create rows; got %d", count)
 	}
 }
 
@@ -1661,8 +1685,9 @@ func TestGetSession_CWD(t *testing.T) {
 func TestListSessions_CWD_Null(t *testing.T) {
 	db := testDB(t)
 
-	// Session with no CWD (title-only)
-	must(t, db.UpdateSessionTitle("s1", "-test", "title", "2026-03-28T15:00:00Z"))
+	// Session with no CWD
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpdateSessionTitle("s1", "title", "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {

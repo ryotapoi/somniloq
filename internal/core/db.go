@@ -154,39 +154,23 @@ func insertMessage(e execer, msg ParsedMessage) error {
 	return err
 }
 
-func (d *DB) UpdateSessionTitle(sessionID, projectDir, title, importedAt string) error {
-	return updateSessionTitle(d.db, sessionID, projectDir, title, importedAt)
+func (d *DB) UpdateSessionTitle(sessionID, title, importedAt string) error {
+	return updateSessionTitle(d.db, sessionID, title, importedAt)
 }
 
-func updateSessionTitle(e execer, sessionID, projectDir, title, importedAt string) error {
-	_, err := e.Exec(`
-		INSERT INTO sessions (session_id, project_dir, imported_at) VALUES (?, ?, ?)
-		ON CONFLICT(session_id) DO NOTHING`,
-		sessionID, projectDir, importedAt,
-	)
-	if err != nil {
-		return err
-	}
-	_, err = e.Exec(`UPDATE sessions SET custom_title = ?, imported_at = ? WHERE session_id = ?`,
+func updateSessionTitle(e execer, sessionID, title, importedAt string) error {
+	_, err := e.Exec(`UPDATE sessions SET custom_title = ?, imported_at = ? WHERE session_id = ?`,
 		title, importedAt, sessionID,
 	)
 	return err
 }
 
-func (d *DB) UpdateSessionAgentName(sessionID, projectDir, agentName, importedAt string) error {
-	return updateSessionAgentName(d.db, sessionID, projectDir, agentName, importedAt)
+func (d *DB) UpdateSessionAgentName(sessionID, agentName, importedAt string) error {
+	return updateSessionAgentName(d.db, sessionID, agentName, importedAt)
 }
 
-func updateSessionAgentName(e execer, sessionID, projectDir, agentName, importedAt string) error {
-	_, err := e.Exec(`
-		INSERT INTO sessions (session_id, project_dir, imported_at) VALUES (?, ?, ?)
-		ON CONFLICT(session_id) DO NOTHING`,
-		sessionID, projectDir, importedAt,
-	)
-	if err != nil {
-		return err
-	}
-	_, err = e.Exec(`UPDATE sessions SET agent_name = ?, imported_at = ? WHERE session_id = ?`,
+func updateSessionAgentName(e execer, sessionID, agentName, importedAt string) error {
+	_, err := e.Exec(`UPDATE sessions SET agent_name = ?, imported_at = ? WHERE session_id = ?`,
 		agentName, importedAt, sessionID,
 	)
 	return err

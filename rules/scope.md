@@ -9,7 +9,7 @@
 - 各 JSONL を行単位で読み、`type` でフィルタ
 - `user`/`assistant` → messages テーブルへ（text 部分のみ抽出）
 - `user`/`assistant` レコードが初出のときだけ `sessions` 行を作成する（`messages` 0 件で残るケースの扱いはバックフィル節参照）
-- メタセッション（`custom-title` / `agent-name` 単独で `user`/`assistant` を持たない）は DB に保存しない（増分 import 跨ぎでの取りこぼし制約は Known limitations 参照）
+- メタセッション（`custom-title` / `agent-name` 単独で `user`/`assistant` を持たない）は DB に保存しない。当該ファイルの `import_state` も進めず、後で会話レコードが追記されたときに先頭から再読み込みできる状態を維持する
 - `user`/`assistant` の `cwd` から `repo_path` を解決して sessions に保存。`cwd` は会話レコードでは通常非空のため、会話セッションでは `repo_path` も通常非空（`ResolveRepoPath` 手順 4 で `cwd` 自体を返すため、`cwd` 非空なら必ず解決される）
 - `custom-title` / `agent-name` レコードは、ファイル走査終了時点で対応する `sessions` 行が存在するときのみ反映する
 - `import_state` を更新
@@ -149,10 +149,6 @@ CREATE TABLE import_state (
 ### 恒久的な制約
 
 - Claude Code が将来 `cwd` 空の `user`/`assistant` レコードを生成する仕様になった場合、somniloq 側ではそのまま `repo_path` 空で保存する。`projects` 集約で「複数リポジトリが空グループに潰れる」上記の問題と同根。その時点で対応方針を再検討する
-- 増分 import（`import_state.last_offset` からの差分読み）と「会話レコード初出のときだけ sessions 行を作成」仕様の組み合わせで、`custom-title` / `agent-name` が取りこぼされるケースがある:
-  - 同一 JSONL 内で `custom-title` / `agent-name` が `user`/`assistant` より先に出現し、かつメタ行を読み終えた時点で会話行が未追加のまま `somniloq import` が実行されると、メタ行は last_offset 内に入るが sessions 行は作られず、後続 import で会話だけ追記されても `custom_title` / `agent_name` は永続的に NULL のまま残る（取り込み節のメタ反映バッファはファイル単位で、import コマンド呼び出し境界を跨いで保持されない）
-  - 通常運用（セッション完了後にまとめて import）では起きないが、セッション進行中に import を叩く運用や file watcher 由来の auto-import では発生し得る
-  - 暫定の回避策は `somniloq import --full` で再取り込みすること。恒久対応は backlog の「未紐付けメタの永続バッファ化」タスクで扱う
 - `--project` の値は SQLite LIKE のメタ文字（`%`、`_`）を素通しでクエリに渡す（既存挙動の継承）。例: `--project my_repo` は `_` が 1 文字ワイルドカードとして解釈されるため `myXrepo` のような値にも誤マッチする可能性がある
 
 ## スキーマ変更への対応方針

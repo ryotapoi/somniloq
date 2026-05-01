@@ -388,3 +388,185 @@ func TestScanJSONLFiles_NonexistentDir(t *testing.T) {
 		t.Errorf("expected 0 files, got %d", len(files))
 	}
 }
+
+func TestProcessFile_MetaOnly_NoSessionRow(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	jsonl := `{"type":"custom-title","customTitle":"meta only","sessionId":"meta1"}
+`
+	path := filepath.Join(dir, "meta1.jsonl")
+	os.WriteFile(path, []byte(jsonl), 0o644)
+
+	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "meta1"}
+	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("processFile failed: %v", err)
+	}
+
+	var count int
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&count); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("meta-only JSONL should not create a session row; got %d", count)
+	}
+}
+
+func TestProcessFile_AgentNameOnly_NoSessionRow(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	jsonl := `{"type":"agent-name","agentName":"orphan","sessionId":"meta1"}
+`
+	path := filepath.Join(dir, "meta1.jsonl")
+	os.WriteFile(path, []byte(jsonl), 0o644)
+
+	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "meta1"}
+	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("processFile failed: %v", err)
+	}
+
+	var count int
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&count); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if count != 0 {
+		t.Errorf("agent-name-only JSONL should not create a session row; got %d", count)
+	}
+}
+
+func TestProcessFile_MetaBeforeBody(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	jsonl := `{"type":"custom-title","customTitle":"top title","sessionId":"s1"}
+{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
+{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"yo"}]}}
+`
+	path := filepath.Join(dir, "s1.jsonl")
+	os.WriteFile(path, []byte(jsonl), 0o644)
+
+	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("processFile failed: %v", err)
+	}
+
+	var title string
+	if err := db.db.QueryRow("SELECT custom_title FROM sessions WHERE session_id='s1'").Scan(&title); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if title != "top title" {
+		t.Errorf("custom_title: got %q, want %q", title, "top title")
+	}
+}
+
+func TestProcessFile_AgentNameBeforeBody(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	jsonl := `{"type":"agent-name","agentName":"first-agent","sessionId":"s1"}
+{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
+`
+	path := filepath.Join(dir, "s1.jsonl")
+	os.WriteFile(path, []byte(jsonl), 0o644)
+
+	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("processFile failed: %v", err)
+	}
+
+	var name string
+	if err := db.db.QueryRow("SELECT agent_name FROM sessions WHERE session_id='s1'").Scan(&name); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if name != "first-agent" {
+		t.Errorf("agent_name: got %q, want %q", name, "first-agent")
+	}
+}
+
+func TestImport_MetaBeforeBody_AcrossInvocations(t *testing.T) {
+	// First Import sees only meta records; the file's import_state must NOT
+	// advance, so a later Import that sees a body record can re-read the meta
+	// from offset 0 and apply the title/agent_name to the freshly created row.
+	db := testDB(t)
+	dir := t.TempDir()
+
+	projDir := filepath.Join(dir, "-test-proj")
+	os.MkdirAll(projDir, 0o755)
+
+	metaOnly := `{"type":"custom-title","customTitle":"early title","sessionId":"s1"}
+{"type":"agent-name","agentName":"early-agent","sessionId":"s1"}
+`
+	path := filepath.Join(projDir, "s1.jsonl")
+	os.WriteFile(path, []byte(metaOnly), 0o644)
+
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir}); err != nil {
+		t.Fatalf("first Import failed: %v", err)
+	}
+
+	// import_state for a meta-only file must remain unset, so the next Import
+	// re-reads from offset 0 once the body is appended.
+	state, err := db.GetImportState(path)
+	if err != nil {
+		t.Fatalf("GetImportState failed: %v", err)
+	}
+	if state != nil {
+		t.Fatalf("import_state should be nil after meta-only Import, got %+v", state)
+	}
+
+	appended := metaOnly + `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+`
+	os.WriteFile(path, []byte(appended), 0o644)
+
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir}); err != nil {
+		t.Fatalf("second Import failed: %v", err)
+	}
+
+	var title, name string
+	if err := db.db.QueryRow("SELECT COALESCE(custom_title, ''), COALESCE(agent_name, '') FROM sessions WHERE session_id='s1'").Scan(&title, &name); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if title != "early title" {
+		t.Errorf("custom_title: got %q, want %q", title, "early title")
+	}
+	if name != "early-agent" {
+		t.Errorf("agent_name: got %q, want %q", name, "early-agent")
+	}
+}
+
+func TestImport_MetaAfterBody_AcrossInvocations(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	projDir := filepath.Join(dir, "-test-proj")
+	os.MkdirAll(projDir, 0o755)
+
+	body := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+`
+	path := filepath.Join(projDir, "s1.jsonl")
+	os.WriteFile(path, []byte(body), 0o644)
+
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir}); err != nil {
+		t.Fatalf("first Import failed: %v", err)
+	}
+
+	appended := body + `{"type":"custom-title","customTitle":"later title","sessionId":"s1"}
+{"type":"agent-name","agentName":"later-agent","sessionId":"s1"}
+`
+	os.WriteFile(path, []byte(appended), 0o644)
+
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir}); err != nil {
+		t.Fatalf("second Import failed: %v", err)
+	}
+
+	var title, name string
+	if err := db.db.QueryRow("SELECT COALESCE(custom_title, ''), COALESCE(agent_name, '') FROM sessions WHERE session_id='s1'").Scan(&title, &name); err != nil {
+		t.Fatalf("SELECT failed: %v", err)
+	}
+	if title != "later title" {
+		t.Errorf("custom_title: got %q, want %q", title, "later title")
+	}
+	if name != "later-agent" {
+		t.Errorf("agent_name: got %q, want %q", name, "later-agent")
+	}
+}
