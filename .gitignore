@@ -34,6 +34,9 @@ CLAUDE.local.md
 .claude/settings.local.json
 .claude/*.local.*
 
+# Codex local-only
+.codex/
+
 # Temporary files (scratch notes, etc.)
 /tmp/
 
