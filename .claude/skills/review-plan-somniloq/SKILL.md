@@ -13,8 +13,17 @@ effort: xhigh
 グローバルの `/review-plan` の後に追加実行する somniloq プロジェクト固有のプランレビュー。
 1つの Plan サブエージェントで実行する。
 
-**重要な制約:**
-- レビューは Task ツール（subagent_type: Plan）で実行する。自分で直接レビューしない
+## ICAR
+
+- **Intent**: somniloq 固有の設計制約に照らしてプランをレビューし、結果を `RESULT_FILE` + `SUMMARY` の 2 行で返す
+- **Constraints**:
+  - レビューは Task ツール（`subagent_type: Plan, model: "claude-sonnet-4-6"`）で実行する。本スキルが直接レビューしない
+  - `$ARGUMENTS` から `PLAN_PATH` を抽出できなければ「プランファイルのパスを引数で指定してください」と返して終了
+  - 「前回の続き」「再レビュー」「前回の指摘」を検出したら再レビューモードとして `$ARGUMENTS` 全文を `PRIOR_REVIEW_BLOCK` としてプロンプトに埋め込む
+  - 結果ファイルは `/tmp/claude/claude-review-results/` 配下に書く。ユーザー返却 text は `RESULT_FILE:` と `SUMMARY:` の 2 行のみ（本文を貼らない）
+  - mkdir / Write 失敗時のみ `RESULT_FILE: ERROR — ...` のフォールバック形式で本文を直接返す
+- **Acceptance**: `RESULT_PATH` に検証本文が書き出され、`SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>` を返した状態
+- **Relevant**: rules/architecture.md, rules/scope.md, rules/constraints.md（プロンプト内の「somniloq 設計制約」リスト）
 
 ## 手順
 

@@ -13,8 +13,18 @@ effort: xhigh
 グローバルの `/review-code` + `/review-code-go` の後に追加実行する somniloq プロジェクト固有の実装レビュー。
 1つの Plan サブエージェントで実行する。
 
-**重要な制約:**
-- レビューは Task ツール（subagent_type: Plan）で実行する。自分で直接レビューしない
+## ICAR
+
+- **Intent**: somniloq 固有の設計制約に照らして未コミットの差分をレビューし、結果を `RESULT_FILE` + `SUMMARY` の 2 行で返す
+- **Constraints**:
+  - レビューは Task ツール（`subagent_type: Plan, model: "claude-sonnet-4-6"`）で実行する。本スキルが直接レビューしない
+  - `git diff` + `git diff --cached` で差分が無ければ「レビュー対象の変更がありません」と返して終了
+  - 変更ファイルに `.go` が含まれていなければ「Go ファイルの変更がないためスキップします」と返して終了
+  - `$ARGUMENTS` に「前回の続き」「再レビュー」「前回の指摘」を検出したら再レビューモードとして全文を `PRIOR_REVIEW_BLOCK` に埋め込む
+  - 結果ファイルは `/tmp/claude/claude-review-results/` 配下に書く。ユーザー返却 text は `RESULT_FILE:` と `SUMMARY:` の 2 行のみ
+  - mkdir / Write 失敗時のみ `RESULT_FILE: ERROR — ...` のフォールバック形式で本文を直接返す
+- **Acceptance**: `RESULT_PATH` にレビュー本文が書き出され、`SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>` を返した状態
+- **Relevant**: rules/architecture.md, rules/scope.md, rules/constraints.md（プロンプト内の「somniloq 設計制約」リスト）
 
 ## 手順
 

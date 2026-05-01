@@ -6,7 +6,17 @@ disable-model-invocation: false
 
 # Commit スキル
 
-Conventional Commits ベースでコミットを作成する。
+## ICAR
+
+- **Intent**: 変更をレビュー済みの状態で、Conventional Commits 形式の英語コミットメッセージとしてリポジトリに記録する
+- **Constraints**:
+  - コミットメッセージは必ず HEREDOC で渡す（改行の安全な扱いのため）
+  - `.env` や credentials を含むファイルはコミット対象から除外する
+  - `--amend` はユーザーが明示した場合のみ使う
+  - 言語は英語、summary は小文字始まり・末尾ピリオドなし・70 文字以内
+  - 該当があれば ADR 作成・`references/knowledge.md` 追記・`backlog/backlog.md` の `[x]` 更新を先に済ませる
+- **Acceptance**: コミットが作成され、`git status` で確認済みの状態
+- **Relevant**: 下記「コミットメッセージ形式」「Type 一覧」「ADR テンプレート」, `references/knowledge.md`, `backlog/backlog.md`
 
 ## コミットメッセージ形式
 
