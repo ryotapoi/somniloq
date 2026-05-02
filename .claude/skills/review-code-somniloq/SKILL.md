@@ -1,183 +1,106 @@
 ---
 name: review-code-somniloq
-description: somniloq 固有の設計制約に基づく実装レビュー。通常はチェーンスキルから呼ばれる。
-argument-hint: <plan-file-path>
-allowed-tools: Read, Glob, Grep, Bash(git diff *), Bash(git log *), Bash(git status *), Bash(mkdir:*), Bash(printf:*), Bash(date:*), Write, Task
+description: somniloq プロジェクト固有の設計制約に基づく実装レビュー worker。引数 `viewpoint=<name>` で観点を指定する（現状 somniloq のみ）。通常はチェーンスキル `/review-code-all` から呼ばれる。
+argument-hint: viewpoint=<name> [<plan-file-path>]
+allowed-tools: Read, Glob, Grep, Bash(git diff:*), Bash(git log:*), Bash(git status:*), Bash(mkdir:*), Bash(printf:*), Bash(date:*), Write
 context: fork
-model: opus
-effort: xhigh
+model: claude-sonnet-4-6
+effort: medium
 ---
 
-# Self Implementation Review — somniloq Project
-
-グローバルの `/review-code` + `/review-code-go` の後に追加実行する somniloq プロジェクト固有の実装レビュー。
-1つの Plan サブエージェントで実行する。
+# Code Review — somniloq Project Worker
 
 ## ICAR
 
-- **Intent**: somniloq 固有の設計制約に照らして未コミットの差分をレビューし、結果を `RESULT_FILE` + `SUMMARY` の 2 行で返す
+- **Intent**: 引数で指定された 1 観点（viewpoint）で実装差分をプロジェクト固有制約と照合し、結果を `/tmp/claude/claude-review-results/` 配下のファイルに書き出して、戻り値は `RESULT_FILE` と `SUMMARY` の 2 行のみ返す
 - **Constraints**:
-  - レビューは Task ツール（`subagent_type: Plan, model: "claude-sonnet-4-6"`）で実行する。本スキルが直接レビューしない
-  - `git diff` + `git diff --cached` で差分が無ければ「レビュー対象の変更がありません」と返して終了
-  - 変更ファイルに `.go` が含まれていなければ「Go ファイルの変更がないためスキップします」と返して終了
-  - `$ARGUMENTS` に「前回の続き」「再レビュー」「前回の指摘」を検出したら再レビューモードとして全文を `PRIOR_REVIEW_BLOCK` に埋め込む
-  - 結果ファイルは `/tmp/claude/claude-review-results/` 配下に書く。ユーザー返却 text は `RESULT_FILE:` と `SUMMARY:` の 2 行のみ
-  - mkdir / Write 失敗時のみ `RESULT_FILE: ERROR — ...` のフォールバック形式で本文を直接返す
+  - 観点本体（検証手順・チェックリスト）はプロジェクト側 `.claude/skills/review-code-somniloq/viewpoints/<viewpoint>.md` に外出ししてある
+  - レビューは fork 自身（sonnet）が直接実行する
+  - 結果は `/tmp/claude/claude-review-results/` 配下のファイルに書き出し、text には `RESULT_FILE` と `SUMMARY` の 2 行のみ返す
+  - 差分が無い場合は「レビュー対象の変更がありません」と返して終了する
+  - 変更ファイルに `.go` が 1 つも含まれていなければ「Go ファイルの変更がないためスキップします」と返して終了する
 - **Acceptance**:
-  - 結果ファイルが `/tmp/claude/claude-review-results/` 配下に書き出されている
-  - 戻り値テキストに `RESULT_FILE: <path>` と `SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>` が含まれている
-  - mkdir / Write 失敗時はフォールバック形式（`RESULT_FILE: ERROR — ...` + 本文）で返す
-- **Relevant**: rules/architecture.md, rules/scope.md, rules/constraints.md（プロンプト内の「somniloq 設計制約」リスト）
+  - 結果ファイルに該当観点のレビュー結果が書き出されている
+  - text 出力は `RESULT_FILE: <path>` と `SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>` の 2 行構成（または `RESULT_FILE: ERROR — <理由>` のフォールバック形式）
+
+## 引数
+
+ARGUMENTS_BEGIN
+$ARGUMENTS
+ARGUMENTS_END
 
 ## 手順
 
-### 1. レビュー対象の差分を取得し、引数を解釈する
+### 1. viewpoint と（あれば）プランパスを抽出する
 
-- `git diff` と `git diff --cached` で未コミットの変更差分を取得する
-- `git status` で変更ファイル一覧を取得する
-- 差分がなければ「レビュー対象の変更がありません」と返して終了する
-- 変更ファイルに `.go` ファイルが含まれていなければ「Go ファイルの変更がないためスキップします」と返して終了する
+- `VIEWPOINT`: `viewpoint=<name>` の形で指定される観点名
+- `PLAN_PATH`: プランファイルの絶対パス（省略可、バッククォート対応）。あれば `HAS_PLAN=true`
+- `PRIOR_REVIEW_BLOCK`: 「前回の続き」「再レビュー」「前回の指摘」のいずれかが含まれていれば再レビューモード
 
-引数（`$ARGUMENTS`）から再レビューモードかどうかを判別する:
+`VIEWPOINT` を抽出できない場合は `RESULT_FILE: ERROR — viewpoint が指定されていません` を返して終了。
 
-- `$ARGUMENTS` に「前回の続き」「再レビュー」「前回の指摘」のいずれかが含まれていたら再レビューモード。`$ARGUMENTS` 全文を後続のプロンプトの `{PRIOR_REVIEW_BLOCK}` にそのまま埋め込む
-- 含まれていなければ初回モード。`{PRIOR_REVIEW_BLOCK}` には空文字を埋める
+### 2. 差分を取得する
 
-### 2. Plan サブエージェントを起動する
+- `git diff` と `git diff --cached` を結合して `GIT_DIFF`、`git status` を `FILE_LIST` として保持する
+- 差分なしなら「レビュー対象の変更がありません」と返して終了
+- `FILE_LIST` に `.go` が 1 つも含まれていなければ「Go ファイルの変更がないためスキップします」と返して終了
 
-Task ツールで `subagent_type: Plan, model: "claude-sonnet-4-6"` を使う。
+### 3. 観点ファイルとプランファイルを読む
 
-エージェントのプロンプトには、手順1で取得済みの以下の値を埋め込む:
-- `{GIT_DIFF}`: 手順1で取得した変更差分（git diff + git diff --cached の結合出力）
-- `{FILE_LIST}`: 手順1で取得した変更ファイル一覧（git status の出力）
+- 観点ファイル: `/Users/ryota/Sources/ryotapoi/somniloq/.claude/skills/review-code-somniloq/viewpoints/<VIEWPOINT>.md` を Read で読む。存在しなければエラー終了
+- プランファイル: `HAS_PLAN=true` の場合、`PLAN_PATH` を Read で読む
 
-加えて、「変更されたファイルの全文は自分で Read/Grep/Glob して確認すること」という指示を含める。
+### 4. レビューを実行する
 
-#### Agent 1: somniloq 固有の設計制約チェック
+worker 自身（sonnet）が、観点ファイルに従って `GIT_DIFF` をレビューする。
 
-プロンプト:
+レビュー時に守るルール:
+
+- 観点ファイルの「検証手順」に従って関連ファイルを Read/Glob/Grep する
+- 観点ファイルのチェックリストを順に当てて、該当箇所があれば指摘する
+- 1 箇所に複数の問題があれば全部出す。指摘はまとめずに別指摘として並べる
+- 1 つの編集で複数指摘を解決できる場合でも「理想形」をまとめて書かない
+- 実害のある問題の指摘と、確認できた点の LGTM の両方を返す。LGTM のみの出力も正当
+
+### 5. 出力フォーマット
+
+- 日本語、🔴 MUST / 🟡 SHOULD / 🔵 NIT
+- 該当するコードの箇所を引用する
+- 問題なければ「somniloq 固有の指摘なし」
+
+### 6. 再レビュー時の判定規約
+
+`PRIOR_REVIEW_BLOCK` が空でない場合、✅ / ⚠️ + 新規指摘の 2 区分で出力（`review-plan-somniloq` と同じ規約）。
+
+### 7. 結果ファイルを書き出して返す
+
+1. `mkdir -p /tmp/claude/claude-review-results`
+2. `printf '%s/review-code-somniloq-%s-%s-%04x.md' /tmp/claude/claude-review-results "<VIEWPOINT>" "$(date +%Y%m%d-%H%M%S)" "$RANDOM"` で `RESULT_PATH` を組み立て
+3. Write で `RESULT_PATH` にレビュー本文を書き出す
+4. 集計: 🔴 MUST / 🟡 SHOULD / 🔵 NIT の件数を数える。`needs_action = (must + should > 0) || (⚠️ ≥ 1)`
+5. 戻り値:
 
 ```
-あなたはコードレビュアーです。以下の実装変更を「somniloq プロジェクト固有の設計制約」と照合し、違反がないか検証してください。
-
-## 変更差分
-{GIT_DIFF}
-
-## 変更ファイル一覧
-{FILE_LIST}
-
-## 呼び出し元からの追加指示（再レビュー時のみ）
-{PRIOR_REVIEW_BLOCK}
-
-（このセクションが空の場合は初回レビューモード。`PRIOR_REVIEW_BLOCK` に「前回の続き」「再レビュー」「前回の指摘」のいずれかが含まれていれば、後述の「再レビュー時の判定規約」に従って ✅/⚠️ + 新規指摘の 2 区分で出力すること。）
-
-## 検証手順
-1. 変更されたファイルを Read で読み、変更の全体像を把握する
-2. 以下の設計制約リストと実装を照合する
-3. 違反があれば指摘する
-
-## somniloq 設計制約
-
-以下はこのプロジェクトで守るべき設計上の制約です。実装がこれらに抵触していないか検証してください。
-
-### モジュール配置・構造
-1. **モジュール配置と依存方向の遵守**: 新しい import が `cmd/somniloq → internal/core` の方向に従っているか。`internal/core` が `cmd/somniloq` に依存していないか（rules/architecture.md 参照）
-2. **共通化の妥当性**: `cmd/somniloq` と `internal/core` 間で共有するコードが `internal/core` に正しく配置されているか。`cmd/somniloq` のローカルなヘルパーが本来 `internal/core` に属する概念を扱っていないか
-3. **リファクタリングと機能実装のコミット分離**: diff にリファクタリング（rename、ファイル移動、構造変更）と機能実装（新しいビジネスロジック）が混在していないか
-
-### DB・SQL の安全性
-4. **SQL プレースホルダの使用**: JSONL 由来のデータは必ず `?` プレースホルダ経由で SQL に渡す。文字列結合で SQL を組み立てない
-5. **modernc.org/sqlite の LastInsertId の罠**: `ON CONFLICT DO NOTHING` 時、`LastInsertId()` は前回挿入の rowid を返す。`RowsAffected()` を先にチェックすること
-6. **SQL 集約関数の意味的正しさ**: MAX/MIN 等の集約関数が字句順ではなく意味的に正しい代表値を返すか。特に文字列カラムの MAX は辞書順最大値であり、「最新」や「代表」とは限らない
-
-### 実装とドキュメントの同期
-7. **Usage / ヘルプ文字列の網羅性**: 新しいフラグやモードが usage 定数・ヘルプ文字列に反映されているか。既存の usage に元々欠落があった場合でも、今回追加したフラグは含めること
-
-### 実装の正確性
-8. **ループ内の時刻取得**: 複数ファイル・レコードを処理するループで、タイムスタンプをループ外で1回だけ取得していないか。処理時間が長い場合、各反復で取得すべき
-9. **テストが正しい仕様を検証しているか**: テストが「現在の実装の動作」を追認しているだけでなく、「意図した仕様」を検証しているか。実装のバグをテストが正として固定化していないか
-
-上記に該当しないが somniloq 固有の設計判断に関わる問題も自由に指摘してよい。
-
-## 検査手順の補足（サボり対策）
-- 指摘箇所の周辺を完遂してから次の観点に進め。1 箇所に複数の問題があれば全部出せ。
-- 指摘はまとめずに別指摘として返せ。複数指摘の統合は main 側の責務であり、レビュアーは独立した指摘として並べて返すこと。
-- 1 つの編集で複数指摘を解決できる場合でも、レビュアーが「理想形」をまとめて書く必要はない。
-
-## 出力形式
-- 日本語で出力
-- 指摘事項は箇条書きで、該当するコードの箇所を引用する
-- 指摘ごとに重要度を付ける: 🔴 MUST / 🟡 SHOULD / 🔵 NIT
-- 問題がなければ「somniloq 固有の指摘なし」と記載する
-
-### LGTM が正当な出力
-- 実害のある問題の指摘と、確認できた点の LGTM の両方を返せ。
-- LGTM のみで指摘ゼロの出力も正当なレビュー結果である。無理に新たな粗を探す必要はない。
-- 「指摘がないと仕事した感がない」というバイアスでの粗探しを避けること。
-
-### 再レビュー時の判定規約
-
-引数で「前回指摘 + 対処」が渡された場合のみ適用する:
-
-以下の 2 区分で出力する:
-
-**前回指摘への対処レビュー:**
-- ✅ <指摘要旨>: 対処適切 / LGTM
-- ⚠️ <指摘要旨>: 対処の問題: <具体的に>
-
-**新規指摘:**
-- 🔴/🟡/🔵 <指摘要旨>: ...
-
-- 対処レビュー（✅/⚠️）は前回指摘 1 件につき 1 行返せ。⚠️ は対処に明確な問題がある場合のみ。
-- 新規指摘は前回指摘で触れていない別観点のみ。前回指摘の言い換え・派生・磨き込みは新規指摘に含めない（その場合は ✅ 扱い）。
-- 前回指摘がすべて妥当に対処されており、新規角度の問題もなければ、対処レビューに ✅ のみを並べて返せ。
-- A/A' 判定（前回と同根拠か別角度か）は **このレビュアー（fork）が行う**。main では行わない。
+RESULT_FILE: <RESULT_PATH>
+SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>
 ```
 
-### 3. 結果ファイルを書き出して返り値を返す
-
-1. 結果保存先ディレクトリを作成: Bash で `mkdir -p /tmp/claude/claude-review-results`
-2. 結果ファイル名を組み立てる: Bash で
-
-   ```bash
-   printf '%s/review-code-somniloq-%s-%04x.md' \
-     /tmp/claude/claude-review-results \
-     "$(date +%Y%m%d-%H%M%S)" \
-     "$RANDOM"
-   ```
-
-   出力されたパスを `RESULT_PATH` とする
-3. Write ツールで `RESULT_PATH` にエージェント結果を書き出す（フォーマットは下の「結果ファイルの中身」参照）
-4. 集計: 🔴 MUST / 🟡 SHOULD / 🔵 NIT の件数を数え、`must`, `should`, `nit` の値を決める。`needs_action` は `must + should > 0` なら `YES`、それ以外は `NO`。再レビュー時に ⚠️（前回対処の問題）が 1 件以上ある場合も `needs_action=YES` 扱いとする（対処側の重要度に揃えて `must` または `should` にカウント）。✅ のみは `needs_action=NO`
-5. ユーザーに返す text は以下の 2 行のみ:
-
-   ```
-   RESULT_FILE: <RESULT_PATH>
-   SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>
-   ```
-
-   `<1行サマリ>` は LGTM 時は「somniloq 固有の指摘なし」、指摘ありの場合は最重要指摘の要旨を 1 行で。エージェント本文は text に貼り付けない。
+`<1行サマリ>` は LGTM 時は「somniloq 固有の指摘なし」、指摘ありの場合は最重要指摘の要旨を 1 行で。
 
 #### フォールバック
 
-mkdir / Write のいずれかが失敗した場合、以下の形式で text を返す:
+mkdir / Write のいずれかが失敗した場合:
 
 ```
 RESULT_FILE: ERROR — <失敗理由を1行で>
 
-<従来形式のエージェント本文（下の「結果ファイルの中身」と同じ構造）>
+<従来形式のレビュー本文>
 ```
 
-main 側は `RESULT_FILE: ERROR` を検出したら本文を直接読む。
-
-### 4. 結果ファイルの中身
-
-`RESULT_PATH` に書き出すレビュー本文は以下の形式:
+### 8. 結果ファイルの中身
 
 ```
-## 自己レビュー結果（somniloq 固有）
+## 自己レビュー結果（somniloq, viewpoint=<VIEWPOINT>）
 
-### somniloq 設計制約チェック
-{Agent 1 の結果}
+<レビュー本文>
 ```
-

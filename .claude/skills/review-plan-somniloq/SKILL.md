@@ -1,128 +1,78 @@
 ---
 name: review-plan-somniloq
-description: somniloq 固有の設計制約に基づくプランレビュー。通常はチェーンスキルから呼ばれる。
-argument-hint: <plan-file-path>
-allowed-tools: Read, Glob, Grep, Bash(mkdir:*), Bash(printf:*), Bash(date:*), Write, Task
+description: somniloq プロジェクト固有の設計制約に基づくプランレビュー worker。引数 `viewpoint=<name>` で観点を指定する（現状 somniloq のみ）。通常はチェーンスキル `/review-plan-all` から呼ばれる。
+argument-hint: viewpoint=<name> `<plan-file-path>`
+allowed-tools: Read, Glob, Grep, Write, Bash(mkdir:*), Bash(printf:*), Bash(date:*)
 context: fork
-model: opus
-effort: xhigh
+model: claude-sonnet-4-6
+effort: medium
 ---
 
-# Self Plan Review — somniloq Project
-
-グローバルの `/review-plan` の後に追加実行する somniloq プロジェクト固有のプランレビュー。
-1つの Plan サブエージェントで実行する。
+# Plan Review — somniloq Project Worker
 
 ## ICAR
 
-- **Intent**: somniloq 固有の設計制約に照らしてプランをレビューし、結果を `RESULT_FILE` + `SUMMARY` の 2 行で返す
+- **Intent**: 引数で指定された 1 観点（viewpoint）でプランをプロジェクト固有制約と照合し、結果を `/tmp/claude/claude-review-results/` 配下のファイルに書き出して、戻り値は `RESULT_FILE` と `SUMMARY` の 2 行のみ返す
 - **Constraints**:
-  - レビューは Task ツール（`subagent_type: Plan, model: "claude-sonnet-4-6"`）で実行する。本スキルが直接レビューしない
-  - `$ARGUMENTS` から `PLAN_PATH` を抽出できなければ「プランファイルのパスを引数で指定してください」と返して終了
-  - 「前回の続き」「再レビュー」「前回の指摘」を検出したら再レビューモードとして `$ARGUMENTS` 全文を `PRIOR_REVIEW_BLOCK` としてプロンプトに埋め込む
-  - 結果ファイルは `/tmp/claude/claude-review-results/` 配下に書く。ユーザー返却 text は `RESULT_FILE:` と `SUMMARY:` の 2 行のみ（本文を貼らない）
-  - mkdir / Write 失敗時のみ `RESULT_FILE: ERROR — ...` のフォールバック形式で本文を直接返す
+  - 観点本体（検証手順・チェックリスト）はプロジェクト側 `.claude/skills/review-plan-somniloq/viewpoints/<viewpoint>.md` に外出ししてある。worker はこれを Read してレビュー方針として使う
+  - レビューは fork 自身（sonnet）が直接実行する。Task / Agent ツールでサブエージェントを起動しない
+  - 結果は `/tmp/claude/claude-review-results/` 配下のファイルに書き出し、text には `RESULT_FILE` と `SUMMARY` の 2 行のみ返す
 - **Acceptance**:
-  - 結果ファイルが `/tmp/claude/claude-review-results/` 配下に書き出されている
-  - 戻り値テキストに `RESULT_FILE: <path>` と `SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>` が含まれている
-  - mkdir / Write 失敗時はフォールバック形式（`RESULT_FILE: ERROR — ...` + 本文）で返す
-- **Relevant**: rules/architecture.md, rules/scope.md, rules/constraints.md（プロンプト内の「somniloq 設計制約」リスト）
+  - 結果ファイルに該当観点のレビュー結果が書き出されている
+  - text 出力は `RESULT_FILE: <path>` と `SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>` の 2 行構成（または `RESULT_FILE: ERROR — <理由>` のフォールバック形式）
+  - `needs_action` は `must + should > 0` のとき `YES`、それ以外は `NO`。再レビュー時に ⚠️（前回対処の問題）が 1 件以上ある場合も `needs_action=YES` 扱いとする（対処側の重要度に揃えて `must` または `should` にカウント）
+- **Relevant**:
+  - `$ARGUMENTS`: `viewpoint=<name> <plan-path>` 形式の文字列
+  - `<repo-root>/.claude/skills/review-plan-somniloq/viewpoints/<name>.md`: 観点本体（worker が Read する）
+
+## 引数
+
+ARGUMENTS_BEGIN
+$ARGUMENTS
+ARGUMENTS_END
 
 ## 手順
 
-### 1. 引数を解釈する
+### 1. viewpoint とプランパスを抽出する
 
 `$ARGUMENTS` から以下を抽出する:
 
-- **`PLAN_PATH`**: プランファイルの絶対パス。`$ARGUMENTS` 内に出現する `.md` 等で終わる絶対パスを拾う。複数あれば最初のもの
-- **`PRIOR_REVIEW_BLOCK`**: `$ARGUMENTS` に「前回の続き」「再レビュー」「前回の指摘」のいずれかが含まれていたら再レビューモード。`$ARGUMENTS` 全文を後続のプロンプトにそのまま埋め込む
+- **`VIEWPOINT`**: `viewpoint=<name>` の形で指定される観点名
+- **`PLAN_PATH`**: プランファイルの絶対パス。バッククォートで囲まれていれば取り除く
+- **`PRIOR_REVIEW_BLOCK`**: `$ARGUMENTS` に「前回の続き」「再レビュー」「前回の指摘」のいずれかが含まれていたら再レビューモード
 
-`$ARGUMENTS` が空、または `PLAN_PATH` を抽出できない場合は「プランファイルのパスを引数で指定してください（例: `/review-plan-somniloq path/to/plan.md`）」と返して終了する。
+`VIEWPOINT` を抽出できない、または `PLAN_PATH` を抽出できない場合は以下を返して終了する:
 
-### 2. プランファイルを読む
+- viewpoint なし: `RESULT_FILE: ERROR — viewpoint が指定されていません。例: viewpoint=somniloq \`/path/to/plan.md\``
+- プランパスなし: `RESULT_FILE: ERROR — プランファイルパスが指定されていません`
 
-- Read で `PLAN_PATH` を読み込む
-- プラン内で参照されているファイル（仕様書・対象コード）のパスを抽出する
+### 2. 観点ファイルとプランファイルを読む
 
-### 3. Plan サブエージェントを起動する
+- 観点ファイル: プロジェクトルートの `.claude/skills/review-plan-somniloq/viewpoints/<VIEWPOINT>.md` を Read で読む。プロジェクトルートは `$ARGUMENTS` 内のパスから推定するか、または絶対パスとして `/Users/ryota/Sources/ryotapoi/somniloq/.claude/skills/review-plan-somniloq/viewpoints/<VIEWPOINT>.md` を使う。存在しなければ `RESULT_FILE: ERROR — viewpoint=<VIEWPOINT> に対応する観点ファイルがありません` を返して終了
+- プランファイル: `PLAN_PATH` を Read で読む
 
-Task ツールで `subagent_type: Plan, model: "claude-sonnet-4-6"` を使う。
+### 3. レビューを実行する
 
-エージェントには以下を渡す:
-- プランの全文
-- 参照ファイルのパス一覧
-- 「コードや仕様書は自分で Read/Grep/Glob して確認すること」という指示
+worker 自身（sonnet）が、観点ファイルに書かれた検証手順と検証観点に従ってプランをレビューする。
 
-#### Agent 1: somniloq 固有の設計制約チェック
+レビュー時に守るルール:
 
-プロンプト:
+- 観点ファイルの「検証手順」に従って関連ファイルを Read/Glob/Grep する（仮定で書かない）
+- 観点ファイルの「検証観点」（あるいは設計制約リスト）のチェックリストを順に当てて、該当箇所があれば指摘する
+- 1 箇所に複数の問題があれば全部出す。指摘はまとめずに別指摘として並べる
+- 1 つの編集で複数指摘を解決できる場合でも「理想形」をまとめて書かない
+- 実害のある問題の指摘と、確認できた点の LGTM の両方を返す。LGTM のみの出力も正当
 
-```
-あなたはコードレビュアーです。以下の実装計画を「somniloq プロジェクト固有の設計制約」と照合し、違反がないか検証してください。
+### 4. 出力フォーマット（指摘本文）
 
-## 実装計画
-{PLAN_CONTENT}
-
-## 呼び出し元からの追加指示（再レビュー時のみ）
-{PRIOR_REVIEW_BLOCK}
-
-（このセクションが空の場合は初回レビューモード。`PRIOR_REVIEW_BLOCK` に「前回の続き」「再レビュー」「前回の指摘」のいずれかが含まれていれば、後述の「再レビュー時の判定規約」に従って ✅/⚠️ + 新規指摘の 2 区分で出力すること。）
-
-## 検証手順
-1. プラン内で参照されている対象コードを Read で読む
-2. 以下の設計制約リストとプランを照合する
-3. 違反があれば指摘する
-
-## somniloq 設計制約
-
-以下はこのプロジェクトで守るべき設計上の制約です。プランがこれらに抵触していないか検証してください。
-
-### モジュール配置・構造
-1. **モジュール配置は依存方向 `cmd/somniloq → internal/core` に従う**: 新しいコードの配置先が rules/architecture.md の責務定義と合っているか。定義された方向に違反する依存がないか
-2. **共通化は依存方向に沿って配置する**: `cmd/somniloq` と `internal/core` 間で共有するコードは `internal/core` に置く。片方だけ変更したくなったとき分離できるか検討されているか
-3. **リファクタリングと機能実装を同一ステップに混ぜない**: 既存コードの構造改善が必要なら、機能実装の前ステップとして分離されているか
-
-### DB・SQL の安全性
-4. **SQL プレースホルダの使用**: JSONL 由来のデータは必ず `?` プレースホルダ経由で SQL に渡す。文字列結合で SQL を組み立てない
-5. **modernc.org/sqlite の LastInsertId の罠**: `ON CONFLICT DO NOTHING` 時、`LastInsertId()` は前回挿入の rowid を返す。`RowsAffected()` を先にチェックすること
-
-### プラン内部の整合性
-6. **既存データへの影響考慮**: フィルタ・スキップ・バリデーションの削除や変更時、既存 DB に保存済みのデータへの影響が検討されているか。「新規データだけ正しくなる」で済まない場合がある
-7. **プラン内の記述一致**: 設計判断セクションと構造体定義・実装ステップ間で型・値・前提条件が矛盾していないか。特にプランを段階的に書いた場合、前半の記述が後半の変更で陳腐化しやすい
-8. **既存テストとの対称性**: 既存の類似機能にあるテスト観点（例: ミリ秒境界テスト）が、新機能のテスト計画にも含まれているか。片方だけテストがあると退行を検出できない
-
-### ドキュメント・仕様の同期
-9. **scope.md / architecture.md との整合**: 新機能や外部依存の追加時、仕様ドキュメントの更新がプランの変更ファイル一覧に含まれているか
-10. **Usage / ヘルプ文字列の更新**: フラグ追加・モード追加・排他的引数パターンの変更時、usage 定数やヘルプ文字列の更新がプランに含まれているか
-11. **派生ドキュメントの更新**: CLI 表面仕様の変更に伴い、README.md, README.ja.md, examples/ 配下の SKILL.md 等の派生ドキュメントの更新がプランに含まれているか
-
-### 設計判断の副作用
-12. **互換性への影響の明示**: 出力フォーマットの変更が既存の利用パターン（スクリプト連携、TSV パース等）に影響する場合、破壊的変更として明示されているか
-13. **集計キーと表示キーの整合**: GROUP BY キーと表示の短縮・変換で情報が縮退し、同名行が出現しないか。集計キーも合わせて寄せる必要がないか検討されているか
-
-上記に該当しないが somniloq 固有の設計判断に関わる問題も自由に指摘してよい。
-
-## 検査手順の補足（サボり対策）
-- 指摘箇所の周辺を完遂してから次の観点に進め。1 箇所に複数の問題があれば全部出せ。
-- 指摘はまとめずに別指摘として返せ。複数指摘の統合は main 側の責務であり、レビュアーは独立した指摘として並べて返すこと。
-- 1 つの編集で複数指摘を解決できる場合でも、レビュアーが「理想形」をまとめて書く必要はない。
-
-## 出力形式
 - 日本語で出力
-- 指摘事項は箇条書きで、該当するコード・計画の箇所を引用する
 - 指摘ごとに重要度を付ける: 🔴 MUST / 🟡 SHOULD / 🔵 NIT
+- 該当する仕様書・コードの箇所を引用する
 - 問題がなければ「somniloq 固有の指摘なし」と記載する
 
-### LGTM が正当な出力
-- 実害のある問題の指摘と、確認できた点の LGTM の両方を返せ。
-- LGTM のみで指摘ゼロの出力も正当なレビュー結果である。無理に新たな粗を探す必要はない。
-- 「指摘がないと仕事した感がない」というバイアスでの粗探しを避けること。
+### 5. 再レビュー時の判定規約
 
-### 再レビュー時の判定規約
-
-引数で「前回指摘 + 対処」が渡された場合のみ適用する:
-
-以下の 2 区分で出力する:
+`PRIOR_REVIEW_BLOCK` が空でない場合、以下の 2 区分で出力する:
 
 **前回指摘への対処レビュー:**
 - ✅ <指摘要旨>: 対処適切 / LGTM
@@ -131,58 +81,37 @@ Task ツールで `subagent_type: Plan, model: "claude-sonnet-4-6"` を使う。
 **新規指摘:**
 - 🔴/🟡/🔵 <指摘要旨>: ...
 
-- 対処レビュー（✅/⚠️）は前回指摘 1 件につき 1 行返せ。⚠️ は対処に明確な問題がある場合のみ。
-- 新規指摘は前回指摘で触れていない別観点のみ。前回指摘の言い換え・派生・磨き込みは新規指摘に含めない（その場合は ✅ 扱い）。
-- 前回指摘がすべて妥当に対処されており、新規角度の問題もなければ、対処レビューに ✅ のみを並べて返せ。
-- A/A' 判定（前回と同根拠か別角度か）は **このレビュアー（fork）が行う**。main では行わない。
+対処レビュー（✅/⚠️）は前回指摘 1 件につき 1 行返す。⚠️ は対処に明確な問題がある場合のみ。新規指摘は前回指摘で触れていない別観点のみ。前回指摘の言い換え・派生・磨き込みは ✅ 扱い。
+
+### 6. 結果ファイルを書き出して返り値を返す
+
+1. `mkdir -p /tmp/claude/claude-review-results`
+2. ファイル名を組み立てる: `printf '%s/review-plan-somniloq-%s-%s-%04x.md' /tmp/claude/claude-review-results "<VIEWPOINT>" "$(date +%Y%m%d-%H%M%S)" "$RANDOM"`。出力を `RESULT_PATH` とする
+3. Write ツールで `RESULT_PATH` にレビュー本文を書き出す（フォーマットは下の「結果ファイルの中身」参照）。**プランモード中でも書ける**（permissions.allow で許可済み）
+4. 集計: 🔴 MUST / 🟡 SHOULD / 🔵 NIT の件数を数える。`needs_action = (must + should > 0) || (⚠️ ≥ 1)`
+5. ユーザーに返す text:
+
+```
+RESULT_FILE: <RESULT_PATH>
+SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>
 ```
 
-### 4. 結果ファイルを書き出して返り値を返す
-
-1. 結果保存先ディレクトリを作成: Bash で `mkdir -p /tmp/claude/claude-review-results`
-2. 結果ファイル名を組み立てる: Bash で
-
-   ```bash
-   printf '%s/review-plan-somniloq-%s-%04x.md' \
-     /tmp/claude/claude-review-results \
-     "$(date +%Y%m%d-%H%M%S)" \
-     "$RANDOM"
-   ```
-
-   出力されたパスを `RESULT_PATH` とする
-3. Write ツールで `RESULT_PATH` に検証結果本文を書き出す（フォーマットは下の「結果ファイルの中身」参照）。
-
-   **プランモード中でも書ける**: `/tmp/claude/claude-review-results/*` は `~/.claude/settings.json` の permissions.allow で `Write` が明示許可されているため、プランモードでもこのパス配下への Write ツールは通る。「プランモードだから Write は禁止」と推測でフォールバックに入らず、必ず Write を試すこと（fallback はあくまで mkdir / Write が**実際に**失敗した時のセーフティネット）
-4. 集計: 🔴 MUST / 🟡 SHOULD / 🔵 NIT の件数を数え、`must`, `should`, `nit` の値を決める。`needs_action` は `must + should > 0` なら `YES`、それ以外は `NO`。再レビュー時に ⚠️（前回対処の問題）が 1 件以上ある場合も `needs_action=YES` 扱いとする（対処側の重要度に揃えて `must` または `should` にカウント）。✅ のみは `needs_action=NO`
-5. ユーザーに返す text は以下の 2 行のみ:
-
-   ```
-   RESULT_FILE: <RESULT_PATH>
-   SUMMARY: needs_action=<YES|NO> must=<N> should=<N> nit=<N> — <1行サマリ>
-   ```
-
-   `<1行サマリ>` は LGTM 時は「somniloq 固有の指摘なし」、指摘ありの場合は最重要指摘の要旨を 1 行で。検証本文は text に貼り付けない。
+`<1行サマリ>` は LGTM 時は「somniloq 固有の指摘なし」、指摘ありの場合は最重要指摘の要旨を 1 行で。
 
 #### フォールバック
 
-mkdir / Write のいずれかが失敗した場合、以下の形式で text を返す:
+mkdir / Write のいずれかが失敗した場合:
 
 ```
 RESULT_FILE: ERROR — <失敗理由を1行で>
 
-<従来形式の検証本文（下の「結果ファイルの中身」と同じ構造）>
+<従来形式のレビュー本文>
 ```
 
-main 側は `RESULT_FILE: ERROR` を検出したら本文を直接読む。
-
-### 5. 結果ファイルの中身
-
-`RESULT_PATH` に書き出す検証本文は以下の形式:
+### 7. 結果ファイルの中身
 
 ```
-## 自己レビュー結果（somniloq 固有）
+## 自己レビュー結果（somniloq, viewpoint=<VIEWPOINT>）
 
-### somniloq 設計制約チェック
-{Agent 1 の結果}
+<レビュー本文>
 ```
-
