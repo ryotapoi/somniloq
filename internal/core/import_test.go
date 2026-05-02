@@ -36,13 +36,10 @@ func TestScanJSONLFiles(t *testing.T) {
 		t.Fatalf("expected 3 files, got %d: %+v", len(files), files)
 	}
 
-	// Check that ProjectDir and SessionID are correctly derived
+	// Check that SessionID is correctly derived
 	found := map[string]bool{}
 	for _, f := range files {
 		found[f.SessionID] = true
-		if f.ProjectDir == "" {
-			t.Errorf("empty ProjectDir for %s", f.Path)
-		}
 	}
 	for _, sid := range []string{"sess1", "sess2", "sess3"} {
 		if !found[sid] {
@@ -74,7 +71,7 @@ func TestProcessFile(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	file := JSONLFile{Path: path, SessionID: "s1"}
 	newOffset, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
@@ -112,7 +109,7 @@ func TestProcessFile_ResolvesRepoPath(t *testing.T) {
 	path := filepath.Join(dir, "s.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s"}
+	file := JSONLFile{Path: path, SessionID: "s"}
 	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
@@ -177,7 +174,7 @@ func TestProcessFile_EmptyFile(t *testing.T) {
 	path := filepath.Join(dir, "empty.jsonl")
 	os.WriteFile(path, []byte(""), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "empty"}
+	file := JSONLFile{Path: path, SessionID: "empty"}
 	newOffset, err := processFile(db, file, 0, 0, "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
@@ -196,7 +193,7 @@ func TestProcessFile_NoTrailingNewline(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	file := JSONLFile{Path: path, SessionID: "s1"}
 	newOffset, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
@@ -223,7 +220,7 @@ func TestProcessFile_SkipsEmptyContent(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	file := JSONLFile{Path: path, SessionID: "s1"}
 	_, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
@@ -254,7 +251,7 @@ func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	file := JSONLFile{Path: path, SessionID: "s1"}
 	_, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
@@ -398,7 +395,7 @@ func TestProcessFile_MetaOnly_NoSessionRow(t *testing.T) {
 	path := filepath.Join(dir, "meta1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "meta1"}
+	file := JSONLFile{Path: path, SessionID: "meta1"}
 	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
@@ -421,7 +418,7 @@ func TestProcessFile_AgentNameOnly_NoSessionRow(t *testing.T) {
 	path := filepath.Join(dir, "meta1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "meta1"}
+	file := JSONLFile{Path: path, SessionID: "meta1"}
 	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
@@ -446,7 +443,7 @@ func TestProcessFile_MetaBeforeBody(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	file := JSONLFile{Path: path, SessionID: "s1"}
 	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
@@ -470,7 +467,7 @@ func TestProcessFile_AgentNameBeforeBody(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, ProjectDir: "-test", SessionID: "s1"}
+	file := JSONLFile{Path: path, SessionID: "s1"}
 	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}

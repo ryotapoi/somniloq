@@ -62,21 +62,21 @@ somniloq sessions --since 7d             # 直近7日間
 somniloq sessions --since 2026-03-28     # 特定日以降（ローカルタイム）
 somniloq sessions --until 2026-03-28     # 特定日まで（ローカルタイム）
 somniloq sessions --since 7d --until 2h  # 7日前から2時間前まで
-somniloq sessions --project myapp        # repo_path または project_dir でマッチ
-somniloq sessions --short                # repo_path の basename（解決不可なら最後のハイフン要素）
+somniloq sessions --project myapp        # repo_path への substring マッチ
+somniloq sessions --short                # repo_path の basename
 ```
 
-出力は TSV 形式: `session_id`, `started_at ~ ended_at`, `repo_path (解決不可なら project_dir)`, `custom_title`, `message_count`
+出力は TSV 形式: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title`, `message_count`
 
 ### projects
 
 ```bash
 somniloq projects             # 全プロジェクト
 somniloq projects --since 7d  # 直近7日間にセッションがあるプロジェクト
-somniloq projects --short     # repo_path の basename（解決不可なら最後のハイフン要素）
+somniloq projects --short     # repo_path の basename
 ```
 
-出力は TSV 形式: `repo_path (解決不可なら project_dir)`, `session_count`
+出力は TSV 形式: `repo_path`, `session_count`
 
 ### show
 
@@ -87,7 +87,7 @@ somniloq show --since 2026-03-28 --until 2026-03-29     # 特定期間
 somniloq show --since 7d --project myapp                # プロジェクト絞り込み
 somniloq show --summary 1 --since 24h                   # 各セッションの冒頭ユーザーメッセージ 1 件
 somniloq show --summary 3 --since 24h                   # 各セッションの冒頭ユーザーメッセージ 3 件
-somniloq show --short --since 24h                       # repo_path の basename（解決不可なら最後のハイフン要素）
+somniloq show --short --since 24h                       # repo_path の basename
 ```
 
 ## 共通オプション
@@ -96,6 +96,8 @@ somniloq show --short --since 24h                       # repo_path の basename
 |-----------|------|-----------|
 | `--db <path>` | SQLite データベースのパス | `~/.somniloq/somniloq.db` |
 | `--version` | バージョンを表示して終了 | — |
+
+> SQLite 3.35 以上が必要（`ALTER TABLE ... DROP COLUMN` を使用）。同梱の `modernc.org/sqlite` ドライバが新しめの SQLite を含むので、別途のインストールは不要。
 
 ### 時刻フィルタ
 

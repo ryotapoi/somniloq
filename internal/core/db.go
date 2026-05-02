@@ -44,8 +44,37 @@ func OpenDB(dsn string) (*DB, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := ensureSessionsProjectDirColumnDropped(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 
 	return &DB{db: db}, nil
+}
+
+// ensureSessionsProjectDirColumnDropped removes the legacy project_dir column
+// if it is still present. Required when upgrading from v0.2.x DBs.
+// Precondition: the sessions table exists. SQLite 3.35+ required for
+// DROP COLUMN.
+func ensureSessionsProjectDirColumnDropped(db *sql.DB) error {
+	_, present, err := sessionsColumnType(db, "project_dir")
+	if err != nil {
+		return fmt.Errorf("inspect sessions table: %w", err)
+	}
+	if !present {
+		return nil
+	}
+	if _, err := db.Exec("ALTER TABLE sessions DROP COLUMN project_dir"); err != nil {
+		// Race re-check: if the column is now absent, another instance dropped
+		// it between our inspect and ALTER — treat as success. Any other state
+		// (re-check failed, or column still present) returns the original
+		// ALTER error.
+		if _, present2, pErr := sessionsColumnType(db, "project_dir"); pErr == nil && !present2 {
+			return nil
+		}
+		return fmt.Errorf("migrate drop project_dir column: %w", err)
+	}
+	return nil
 }
 
 // ensureSessionsRepoPathColumn adds sessions.repo_path if it is missing.
@@ -117,8 +146,8 @@ func (d *DB) UpsertSession(meta SessionMeta, importedAt string) error {
 
 func upsertSession(e execer, meta SessionMeta, importedAt string) error {
 	_, err := e.Exec(`
-		INSERT INTO sessions (session_id, project_dir, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
-		VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
+		INSERT INTO sessions (session_id, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
+		VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
 		ON CONFLICT(session_id) DO UPDATE SET
 		  cwd = COALESCE(NULLIF(excluded.cwd, ''), sessions.cwd),
 		  repo_path = COALESCE(NULLIF(excluded.repo_path, ''), sessions.repo_path),
@@ -127,7 +156,7 @@ func upsertSession(e execer, meta SessionMeta, importedAt string) error {
 		  started_at = COALESCE(MIN(sessions.started_at, excluded.started_at), excluded.started_at, sessions.started_at),
 		  ended_at = COALESCE(MAX(sessions.ended_at, excluded.ended_at), excluded.ended_at, sessions.ended_at),
 		  imported_at = excluded.imported_at`,
-		meta.SessionID, meta.ProjectDir, meta.CWD, meta.RepoPath, meta.GitBranch,
+		meta.SessionID, meta.CWD, meta.RepoPath, meta.GitBranch,
 		meta.Version, meta.StartedAt, meta.EndedAt, importedAt,
 	)
 	return err
@@ -428,7 +457,6 @@ func (d *DB) DeleteAll() error {
 const schema = `
 CREATE TABLE IF NOT EXISTS sessions (
     session_id TEXT PRIMARY KEY,
-    project_dir TEXT NOT NULL,
     cwd TEXT,
     repo_path TEXT,
     git_branch TEXT,

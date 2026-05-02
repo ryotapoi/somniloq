@@ -33,7 +33,7 @@ v0.2.x 由来データの補正窓口。以下を順に実行する。
 - セッション一覧を表示
 - `--since`/`--until` で時刻フィルタ（相対: `24h`, `7d`、絶対: `2026-03-28`, `2026-03-28T15:00`）。絶対日付はローカルタイム。出力のタイムスタンプもローカルタイム（`2006-01-02 15:04` 形式）
 - 時刻は `started_at ~ ended_at` の範囲形式で表示。ended_at がない場合は `started_at ~`
-- `--project` は `repo_path` への substring マッチ。`project_dir` は対象としない（LIKE のターゲットは `repo_path` のみ。LIKE メタ文字の扱いは Known limitations 参照）
+- `--project` は `repo_path` への substring マッチ（LIKE メタ文字の扱いは Known limitations 参照）
 - `repo_path` は絶対パスのため、`/` セグメントを跨いだ部分一致（例: `--project Sources/ryot`）も可能
 - デフォルト表示は `repo_path` をそのまま
 - `--short` は `filepath.Base(repo_path)`（ハイフン保持）
@@ -56,7 +56,7 @@ v0.2.x 由来データの補正窓口。以下を順に実行する。
 - `--include-clear` で `/clear`・caveat のスキップを無効化（`--summary >= 1` が前提）
 - メタデータ `Project` 行は `repo_path` をそのまま表示
 - `--short` で `filepath.Base(repo_path)`
-- `--project` は sessions と同じフィルタ規則（`repo_path` 単独 substring。`project_dir` は対象外）
+- `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ）
 - `--format markdown` でフォーマット指定
 
 
@@ -100,7 +100,6 @@ somniloq --version                          # バージョン表示
 -- セッション単位のメタデータ
 CREATE TABLE sessions (
     session_id TEXT PRIMARY KEY,  -- UUID
-    project_dir TEXT NOT NULL,    -- 取り込み時の書き込みは継続するが、v0.3 完成時点ではクエリ側（フィルタ・集約・表示）で使わない。JSONL ファイルパス由来の出自情報として保持。撤去はリリース後に再評価（backlog 参照）
     cwd TEXT,                     -- 作業ディレクトリ。会話レコードでは通常非空
     repo_path TEXT,               -- ResolveRepoPath（internal/core/repo_path.go）で解決したリポジトリパス。会話セッションでは通常非空
     git_branch TEXT,

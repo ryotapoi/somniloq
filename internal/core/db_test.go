@@ -54,9 +54,11 @@ func TestOpenDB_HasRepoPathColumn(t *testing.T) {
 	}
 }
 
-// legacySessionsSchema mirrors the sessions table definition before the
-// repo_path column was introduced. It is used by migration tests that exercise
-// ensureSessionsRepoPathColumn against a DB that still has the old shape.
+// legacySessionsSchema is the v0.2.x sessions table shape: before the
+// repo_path column was added and before project_dir was dropped. Used by
+// migration tests that exercise ensureSessionsRepoPathColumn and
+// ensureSessionsProjectDirColumnDropped against a DB that still has the old
+// shape.
 const legacySessionsSchema = `
 CREATE TABLE sessions (
     session_id TEXT PRIMARY KEY,
@@ -115,31 +117,77 @@ func TestEnsureSessionsRepoPathColumn_Idempotent(t *testing.T) {
 	}
 }
 
+func TestEnsureSessionsProjectDirColumnDropped_DropsColumn(t *testing.T) {
+	db := openLegacyMemoryDB(t)
+
+	if err := ensureSessionsProjectDirColumnDropped(db); err != nil {
+		t.Fatalf("ensureSessionsProjectDirColumnDropped failed: %v", err)
+	}
+
+	_, present, err := sessionsColumnType(db, "project_dir")
+	if err != nil {
+		t.Fatalf("sessionsColumnType failed: %v", err)
+	}
+	if present {
+		t.Fatal("project_dir column should have been dropped")
+	}
+}
+
+func TestEnsureSessionsProjectDirColumnDropped_Idempotent(t *testing.T) {
+	db := openLegacyMemoryDB(t)
+
+	if err := ensureSessionsProjectDirColumnDropped(db); err != nil {
+		t.Fatalf("first call failed: %v", err)
+	}
+	if err := ensureSessionsProjectDirColumnDropped(db); err != nil {
+		t.Fatalf("second call should be a no-op, got: %v", err)
+	}
+}
+
+func TestEnsureSessionsProjectDirColumnDropped_NoOpWhenAbsent(t *testing.T) {
+	db := testDB(t)
+
+	if err := ensureSessionsProjectDirColumnDropped(db.db); err != nil {
+		t.Fatalf("call against fresh DB should be a no-op, got: %v", err)
+	}
+}
+
+func TestOpenDB_HasNoProjectDirColumn(t *testing.T) {
+	db := testDB(t)
+
+	_, present, err := sessionsColumnType(db.db, "project_dir")
+	if err != nil {
+		t.Fatalf("sessionsColumnType failed: %v", err)
+	}
+	if present {
+		t.Fatal("project_dir column should not exist on a fresh DB")
+	}
+}
+
 func TestUpsertSession(t *testing.T) {
 	db := testDB(t)
 
 	meta := SessionMeta{
-		SessionID:  "s1",
-		ProjectDir: "-Users-test",
-		CWD:        "/tmp",
-		RepoPath:   "/Users/test",
-		GitBranch:  "main",
-		Version:    "2.1.86",
-		StartedAt:  "2026-03-28T14:00:00Z",
-		EndedAt:    "2026-03-28T14:10:00Z",
+		SessionID: "s1",
+		CWD:       "/tmp",
+		RepoPath:  "/Users/test",
+		GitBranch: "main",
+		Version:   "2.1.86",
+		StartedAt: "2026-03-28T14:00:00Z",
+		EndedAt:   "2026-03-28T14:10:00Z",
 	}
 	if err := db.UpsertSession(meta, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
 
-	var sid, projDir, startedAt, repoPath string
-	err := db.db.QueryRow("SELECT session_id, project_dir, started_at, repo_path FROM sessions WHERE session_id='s1'").
-		Scan(&sid, &projDir, &startedAt, &repoPath)
+	var sid, startedAt, repoPath string
+	err := db.db.QueryRow("SELECT session_id, started_at, repo_path FROM sessions WHERE session_id='s1'").
+		Scan(&sid, &startedAt, &repoPath)
 	if err != nil {
 		t.Fatalf("SELECT failed: %v", err)
 	}
-	if sid != "s1" || projDir != "-Users-test" || startedAt != "2026-03-28T14:00:00Z" {
-		t.Errorf("unexpected row: sid=%s projDir=%s startedAt=%s", sid, projDir, startedAt)
+	if sid != "s1" || startedAt != "2026-03-28T14:00:00Z" {
+		t.Errorf("unexpected row: sid=%s startedAt=%s", sid, startedAt)
 	}
 	if repoPath != "/Users/test" {
 		t.Errorf("repo_path: got %q, want %q", repoPath, "/Users/test")
@@ -147,12 +195,11 @@ func TestUpsertSession(t *testing.T) {
 
 	// Second upsert with later ended_at
 	meta2 := SessionMeta{
-		SessionID:  "s1",
-		ProjectDir: "-Users-test",
-		CWD:        "/tmp",
-		RepoPath:   "/Users/test",
-		StartedAt:  "2026-03-28T14:05:00Z",
-		EndedAt:    "2026-03-28T14:20:00Z",
+		SessionID: "s1",
+		CWD:       "/tmp",
+		RepoPath:  "/Users/test",
+		StartedAt: "2026-03-28T14:05:00Z",
+		EndedAt:   "2026-03-28T14:20:00Z",
 	}
 	if err := db.UpsertSession(meta2, "2026-03-28T15:01:00Z"); err != nil {
 		t.Fatalf("UpsertSession (2nd) failed: %v", err)
@@ -178,29 +225,27 @@ func TestUpsertSession_RepoPath(t *testing.T) {
 	// Use distinct values for every text column so that any order mismatch
 	// between the Go args and the SQL placeholders is immediately visible.
 	meta := SessionMeta{
-		SessionID:  "s-map",
-		ProjectDir: "projdir-val",
-		CWD:        "cwd-val",
-		RepoPath:   "repo-val",
-		GitBranch:  "branch-val",
-		Version:    "version-val",
-		StartedAt:  "started-val",
-		EndedAt:    "ended-val",
+		SessionID: "s-map",
+		CWD:       "cwd-val",
+		RepoPath:  "repo-val",
+		GitBranch: "branch-val",
+		Version:   "version-val",
+		StartedAt: "started-val",
+		EndedAt:   "ended-val",
 	}
 	if err := db.UpsertSession(meta, "imported-val"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
 
-	var projDir, cwd, repoPath, branch, version, startedAt, endedAt string
-	err := db.db.QueryRow(`SELECT project_dir, cwd, repo_path, git_branch, version, started_at, ended_at FROM sessions WHERE session_id='s-map'`).
-		Scan(&projDir, &cwd, &repoPath, &branch, &version, &startedAt, &endedAt)
+	var cwd, repoPath, branch, version, startedAt, endedAt string
+	err := db.db.QueryRow(`SELECT cwd, repo_path, git_branch, version, started_at, ended_at FROM sessions WHERE session_id='s-map'`).
+		Scan(&cwd, &repoPath, &branch, &version, &startedAt, &endedAt)
 	if err != nil {
 		t.Fatalf("SELECT failed: %v", err)
 	}
 	checks := []struct {
 		label, got, want string
 	}{
-		{"project_dir", projDir, "projdir-val"},
 		{"cwd", cwd, "cwd-val"},
 		{"repo_path", repoPath, "repo-val"},
 		{"git_branch", branch, "branch-val"},
@@ -219,9 +264,8 @@ func TestUpsertSession_RepoPath_EmptyInsertsNull(t *testing.T) {
 	db := testDB(t)
 
 	meta := SessionMeta{
-		SessionID:  "s1",
-		ProjectDir: "-test",
-		RepoPath:   "",
+		SessionID: "s1",
+		RepoPath:  "",
 	}
 	if err := db.UpsertSession(meta, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
@@ -239,10 +283,10 @@ func TestUpsertSession_RepoPath_EmptyInsertsNull(t *testing.T) {
 func TestUpsertSession_RepoPath_EmptyDoesNotOverwrite(t *testing.T) {
 	db := testDB(t)
 
-	if err := db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", RepoPath: "/Users/test/proj"}, "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpsertSession(SessionMeta{SessionID: "s1", RepoPath: "/Users/test/proj"}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("first UpsertSession failed: %v", err)
 	}
-	if err := db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", RepoPath: ""}, "2026-03-28T15:01:00Z"); err != nil {
+	if err := db.UpsertSession(SessionMeta{SessionID: "s1", RepoPath: ""}, "2026-03-28T15:01:00Z"); err != nil {
 		t.Fatalf("second UpsertSession failed: %v", err)
 	}
 
@@ -260,7 +304,7 @@ func TestUpsertSession_RepoPath_AfterUpdateSessionTitle(t *testing.T) {
 
 	// UpdateSessionTitle on an existing row only touches custom_title/imported_at,
 	// not repo_path.
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", RepoPath: "/Users/test/proj"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", RepoPath: "/Users/test/proj"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpdateSessionTitle("s1", "title", "2026-03-28T15:01:00Z"))
 
 	var repoPath string
@@ -288,7 +332,7 @@ func TestOpenDB_ReopenIsIdempotent(t *testing.T) {
 	if err != nil {
 		t.Fatalf("first OpenDB failed: %v", err)
 	}
-	if err := db1.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"); err != nil {
+	if err := db1.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
 	if err := db1.Close(); err != nil {
@@ -353,17 +397,22 @@ func TestOpenDB_MigratesLegacyFile(t *testing.T) {
 		t.Fatal("repo_path column should have been added to legacy DB")
 	}
 
+	_, projectDirPresent, err := sessionsColumnType(db.db, "project_dir")
+	if err != nil {
+		t.Fatalf("sessionsColumnType failed: %v", err)
+	}
+	if projectDirPresent {
+		t.Fatal("project_dir column should have been dropped from legacy DB")
+	}
+
 	var (
-		projDir, importedAt string
-		isNull              int
+		importedAt string
+		isNull     int
 	)
 	if err := db.db.QueryRow(
-		"SELECT project_dir, imported_at, repo_path IS NULL FROM sessions WHERE session_id='legacy-s1'",
-	).Scan(&projDir, &importedAt, &isNull); err != nil {
+		"SELECT imported_at, repo_path IS NULL FROM sessions WHERE session_id='legacy-s1'",
+	).Scan(&importedAt, &isNull); err != nil {
 		t.Fatalf("SELECT failed: %v", err)
-	}
-	if projDir != "-test" {
-		t.Errorf("project_dir mutated by migration: got %q, want %q", projDir, "-test")
 	}
 	if importedAt != "2026-03-28T15:00:00Z" {
 		t.Errorf("imported_at mutated by migration: got %q", importedAt)
@@ -377,7 +426,7 @@ func TestInsertMessage(t *testing.T) {
 	db := testDB(t)
 
 	// Need a session first
-	if err := db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test"}, "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpsertSession(SessionMeta{SessionID: "s1"}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
 
@@ -414,7 +463,7 @@ func TestInsertMessage(t *testing.T) {
 func TestUpdateSessionTitle(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1"}, "2026-03-28T15:00:00Z"))
 	if err := db.UpdateSessionTitle("s1", "my title", "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionTitle failed: %v", err)
 	}
@@ -509,11 +558,11 @@ func TestListSessions_OrderAndCount(t *testing.T) {
 	db := testDB(t)
 
 	// Older session with 1 message
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-proj1", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
 	// Newer session with 2 messages
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-Users-test-proj2", StartedAt: "2026-03-28T14:00:00Z", EndedAt: "2026-03-28T14:30:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", StartedAt: "2026-03-28T14:00:00Z", EndedAt: "2026-03-28T14:30:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s2", Role: "user", Content: "hi", Timestamp: "2026-03-28T14:00:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m3", SessionID: "s2", Role: "assistant", Content: "hey", Timestamp: "2026-03-28T14:01:00Z"}))
 
@@ -546,7 +595,7 @@ func TestListSessions_OrderAndCount(t *testing.T) {
 func TestListSessions_ZeroMessages(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {
@@ -564,7 +613,7 @@ func TestListSessions_NullTitle(t *testing.T) {
 	db := testDB(t)
 
 	// Session with no custom_title set
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {
@@ -579,10 +628,10 @@ func TestListSessions_NullStartedAt(t *testing.T) {
 	db := testDB(t)
 
 	// Session with started_at (normal)
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	// Session created via UpsertSession with no StartedAt, then title applied.
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-test"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpdateSessionTitle("s2", "title only", "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
@@ -605,8 +654,8 @@ func TestListSessions_NullStartedAt(t *testing.T) {
 func TestListSessions_SinceFilter(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "old", ProjectDir: "-test", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "new", ProjectDir: "-test", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "old", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "new", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Since: "2026-03-28T00:00:00Z"})
 	if err != nil {
@@ -624,7 +673,7 @@ func TestListSessions_SinceFilter_MillisecondTimestamp(t *testing.T) {
 	db := testDB(t)
 
 	// Real JSONL timestamps have milliseconds (e.g. "2026-03-28T14:10:45.977Z")
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T14:10:45.977Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T14:10:45.977Z"}, "2026-03-28T15:00:00Z"))
 
 	// Since filter with millisecond precision (as generated by cmd layer)
 	rows, err := db.ListSessions(SessionFilter{Since: "2026-03-28T14:10:45.000Z"})
@@ -639,8 +688,8 @@ func TestListSessions_SinceFilter_MillisecondTimestamp(t *testing.T) {
 func TestListSessions_ProjectFilter(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-Brimday", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-Users-test-somniloq", RepoPath: "/Users/test/somniloq", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", RepoPath: "/Users/test/somniloq", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Project: "Brimday"})
 	if err != nil {
@@ -657,7 +706,7 @@ func TestListSessions_ProjectFilter(t *testing.T) {
 func TestListSessions_RepoPath(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-Brimday", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {
@@ -674,7 +723,7 @@ func TestListSessions_RepoPath(t *testing.T) {
 func TestListSessions_RepoPath_NullReturnsEmpty(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {
@@ -691,7 +740,7 @@ func TestListSessions_RepoPath_NullReturnsEmpty(t *testing.T) {
 func TestGetSession_RepoPath(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-Brimday", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	got, err := db.GetSession("s1")
 	if err != nil {
@@ -714,10 +763,9 @@ func TestListSessions_ProjectFilter_LikeMetacharKnownLimitation(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "s1",
-		ProjectDir: "-Users-test-Brimday",
-		RepoPath:   "/Users/test/Brimday",
-		StartedAt:  "2026-03-28T10:00:00Z",
+		SessionID: "s1",
+		RepoPath:  "/Users/test/Brimday",
+		StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Project: "Brim%day"})
@@ -733,10 +781,9 @@ func TestListSessions_ProjectFilter_SlashSpan(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "s1",
-		ProjectDir: "-Users-ryota-Sources-ryotapoi-somniloq",
-		RepoPath:   "/Users/ryota/Sources/ryotapoi/somniloq",
-		StartedAt:  "2026-03-28T10:00:00Z",
+		SessionID: "s1",
+		RepoPath:  "/Users/ryota/Sources/ryotapoi/somniloq",
+		StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Project: "Sources/ryot"})
@@ -755,22 +802,19 @@ func TestListSessions_ProjectFilter_RepoPathOnly(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "repo-only",
-		ProjectDir: "-Users-other-foo",
-		RepoPath:   "/Users/test/UniqRepo",
-		StartedAt:  "2026-03-28T10:00:00Z",
+		SessionID: "repo-only",
+		RepoPath:  "/Users/test/UniqRepo",
+		StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "projdir-only",
-		ProjectDir: "-Users-test-UniqProj",
-		RepoPath:   "/Users/other/baz",
-		StartedAt:  "2026-03-28T11:00:00Z",
+		SessionID: "projdir-only",
+		RepoPath:  "/Users/other/baz",
+		StartedAt: "2026-03-28T11:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "both",
-		ProjectDir: "-Users-test-Common",
-		RepoPath:   "/Users/test/Common",
-		StartedAt:  "2026-03-28T12:00:00Z",
+		SessionID: "both",
+		RepoPath:  "/Users/test/Common",
+		StartedAt: "2026-03-28T12:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 
 	t.Run("repo-only", func(t *testing.T) {
@@ -797,13 +841,13 @@ func TestListSessions_ProjectFilter_RepoPathOnly(t *testing.T) {
 			t.Errorf("got %s, want both", rows[0].SessionID)
 		}
 	})
-	t.Run("project_dir-only does not match", func(t *testing.T) {
+	t.Run("unrelated repo_path", func(t *testing.T) {
 		rows, err := db.ListSessions(SessionFilter{Project: "UniqProj"})
 		if err != nil {
 			t.Fatalf("ListSessions failed: %v", err)
 		}
 		if len(rows) != 0 {
-			t.Fatalf("expected 0 rows (project_dir-only must not match), got %d", len(rows))
+			t.Fatalf("expected 0 rows (no repo_path matches), got %d", len(rows))
 		}
 	})
 }
@@ -811,9 +855,9 @@ func TestListSessions_ProjectFilter_RepoPathOnly(t *testing.T) {
 func TestListSessions_CombinedFilter(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "old-brim", ProjectDir: "-Users-test-Brimday", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "new-brim", ProjectDir: "-Users-test-Brimday", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "new-somniloq", ProjectDir: "-Users-test-somniloq", RepoPath: "/Users/test/somniloq", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "old-brim", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "new-brim", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "new-somniloq", RepoPath: "/Users/test/somniloq", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Since: "2026-03-28T00:00:00Z", Project: "Brimday"})
 	if err != nil {
@@ -830,8 +874,8 @@ func TestListSessions_CombinedFilter(t *testing.T) {
 func TestListSessions_UntilFilter(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "early", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "late", ProjectDir: "-test", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "early", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "late", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Until: "2026-03-28T12:00:00.000Z"})
 	if err != nil {
@@ -848,9 +892,9 @@ func TestListSessions_UntilFilter(t *testing.T) {
 func TestListSessions_SinceAndUntilFilter(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-test", StartedAt: "2026-03-28T12:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s3", ProjectDir: "-test", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", StartedAt: "2026-03-28T12:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s3", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Since: "2026-03-28T11:00:00.000Z", Until: "2026-03-28T13:00:00.000Z"})
 	if err != nil {
@@ -867,7 +911,7 @@ func TestListSessions_SinceAndUntilFilter(t *testing.T) {
 func TestListSessions_UntilFilter_MillisecondTimestamp(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T12:00:00.500Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T12:00:00.500Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{Until: "2026-03-28T12:00:00.000Z"})
 	if err != nil {
@@ -881,7 +925,7 @@ func TestListSessions_UntilFilter_MillisecondTimestamp(t *testing.T) {
 func TestListSessions_EndedAt(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {
@@ -898,7 +942,7 @@ func TestListSessions_EndedAt(t *testing.T) {
 func TestListSessions_EndedAt_Null(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {
@@ -915,7 +959,7 @@ func TestListSessions_EndedAt_Null(t *testing.T) {
 func TestGetMessages_Empty(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	msgs, err := db.GetMessages("s1")
 	if err != nil {
@@ -929,7 +973,7 @@ func TestGetMessages_Empty(t *testing.T) {
 func TestGetMessages_OrderByTimestamp(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	// Insert in reverse order
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "assistant", Content: "world", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
@@ -974,7 +1018,7 @@ func TestGetMessages_OrderByTimestamp(t *testing.T) {
 func TestGetSession_Found(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpdateSessionTitle("s1", "my session", "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
@@ -1002,7 +1046,7 @@ func TestGetSession_Found(t *testing.T) {
 func TestGetSession_EndedAt(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
 
 	got, err := db.GetSession("s1")
 	if err != nil {
@@ -1019,7 +1063,7 @@ func TestGetSession_EndedAt(t *testing.T) {
 func TestGetSession_EndedAt_Null(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	got, err := db.GetSession("s1")
 	if err != nil {
@@ -1061,11 +1105,11 @@ func TestListProjects_GroupByProject(t *testing.T) {
 	db := testDB(t)
 
 	// Project A: 2 sessions
-	must(t, db.UpsertSession(SessionMeta{SessionID: "a1", ProjectDir: "-Users-test-projA", RepoPath: "/Users/test/projA", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "a2", ProjectDir: "-Users-test-projA", RepoPath: "/Users/test/projA", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "a1", RepoPath: "/Users/test/projA", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "a2", RepoPath: "/Users/test/projA", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	// Project B: 1 session
-	must(t, db.UpsertSession(SessionMeta{SessionID: "b1", ProjectDir: "-Users-test-projB", RepoPath: "/Users/test/projB", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "b1", RepoPath: "/Users/test/projB", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{})
 	if err != nil {
@@ -1094,10 +1138,10 @@ func TestListProjects_SinceFilter(t *testing.T) {
 	db := testDB(t)
 
 	// Old project (only old sessions)
-	must(t, db.UpsertSession(SessionMeta{SessionID: "old1", ProjectDir: "-Users-test-old", RepoPath: "/Users/test/old", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "old1", RepoPath: "/Users/test/old", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	// New project
-	must(t, db.UpsertSession(SessionMeta{SessionID: "new1", ProjectDir: "-Users-test-new", RepoPath: "/Users/test/new", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "new1", RepoPath: "/Users/test/new", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{Since: "2026-03-28T00:00:00.000Z"})
 	if err != nil {
@@ -1115,10 +1159,10 @@ func TestListProjects_UntilFilter(t *testing.T) {
 	db := testDB(t)
 
 	// Early project
-	must(t, db.UpsertSession(SessionMeta{SessionID: "early1", ProjectDir: "-Users-test-early", RepoPath: "/Users/test/early", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "early1", RepoPath: "/Users/test/early", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	// Late project (only late sessions)
-	must(t, db.UpsertSession(SessionMeta{SessionID: "late1", ProjectDir: "-Users-test-late", RepoPath: "/Users/test/late", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "late1", RepoPath: "/Users/test/late", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{Until: "2026-03-28T12:00:00.000Z"})
 	if err != nil {
@@ -1135,9 +1179,9 @@ func TestListProjects_UntilFilter(t *testing.T) {
 func TestListProjects_SinceAndUntilFilter(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-old", RepoPath: "/Users/test/old", StartedAt: "2026-03-28T08:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-Users-test-mid", RepoPath: "/Users/test/mid", StartedAt: "2026-03-28T12:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s3", ProjectDir: "-Users-test-new", RepoPath: "/Users/test/new", StartedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", RepoPath: "/Users/test/old", StartedAt: "2026-03-28T08:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", RepoPath: "/Users/test/mid", StartedAt: "2026-03-28T12:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s3", RepoPath: "/Users/test/new", StartedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{Since: "2026-03-28T10:00:00.000Z", Until: "2026-03-28T14:00:00.000Z"})
 	if err != nil {
@@ -1157,16 +1201,14 @@ func TestListProjects_GroupByRepoPath(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "body",
-		ProjectDir: "-Users-test-Brimday",
-		RepoPath:   "/Users/test/Brimday",
-		StartedAt:  "2026-03-28T10:00:00Z",
+		SessionID: "body",
+		RepoPath:  "/Users/test/Brimday",
+		StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "worktree",
-		ProjectDir: "-Users-test-Brimday--claude-worktrees-foo",
-		RepoPath:   "/Users/test/Brimday",
-		StartedAt:  "2026-03-28T11:00:00Z",
+		SessionID: "worktree",
+		RepoPath:  "/Users/test/Brimday",
+		StartedAt: "2026-03-28T11:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{})
@@ -1190,14 +1232,12 @@ func TestListProjects_EmptyRepoPathGroup(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "s1",
-		ProjectDir: "-Users-test-Brimday",
-		StartedAt:  "2026-03-28T10:00:00Z",
+		SessionID: "s1",
+		StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "s2",
-		ProjectDir: "-Users-test-Brimday",
-		StartedAt:  "2026-03-28T11:00:00Z",
+		SessionID: "s2",
+		StartedAt: "2026-03-28T11:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{})
@@ -1216,19 +1256,17 @@ func TestListProjects_EmptyRepoPathGroup(t *testing.T) {
 }
 
 func TestListProjects_NullRepoPathCollapsesAcrossProjects(t *testing.T) {
-	// Sessions with empty repo_path collapse into a single group regardless
-	// of project_dir. Documented as a Known limitation in rules/scope.md.
+	// Sessions with empty repo_path collapse into a single group.
+	// Documented as a Known limitation in rules/scope.md.
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "a1",
-		ProjectDir: "-Users-test-projA",
-		StartedAt:  "2026-03-28T10:00:00Z",
+		SessionID: "a1",
+		StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "b1",
-		ProjectDir: "-Users-test-projB",
-		StartedAt:  "2026-03-28T11:00:00Z",
+		SessionID: "b1",
+		StartedAt: "2026-03-28T11:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{})
@@ -1252,24 +1290,21 @@ func TestListProjects_GroupByRepoPath_OrderByLatest(t *testing.T) {
 
 	// Body session for repo A, older.
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "a-body",
-		ProjectDir: "-Users-test-RepoA",
-		RepoPath:   "/Users/test/RepoA",
-		StartedAt:  "2026-03-28T10:00:00Z",
+		SessionID: "a-body",
+		RepoPath:  "/Users/test/RepoA",
+		StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 	// Worktree session for repo A, newer than any repo B session.
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "a-wt",
-		ProjectDir: "-Users-test-RepoA--claude-worktrees-foo",
-		RepoPath:   "/Users/test/RepoA",
-		StartedAt:  "2026-03-28T16:00:00Z",
+		SessionID: "a-wt",
+		RepoPath:  "/Users/test/RepoA",
+		StartedAt: "2026-03-28T16:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 	// Repo B session in between.
 	must(t, db.UpsertSession(SessionMeta{
-		SessionID:  "b1",
-		ProjectDir: "-Users-test-RepoB",
-		RepoPath:   "/Users/test/RepoB",
-		StartedAt:  "2026-03-28T12:00:00Z",
+		SessionID: "b1",
+		RepoPath:  "/Users/test/RepoB",
+		StartedAt: "2026-03-28T12:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{})
@@ -1291,10 +1326,10 @@ func TestListProjects_NullStartedAt(t *testing.T) {
 	db := testDB(t)
 
 	// Normal session
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-normal", RepoPath: "/Users/test/normal", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", RepoPath: "/Users/test/normal", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	// Session with NULL started_at
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", ProjectDir: "-Users-test-titleonly", RepoPath: "/Users/test/titleonly"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s2", RepoPath: "/Users/test/titleonly"}, "2026-03-28T15:00:00Z"))
 
 	// No filter: both projects should appear
 	rows, err := db.ListProjects(SessionFilter{})
@@ -1328,7 +1363,7 @@ func TestListProjects_NullStartedAt(t *testing.T) {
 func TestGetSummaryMessages_Empty(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	msgs, err := db.GetSummaryMessages("s1", 1, false)
 	if err != nil {
@@ -1342,7 +1377,7 @@ func TestGetSummaryMessages_Empty(t *testing.T) {
 func TestGetSummaryMessages_ReturnsFirstUserMessage(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "fix the bug", Timestamp: "2026-03-28T10:00:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "assistant", Content: "done", Timestamp: "2026-03-28T10:01:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m3", SessionID: "s1", Role: "user", Content: "thanks", Timestamp: "2026-03-28T10:02:00Z"}))
@@ -1374,7 +1409,7 @@ func TestGetSummaryMessages_ReturnsFirstUserMessage(t *testing.T) {
 func TestGetSummaryMessages_SkipsSidechain(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "sidechain msg", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "real msg", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
 
@@ -1393,7 +1428,7 @@ func TestGetSummaryMessages_SkipsSidechain(t *testing.T) {
 func TestGetSummaryMessages_NoUserMessages(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "assistant", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
 	msgs, err := db.GetSummaryMessages("s1", 1, false)
@@ -1408,7 +1443,7 @@ func TestGetSummaryMessages_NoUserMessages(t *testing.T) {
 func TestGetSummaryMessages_LimitN(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "u1", SessionID: "s1", Role: "user", Content: "one", Timestamp: "2026-03-28T10:00:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "u2", SessionID: "s1", Role: "user", Content: "two", Timestamp: "2026-03-28T10:01:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "a1", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: "2026-03-28T10:02:00Z"}))
@@ -1434,7 +1469,7 @@ func TestGetSummaryMessages_LimitN(t *testing.T) {
 func TestGetSummaryMessages_SkipsClearPrefix(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>\n<command-message>clear</command-message>", Timestamp: "2026-03-28T10:00:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
 
@@ -1453,7 +1488,7 @@ func TestGetSummaryMessages_SkipsClearPrefix(t *testing.T) {
 func TestGetSummaryMessages_SkipsCaveatPrefix(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "<local-command-caveat>Caveat: ...</local-command-caveat>", Timestamp: "2026-03-28T10:00:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
 
@@ -1472,7 +1507,7 @@ func TestGetSummaryMessages_SkipsCaveatPrefix(t *testing.T) {
 func TestGetSummaryMessages_IncludeClear(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m_clear", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>\nmore", Timestamp: "2026-03-28T10:00:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m_caveat", SessionID: "s1", Role: "user", Content: "<local-command-caveat>note</local-command-caveat>", Timestamp: "2026-03-28T10:01:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m_assistant", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: "2026-03-28T10:02:00Z"}))
@@ -1503,7 +1538,7 @@ func TestGetSummaryMessages_IncludeClear(t *testing.T) {
 func TestGetSummaryMessages_AllSkipped(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>", Timestamp: "2026-03-28T10:00:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "<local-command-caveat>x</local-command-caveat>", Timestamp: "2026-03-28T10:01:00Z"}))
 
@@ -1519,7 +1554,7 @@ func TestGetSummaryMessages_AllSkipped(t *testing.T) {
 func TestGetSummaryMessages_LimitExceedsAvailable(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m1", SessionID: "s1", Role: "user", Content: "one", Timestamp: "2026-03-28T10:00:00Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m2", SessionID: "s1", Role: "user", Content: "two", Timestamp: "2026-03-28T10:01:00Z"}))
 
@@ -1535,7 +1570,7 @@ func TestGetSummaryMessages_LimitExceedsAvailable(t *testing.T) {
 func TestGetSummaryMessages_LimitZeroReturnsError(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	_, err := db.GetSummaryMessages("s1", 0, false)
 	if err == nil {
@@ -1546,7 +1581,7 @@ func TestGetSummaryMessages_LimitZeroReturnsError(t *testing.T) {
 func TestGetSummaryMessages_MillisecondTimestamp(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test", StartedAt: "2026-03-28T10:00:00.000Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", StartedAt: "2026-03-28T10:00:00.000Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m_late", SessionID: "s1", Role: "user", Content: "later", Timestamp: "2026-03-28T10:00:00.200Z"}))
 	must(t, db.InsertMessage(ParsedMessage{UUID: "m_early", SessionID: "s1", Role: "user", Content: "earlier", Timestamp: "2026-03-28T10:00:00.100Z"}))
 
@@ -1565,7 +1600,7 @@ func TestGetSummaryMessages_MillisecondTimestamp(t *testing.T) {
 func TestUpdateSessionAgentName(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1"}, "2026-03-28T15:00:00Z"))
 	if err := db.UpdateSessionAgentName("s1", "agent1", "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionAgentName failed: %v", err)
 	}
@@ -1599,7 +1634,7 @@ func TestUpdateSessionAgentName_NoRow_IsNoop(t *testing.T) {
 func TestListSessions_CWD(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-proj", CWD: "/Users/test/proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", CWD: "/Users/test/proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {
@@ -1616,7 +1651,7 @@ func TestListSessions_CWD(t *testing.T) {
 func TestGetSession_CWD(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-Users-test-proj", CWD: "/Users/test/proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", CWD: "/Users/test/proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	got, err := db.GetSession("s1")
 	if err != nil {
@@ -1634,7 +1669,7 @@ func TestListSessions_CWD_Null(t *testing.T) {
 	db := testDB(t)
 
 	// Session with no CWD
-	must(t, db.UpsertSession(SessionMeta{SessionID: "s1", ProjectDir: "-test"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{SessionID: "s1"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpdateSessionTitle("s1", "title", "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})

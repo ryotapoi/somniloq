@@ -64,21 +64,21 @@ somniloq sessions --since 7d             # last 7 days
 somniloq sessions --since 2026-03-28     # after a date (local time)
 somniloq sessions --until 2026-03-28     # before a date (local time)
 somniloq sessions --since 7d --until 2h  # 7 days ago to 2 hours ago
-somniloq sessions --project myapp        # match against repo_path or project_dir
-somniloq sessions --short                # basename of repo_path (fallback to last hyphen element)
+somniloq sessions --project myapp        # substring match against repo_path
+somniloq sessions --short                # basename of repo_path
 ```
 
-Output is TSV: `session_id`, `started_at ~ ended_at`, `repo_path (or project_dir if unresolved)`, `custom_title`, `message_count`
+Output is TSV: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title`, `message_count`
 
 ### projects
 
 ```bash
 somniloq projects             # all projects
 somniloq projects --since 7d  # projects active in the last 7 days
-somniloq projects --short     # basename of repo_path (fallback to last hyphen element)
+somniloq projects --short     # basename of repo_path
 ```
 
-Output is TSV: `repo_path (or project_dir if unresolved)`, `session_count`
+Output is TSV: `repo_path`, `session_count`
 
 ### show
 
@@ -89,7 +89,7 @@ somniloq show --since 2026-03-28 --until 2026-03-29     # date range
 somniloq show --since 7d --project myapp                # filter by project
 somniloq show --summary 1 --since 24h                   # first user message per session
 somniloq show --summary 3 --since 24h                   # first 3 user messages per session
-somniloq show --short --since 24h                       # basename of repo_path (fallback to last hyphen element)
+somniloq show --short --since 24h                       # basename of repo_path
 ```
 
 ## Common Options
@@ -98,6 +98,8 @@ somniloq show --short --since 24h                       # basename of repo_path 
 |--------|-------------|---------|
 | `--db <path>` | Path to SQLite database | `~/.somniloq/somniloq.db` |
 | `--version` | Print version and exit | — |
+
+> Requires SQLite 3.35 or later (for `ALTER TABLE ... DROP COLUMN`). The bundled `modernc.org/sqlite` driver ships with a recent SQLite, so no separate install is needed.
 
 ### Time Filters
 

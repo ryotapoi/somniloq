@@ -18,8 +18,8 @@ func insertLegacySession(t *testing.T, db *DB, sessionID string, cwd *string) {
 		cwdArg = *cwd
 	}
 	if _, err := db.db.Exec(
-		`INSERT INTO sessions (session_id, project_dir, cwd, repo_path, imported_at)
-		 VALUES (?, '-test', ?, NULL, '2026-03-28T15:00:00Z')`,
+		`INSERT INTO sessions (session_id, cwd, repo_path, imported_at)
+		 VALUES (?, ?, NULL, '2026-03-28T15:00:00Z')`,
 		sessionID, cwdArg,
 	); err != nil {
 		t.Fatalf("insertLegacySession: %v", err)
@@ -206,8 +206,8 @@ func TestBackfill_LeavesFilledSessions(t *testing.T) {
 	defer db.Close()
 
 	if _, err := db.db.Exec(
-		`INSERT INTO sessions (session_id, project_dir, cwd, repo_path, imported_at)
-		 VALUES ('s1', '-test', '/Users/test/existing/.claude/worktrees/x', '/Users/test/existing', '2026-03-28T15:00:00Z')`,
+		`INSERT INTO sessions (session_id, cwd, repo_path, imported_at)
+		 VALUES ('s1', '/Users/test/existing/.claude/worktrees/x', '/Users/test/existing', '2026-03-28T15:00:00Z')`,
 	); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
@@ -363,8 +363,8 @@ func TestBackfill_KeepsSessionsWithMessages(t *testing.T) {
 	defer db.Close()
 
 	if _, err := db.db.Exec(
-		`INSERT INTO sessions (session_id, project_dir, cwd, repo_path, imported_at)
-		 VALUES ('s1', '-test', '/Users/test/proj', '/Users/test/proj', '2026-03-28T15:00:00Z')`,
+		`INSERT INTO sessions (session_id, cwd, repo_path, imported_at)
+		 VALUES ('s1', '/Users/test/proj', '/Users/test/proj', '2026-03-28T15:00:00Z')`,
 	); err != nil {
 		t.Fatalf("insert: %v", err)
 	}

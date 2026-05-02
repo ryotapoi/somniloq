@@ -15,7 +15,6 @@ func insertOrphanSession(t *testing.T, db *core.DB, sessionID, cwd string) {
 	t.Helper()
 	if err := db.UpsertSession(core.SessionMeta{
 		SessionID:  sessionID,
-		ProjectDir: "-test",
 		CWD:        cwd,
 		StartedAt:  "2026-03-28T15:00:00Z",
 	}, "2026-03-28T15:00:00Z"); err != nil {
@@ -28,7 +27,6 @@ func insertSessionWithMessage(t *testing.T, db *core.DB, sessionID, cwd, uuid st
 	t.Helper()
 	if err := db.UpsertSession(core.SessionMeta{
 		SessionID:  sessionID,
-		ProjectDir: "-test",
 		CWD:        cwd,
 		StartedAt:  "2026-03-28T15:00:00Z",
 	}, "2026-03-28T15:00:00Z"); err != nil {

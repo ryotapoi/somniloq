@@ -74,18 +74,18 @@ somniloq sessions --short                        # short project names
 |------|---------|-------------|
 | `--since` | — | Start time filter (see "Time filters") |
 | `--until` | — | End time filter |
-| `--project` | — | Substring match on `repo_path` (when resolved) or `project_dir` |
-| `--short` | false | Show repo basename (or last hyphen element if `repo_path` unresolved) |
+| `--project` | — | Substring match on `repo_path` |
+| `--short` | false | Show repo basename (`filepath.Base(repo_path)`) |
 
 **Columns** (tab-separated):
 
 ```
-SessionID    TimeRange    ProjectDir    CustomTitle    MessageCount
+SessionID    TimeRange    RepoPath    CustomTitle    MessageCount
 ```
 
 - `TimeRange` is displayed as `YYYY-MM-DD HH:MM ~ YYYY-MM-DD HH:MM` (started ~ ended) in local time. If `ended_at` is unavailable, the format is `YYYY-MM-DD HH:MM ~`.
-- `ProjectDir` column shows `repo_path` when resolved (e.g. `/Users/ryota/Sources/myapp`); otherwise it falls back to the raw `project_dir` key with worktree suffix stripped.
-- `--short` shows `filepath.Base(repo_path)` when resolved (e.g. `myapp`, hyphens preserved); otherwise the last hyphen-separated element of `project_dir`.
+- `RepoPath` column shows `repo_path` (e.g. `/Users/ryota/Sources/myapp`). Empty when unresolved.
+- `--short` shows `filepath.Base(repo_path)` (e.g. `myapp`, hyphens preserved).
 
 ---
 
@@ -109,8 +109,8 @@ somniloq show --short --since 24h
 |------|---------|-------------|
 | `--since` | — | Start time filter |
 | `--until` | — | End time filter |
-| `--project` | — | Substring match on `repo_path` (when resolved) or `project_dir` (time-range mode only) |
-| `--short` | false | Show repo basename (or last hyphen element if `repo_path` unresolved) |
+| `--project` | — | Substring match on `repo_path` (time-range mode only) |
+| `--short` | false | Show repo basename (`filepath.Base(repo_path)`) |
 | `--summary <N>` | 0 | Show first N user messages per session after skipping `/clear` and `<local-command-caveat>`. `0` disables (full output). Requires an integer argument — bare `--summary` is an error (use `--summary 1` for the old default). |
 | `--include-clear` | false | Requires `--summary >= 1`; disable `/clear` + caveat skipping (sidechain still excluded). Debug use. |
 | `--format` | markdown | Output format (only `markdown` is supported) |
@@ -127,7 +127,7 @@ somniloq show --short --since 24h
 ## Session Title
 
 - **Session**: `<session-id>`
-- **Project**: `<project-dir>`
+- **Project**: `<repo-path>`
 - **Started**: `<started_at ~ ended_at>`
 
 ### User
@@ -158,15 +158,15 @@ somniloq projects --since 30d --short
 |------|---------|-------------|
 | `--since` | — | Start time filter |
 | `--until` | — | End time filter |
-| `--short` | false | Show repo basename (or last hyphen element if `repo_path` unresolved) |
+| `--short` | false | Show repo basename (`filepath.Base(repo_path)`) |
 
 **Columns** (tab-separated):
 
 ```
-ProjectDir    SessionCount
+RepoPath    SessionCount
 ```
 
-`ProjectDir` shows `repo_path` when resolved; otherwise it falls back to the raw `project_dir` key. Worktree and subdirectory sessions are merged into their root project via `repo_path` aggregation in SQL — session counts are combined.
+`RepoPath` shows `repo_path` (empty when unresolved). Worktree and subdirectory sessions are merged into their root project via `repo_path` aggregation in SQL — session counts are combined.
 
 ---
 
@@ -228,6 +228,6 @@ somniloq show "$(somniloq sessions --since 24h | head -1 | cut -f1)"
 - **TSV output** from `sessions` and `projects` is pipe-friendly. Use `cut`, `awk`, or `column -t -s $'\t'` to reshape.
 - **Sidechain messages** (subagent conversations) are excluded from `show`.
 - **Empty messages** (tool_use-only turns with no text) are excluded at import time.
-- **`--project`** is a substring match against both `repo_path` (when resolved) and `project_dir` — `--project app` matches `myapp` and `app-server`. With `repo_path`, slash-spanning queries (e.g. `--project Sources/ryot`) also work.
+- **`--project`** is a substring match against `repo_path` — `--project app` matches `myapp` and `app-server`. Slash-spanning queries (e.g. `--project Sources/ryot`) also work.
 - **All timestamps** in output are local time.
 - Every subcommand supports `--help` for a quick flag reference.

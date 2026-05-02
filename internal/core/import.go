@@ -26,9 +26,8 @@ type ImportOptions struct {
 }
 
 type JSONLFile struct {
-	Path       string
-	ProjectDir string
-	SessionID  string
+	Path      string
+	SessionID string
 }
 
 func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
@@ -150,14 +149,13 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 					repoCache[rec.CWD] = repo
 				}
 				meta := SessionMeta{
-					SessionID:  rec.SessionID,
-					ProjectDir: file.ProjectDir,
-					CWD:        rec.CWD,
-					RepoPath:   repo,
-					GitBranch:  rec.GitBranch,
-					Version:    rec.Version,
-					StartedAt:  rec.Timestamp,
-					EndedAt:    rec.Timestamp,
+					SessionID: rec.SessionID,
+					CWD:       rec.CWD,
+					RepoPath:  repo,
+					GitBranch: rec.GitBranch,
+					Version:   rec.Version,
+					StartedAt: rec.Timestamp,
+					EndedAt:   rec.Timestamp,
 				}
 				if uerr := upsertSession(tx, meta, importedAt); uerr != nil {
 					return offset, fmt.Errorf("upsert session: %w", uerr)
@@ -248,9 +246,8 @@ func ScanJSONLFiles(projectsDir string) ([]JSONLFile, error) {
 			}
 			sessionID := strings.TrimSuffix(name, ".jsonl")
 			files = append(files, JSONLFile{
-				Path:       filepath.Join(subPath, name),
-				ProjectDir: projDir,
-				SessionID:  sessionID,
+				Path:      filepath.Join(subPath, name),
+				SessionID: sessionID,
 			})
 		}
 	}

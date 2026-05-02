@@ -41,14 +41,13 @@ type ParsedMessage struct {
 }
 
 type SessionMeta struct {
-	SessionID  string
-	ProjectDir string
-	CWD        string
-	RepoPath   string
-	GitBranch  string
-	Version    string
-	StartedAt  string
-	EndedAt    string
+	SessionID string
+	CWD       string
+	RepoPath  string
+	GitBranch string
+	Version   string
+	StartedAt string
+	EndedAt   string
 }
 
 func ParseRecord(line []byte) (*RawRecord, error) {
