@@ -1,8 +1,10 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -32,7 +34,7 @@ Usage:
 
 Commands:
   import     Import session logs from JSONL files
-  backfill   Resolve repo_path for legacy sessions
+  backfill   Correct legacy session data
   sessions   List sessions
   show       Show session content in Markdown
   projects   List projects
@@ -126,24 +128,63 @@ func runImport(dbPath, projectsDir string, args []string) {
 }
 
 func runBackfill(dbPath string, args []string) {
-	fs := flag.NewFlagSet("backfill", flag.ExitOnError)
-	setUsage(fs, "Resolve repo_path for legacy sessions", "somniloq backfill")
-	fs.Parse(args)
-
-	if fs.NArg() != 0 {
-		fmt.Fprintln(os.Stderr, "error: unexpected arguments")
-		os.Exit(1)
+	isTTY := isatty.IsTerminal(os.Stdin.Fd())
+	open := func() (*core.DB, error) {
+		return openDB(dbPath), nil
 	}
-
-	db := openDB(dbPath)
-	defer db.Close()
-
-	resolved, unresolved, err := core.BackfillRepoPaths(db)
+	code, err := backfillCmd(args, open, os.Stdin, os.Stdout, os.Stderr, isTTY)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
 	}
-	fmt.Printf("Backfilled %d sessions (%d unresolved)\n", resolved, unresolved)
+	os.Exit(code)
+}
+
+// backfillCmd runs the backfill subcommand without calling os.Exit, so it can
+// be tested directly. openDB is invoked only after argument parsing succeeds,
+// so `--help` and validation errors do not require a real DB. backfillCmd
+// closes the DB it opens via the factory; tests that need to inspect the same
+// DB after backfillCmd returns must hand out a wrapper that survives Close
+// (or simply skip Close inside the factory).
+func backfillCmd(args []string, openDB func() (*core.DB, error), in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
+	fs := flag.NewFlagSet("backfill", flag.ContinueOnError)
+	yes := fs.Bool("yes", false, "skip confirmation prompt")
+	setUsage(fs, "Correct legacy session data (delete orphan sessions, resolve repo_path)", "somniloq backfill")
+	fs.SetOutput(errOut)
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0, nil
+		}
+		return 1, err
+	}
+	if fs.NArg() != 0 {
+		return 1, errors.New("unexpected arguments")
+	}
+
+	db, err := openDB()
+	if err != nil {
+		return 1, err
+	}
+	defer db.Close()
+
+	count, err := core.CountOrphanSessions(db)
+	if err != nil {
+		return 1, err
+	}
+	if count > 0 && !*yes {
+		if !isTTY {
+			return 1, errors.New("backfill requires confirmation when deleting sessions; use --yes to skip in non-interactive mode")
+		}
+		if !confirmBackfillDelete(in, errOut, count) {
+			return 0, nil
+		}
+	}
+
+	result, err := core.Backfill(db)
+	if err != nil {
+		return 1, err
+	}
+	fmt.Fprintf(out, "Backfilled: deleted=%d resolved=%d unresolved=%d\n", result.Deleted, result.Resolved, result.Unresolved)
+	return 0, nil
 }
 
 func runSessions(dbPath string, args []string) {

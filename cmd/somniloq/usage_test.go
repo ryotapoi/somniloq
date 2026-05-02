@@ -11,17 +11,21 @@ func TestBackfillUsage(t *testing.T) {
 	var buf bytes.Buffer
 	fs := flag.NewFlagSet("backfill", flag.ContinueOnError)
 	fs.SetOutput(&buf)
+	fs.Bool("yes", false, "skip confirmation prompt")
 
-	setUsage(fs, "Resolve repo_path for legacy sessions", "somniloq backfill")
+	setUsage(fs, "Correct legacy session data (delete orphan sessions, resolve repo_path)", "somniloq backfill")
 	fs.Usage()
 
 	out := buf.String()
 
-	if !strings.Contains(out, "Resolve repo_path for legacy sessions") {
+	if !strings.Contains(out, "Correct legacy session data") {
 		t.Errorf("expected description in output, got:\n%s", out)
 	}
 	if !strings.Contains(out, "somniloq backfill") {
 		t.Errorf("expected usage line in output, got:\n%s", out)
+	}
+	if !strings.Contains(out, "-yes") {
+		t.Errorf("expected -yes flag in output, got:\n%s", out)
 	}
 }
 

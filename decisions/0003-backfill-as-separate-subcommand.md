@@ -34,3 +34,13 @@ We will add a dedicated `somniloq backfill` subcommand that resolves `repo_path`
 - `repo_path` カラムは従来の 2 値（NULL / 非空）のまま。`upsertSession` の `COALESCE(NULLIF(excluded.repo_path, ''), sessions.repo_path)` 条件と非対称を作らない
 - 毎回の `import` に追加コストが乗らない
 - `ResolveRepoPath` の失敗原因（stderr パース）分類は本タスクでは実装不要。将来必要になれば別タスクで拡張する
+
+## Update (v0.3, 2026-05-02)
+
+`backfill` の役割を「`repo_path` の解決」だけに留めず、**v0.3 系で発生した DB 不整合を直すための単一の窓口** に拡張した。`import` は既存セッションの修正を行わない方針を維持しつつ、過去の取り込みで生じた残骸の掃除はすべて `backfill` 経由に集約する。
+
+- **メッセージを持たない sessions の DELETE を追加**: v0.2.x 時代の meta-prefix INSERT 残骸により、`messages` を 1 件も持たない `sessions` 行が残るケースがあった。これらは `projects` 集計などで空グループを発生させるため、`backfill` 実行時にまとめて DELETE する
+- **確認プロンプトの追加**: DELETE は破壊的操作なので、orphan セッションが存在する場合はデフォルト No のプロンプトを出す。`--yes` で省略可。非対話モードでは `--yes` がない限り実行を拒否する（`import --full` と同じパターン）
+- **API シグネチャ変更**: `core.BackfillRepoPaths(db) (resolved, unresolved int, err error)` を `core.Backfill(db) (BackfillResult, error)` にリネーム。`Resolved` / `Unresolved` / `Deleted` を持つ struct 戻り値にすることで、今後カウンタを増やしても呼び出し側の形が壊れないようにした
+- **追加 API**: `core.CountOrphanSessions(db)` を CLI から呼べるようにし、プロンプトを出すかの判定に使う
+- 詳細は commit 642fb63 を参照

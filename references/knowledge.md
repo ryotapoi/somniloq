@@ -14,6 +14,12 @@ Claude Code の JSONL タイムスタンプはミリ秒付き RFC3339（例: `20
 
 対処: `OpenDB` で `db.SetMaxOpenConns(1)` を設定し、物理接続を 1 本に固定する。ファイル DB でも SQLite の書き込みロック特性上直列化されるので実害はなく、本プロジェクトの CLI 用途では一律 1 本で十分。
 
+## modernc.org/sqlite の `RowsAffected` / `LastInsertId` は常に nil エラー
+
+`modernc.org/sqlite` の `sql.Result.RowsAffected()` / `LastInsertId()` は常にエラー `nil` を返す（実装が pure Go の SQLite で、ドライバ層で値を確定できる）。エラーチェックを書いても本ドライバでは絶対に発火しないため、テストでエラーパスを再現できない。
+
+対処: エラーチェックは将来のドライバ切替時の防御として残すが、`fmt.Errorf("...: %w", err)` でラップする際に「modernc では常に nil」と短いコメントを添えると意図が伝わる。ドライバ依存の挙動なので、別ドライバ（mattn/go-sqlite3 など）に切り替えると挙動が変わる可能性がある。
+
 ## スキーママイグレーションは PRAGMA check-first を主経路にする
 
 SQLite には `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` が無い。`duplicate column name` エラーを文字列マッチで吸収する方法はドライバのエラーフォーマット変更に脆い。
