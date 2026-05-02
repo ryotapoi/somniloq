@@ -58,6 +58,28 @@ Output: `Imported <n> files (<scanned> scanned, <skipped> skipped, <failed> fail
 
 ---
 
+### backfill
+
+Repair existing DB rows produced by older versions. Run once after upgrading from v0.2.x; safe to re-run.
+
+```bash
+somniloq backfill              # repair (prompts y/N if rows will be deleted)
+somniloq backfill --yes        # skip confirmation (for scripts/cron)
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--yes` | false | Skip confirmation. Required in non-interactive environments when any rows would be deleted. |
+
+What it does:
+
+- Resolves `repo_path` for sessions where it is `NULL` and `cwd` is non-empty.
+- Deletes `sessions` rows that have no `messages` (leftover meta-only rows from v0.2.x).
+
+Rows whose `repo_path` cannot be resolved (e.g. `cwd` is empty) stay `NULL` and will be retried on the next run.
+
+---
+
 ### sessions
 
 List sessions, newest first. Output is TSV.

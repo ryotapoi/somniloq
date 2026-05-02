@@ -41,6 +41,7 @@ somniloq show --since 7d
 | コマンド | 説明 |
 |---------|------|
 | `import` | JSONL ファイルを SQLite に取り込む |
+| `backfill` | 既存 DB の補正（`repo_path` 解決、孤立セッションの削除） |
 | `sessions` | セッション一覧を表示 |
 | `projects` | プロジェクト一覧を表示（セッション数付き） |
 | `show` | セッション内容を Markdown 形式で出力 |
@@ -52,6 +53,20 @@ somniloq import              # 差分取り込み
 somniloq import --full       # 全件再取り込み（確認プロンプトあり）
 somniloq import --full --yes # 確認なしで全件再取り込み
 ```
+
+### backfill
+
+```bash
+somniloq backfill            # 既存 DB の補正（DELETE 対象があれば確認プロンプト）
+somniloq backfill --yes      # 確認なしで補正
+```
+
+旧バージョン由来の DB 行を補正する:
+
+- `repo_path` が `NULL` で `cwd` が非空のセッションを `ResolveRepoPath` で埋める
+- `messages` を 1 件も持たない `sessions` 行を削除（v0.2.x のメタ前置 INSERT 残骸を掃除）
+
+DELETE 対象が 1 件以上あるときのみ確認プロンプトを出す（デフォルト No）。`--yes` でスキップ可。非対話環境（パイプ・CI 等）では DELETE 対象 1 件以上のとき `--yes` が必須。再実行しても問題ない。
 
 ### sessions
 
@@ -108,6 +123,28 @@ somniloq show --short --since 24h                       # repo_path の basename
 | 相対時刻 | `30m`, `24h`, `7d` | 現在からの相対時間 |
 | 絶対日付 | `2026-03-28` | ローカルタイムの 00:00 |
 | 絶対日時 | `2026-03-28T15:00` | ローカルタイムの指定時刻 |
+
+## v0.2.x からのアップグレード
+
+v0.3 では集約キーと `--project` の挙動が変わるため、既存 DB に対して一度補正を入れる必要がある。
+
+1. **DB をバックアップ。** `backfill` は孤立行を削除するため、`~/.somniloq/somniloq.db` を別名でコピーしておく。
+2. **v0.3 バイナリを入れて以下を実行:**
+   ```bash
+   somniloq backfill
+   ```
+   旧来の行の `repo_path` を埋め、`messages` を 1 件も持たない `sessions` 行（v0.2.x のメタ前置 INSERT 残骸）を削除する。
+3. **任意 — 退避済みの JSONL を補充する。** `~/.claude/projects/` から JSONL を別所に移していた場合は、現状に無い分だけコピーして再取り込みする:
+   ```bash
+   cp -rn /path/to/old-projects/. ~/.claude/projects/
+   somniloq import --full --yes
+   ```
+
+### CLI 挙動の変更点
+
+- `--project` は `repo_path` への substring マッチ一本になった。旧来の `project_dir` フォールバックは廃止。`repo_path` が `NULL` のままの古い行は `somniloq backfill` を実行するまで `--project` にヒットしない。
+- `sessions` / `projects` の TSV 出力は `repo_path` をそのまま出す（`project_dir` フォールバック表記なし）。
+- `--short` は常に `filepath.Base(repo_path)`。
 
 ## ドキュメント
 
