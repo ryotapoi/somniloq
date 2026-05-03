@@ -28,7 +28,7 @@
 ## Routing
 
 - Exploratory → `investigate.md` で事実を揃えてから判断し直す
-- Plan が必要な変更 → `plan.md`
+- Plan が必要な変更 → `EnterPlanMode` してから `plan.md`（plan mode 中に計画を提示し、`ExitPlanMode` でユーザー承認を取ってから `implement.md` へ）
 - Plan 省略可な変更 → そのまま `implement.md`
 - 検証 → `verify.md`
 - レビュー → `review.md`
