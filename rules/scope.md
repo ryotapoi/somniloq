@@ -2,7 +2,11 @@
 
 ## 主要機能
 
-### 取り込み（import）
+### 取り込み（import / import-codex）
+
+source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。共通の正規化スキーマ（`sessions` / `messages`）に保存する点は両者で一致するが、ファイル配置・レコード形式・差分検出キーは source ごとに異なる。
+
+#### Claude Code 用（`somniloq import`）
 
 - `~/.claude/projects/` を走査し、各 JSONL ファイルを列挙
 - `import_state` と照合し、未取り込み or サイズ増加分を検出（差分取り込み）
@@ -16,6 +20,14 @@
 - `--full` フラグで全件再取り込み（確認プロンプトあり、デフォルト No）
   - `--yes` で確認をスキップ
   - 非対話環境（パイプ、CI 等）では `--yes` が必須
+
+#### Codex 用（`somniloq import-codex`）
+
+- `~/.codex/sessions/` 配下の rollout JSONL を走査・列挙
+- 各 JSONL を行単位で読み、`response_item` かつ `payload.type == "message"` かつ `role in ("user", "assistant")` のレコードのみを取り込み対象とする
+- `session_meta.payload.cwd` から `repo_path` を解決して sessions に保存（解決ロジックは Claude Code 側と共有）
+- 一意性は `(rollout_path, line_number)` ベースで判定（Codex のレコードは Claude Code のような UUID を持たないため）
+- 差分取り込み・`--full` 等のオプション体系は `import` と揃える
 
 ### バックフィル（backfill）
 
@@ -63,9 +75,12 @@ v0.2.x 由来データの補正窓口。以下を順に実行する。
 ## CLI インターフェース
 
 ```bash
-somniloq import                          # 全 JSONL を差分取り込み
-somniloq import --full                   # 全件再取り込み（確認あり）
+somniloq import                          # Claude Code の JSONL を差分取り込み
+somniloq import --full                   # Claude Code を全件再取り込み（確認あり）
 somniloq import --full --yes             # 確認なしで全件再取り込み
+somniloq import-codex                    # Codex の JSONL を差分取り込み
+somniloq import-codex --full             # Codex を全件再取り込み（確認あり）
+somniloq import-codex --full --yes       # 確認なしで全件再取り込み
 somniloq backfill                        # 既存セッションの補正（DELETE 対象があれば確認）
 somniloq backfill --yes                  # 確認なしで補正
 somniloq sessions                        # セッション一覧
@@ -99,31 +114,35 @@ somniloq --version                          # バージョン表示
 ```sql
 -- セッション単位のメタデータ
 CREATE TABLE sessions (
-    session_id TEXT PRIMARY KEY,  -- UUID
+    source TEXT NOT NULL,         -- 'claude_code' or 'codex'
+    session_id TEXT NOT NULL,     -- Claude Code は UUID、Codex は rollout 内で一意となる ID
     cwd TEXT,                     -- 作業ディレクトリ。会話レコードでは通常非空
     repo_path TEXT,               -- ResolveRepoPath（internal/core/repo_path.go）で解決したリポジトリパス。会話セッションでは通常非空
     git_branch TEXT,
-    custom_title TEXT,            -- custom-title レコードから
-    agent_name TEXT,              -- agent-name レコードから
-    version TEXT,                 -- Claude Code バージョン
+    custom_title TEXT,            -- custom-title レコードから（Claude Code のみ）
+    agent_name TEXT,              -- agent-name レコードから（Claude Code のみ）
+    version TEXT,                 -- ツールのバージョン
     started_at TEXT,              -- 最初のレコードの timestamp
     ended_at TEXT,                -- 最後のレコードの timestamp
-    imported_at TEXT NOT NULL     -- 取り込み日時
+    imported_at TEXT NOT NULL,    -- 取り込み日時
+    PRIMARY KEY (source, session_id)
 );
 
 -- 会話ターン（user/assistant の text のみ）
 CREATE TABLE messages (
     uuid TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL REFERENCES sessions(session_id),
+    source TEXT NOT NULL,
+    session_id TEXT NOT NULL,
     parent_uuid TEXT,
     role TEXT NOT NULL,           -- 'user' or 'assistant'
     content TEXT NOT NULL,        -- text 部分のみ結合した文字列
     timestamp TEXT NOT NULL,
     is_sidechain BOOLEAN DEFAULT FALSE,
-    UNIQUE(uuid)
+    UNIQUE(uuid),
+    FOREIGN KEY (source, session_id) REFERENCES sessions(source, session_id)
 );
 
--- 取り込み状態の追跡
+-- 取り込み状態の追跡（v0.4 で Codex 対応に合わせて主キー設計を見直す。詳細は backlog v0.4 参照）
 CREATE TABLE import_state (
     jsonl_path TEXT PRIMARY KEY,  -- JSONL ファイルのパス
     file_size INTEGER,            -- 最終取り込み時のファイルサイズ
