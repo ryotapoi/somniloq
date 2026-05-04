@@ -31,14 +31,19 @@ source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。
 
 ### バックフィル（backfill）
 
-v0.2.x 由来データの補正窓口。以下を順に実行する。
+過去バージョン由来のデータ補正と、メジャーバージョンアップ時のスキーマ移行の窓口。以下を順に実行する。
 
+- v0.4 スキーマ移行（v0.3 由来 DB のみ実行。実行済みなら no-op）:
+  - `sessions` / `messages` に `source` カラムを追加し、既存行に `'claude_code'` を埋め込む
+  - `sessions` の主キーを `(source, session_id)` 複合主キーに、`messages` の外部キーを `(source, session_id)` 複合外部キーに張り直す（テーブル再作成方式）
+  - `import_state` に `source` カラムを追加し、既存行に `'claude_code'` を埋め込む
+  - 詳細は `decisions/0004-codex-schema-and-migration.md` 参照
 - `messages` を持たない `sessions` 行を DELETE
   - 主目的は v0.2.x 由来のメタ前置 INSERT 残骸の除去
   - 副次的に、text 抽出結果が空の `user`/`assistant` レコードしか持たないセッション（`tool_use` のみ・添付のみ・空白のみ）も消える。取り込み側は text 非空判定の前に `upsertSession` を呼ぶため `messages` 0 件で残る仕様で、show / sessions 一覧で実体が無く実害はほぼゼロ。`--full` で再取り込みすれば戻る
 - `repo_path IS NULL` かつ `cwd` 非空 の行を `ResolveRepoPath` で埋める（手順 4 が cwd 返却になったため `cwd` 非空なら必ず解決される）
 - DELETE 対象が 1 件以上ある場合のみ件数を起動時に表示し確認プロンプトを出す（デフォルト No）。0 件なら無確認で進む。`--yes` で確認をスキップ。非対話環境（パイプ・CI 等）では DELETE 対象 1 件以上のとき `--yes` 必須（`import --full` と同じ作法）
-- `import` から独立。v0.3 へアップグレード後に一度叩く想定
+- `import` から独立。v0.3 / v0.4 へアップグレード後に一度叩く想定（v0.4 ではスキーマ移行が含まれるため、`import` / `import-codex` を叩く前の実行が必須）
 
 ### セッション一覧（sessions）
 
@@ -111,6 +116,8 @@ somniloq --version                          # バージョン表示
 
 ### テーブル設計
 
+主キー設計と Codex 対応 migration の詳細は `decisions/0004-codex-schema-and-migration.md` 参照。
+
 ```sql
 -- セッション単位のメタデータ
 CREATE TABLE sessions (
@@ -142,9 +149,12 @@ CREATE TABLE messages (
     FOREIGN KEY (source, session_id) REFERENCES sessions(source, session_id)
 );
 
--- 取り込み状態の追跡（v0.4 で Codex 対応に合わせて主キー設計を見直す。詳細は backlog v0.4 参照）
+-- 取り込み状態の追跡。主キーは jsonl_path 単独。Claude Code と Codex は
+-- ベースディレクトリ（~/.claude/projects/ と ~/.codex/sessions/）が分離して
+-- いるため絶対パスだけで一意に特定でき、source は補助情報として保持する。
 CREATE TABLE import_state (
-    jsonl_path TEXT PRIMARY KEY,  -- JSONL ファイルのパス
+    jsonl_path TEXT PRIMARY KEY,  -- JSONL ファイルの絶対パス
+    source TEXT NOT NULL,         -- 'claude_code' or 'codex'
     file_size INTEGER,            -- 最終取り込み時のファイルサイズ
     last_offset INTEGER,          -- 最終取り込み行のバイトオフセット
     imported_at TEXT NOT NULL
