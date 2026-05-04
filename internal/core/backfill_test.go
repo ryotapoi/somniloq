@@ -11,6 +11,11 @@ import (
 // so tests can construct pre-v0.3 state (repo_path NULL with cwd present, or
 // cwd itself NULL/empty). A nil cwd argument stores SQL NULL; a non-nil value
 // is stored verbatim (including the empty string).
+//
+// Stamps source = 'claude_code' so the row satisfies the v0.4 NOT NULL
+// constraint. v0.4 schema is what OpenDB creates and what every CRUD path
+// expects; tests that need to construct v0.3-shaped rows for migration
+// testing use setupV03DB instead.
 func insertLegacySession(t *testing.T, db *DB, sessionID string, cwd *string) {
 	t.Helper()
 	var cwdArg any
@@ -18,8 +23,8 @@ func insertLegacySession(t *testing.T, db *DB, sessionID string, cwd *string) {
 		cwdArg = *cwd
 	}
 	if _, err := db.db.Exec(
-		`INSERT INTO sessions (session_id, cwd, repo_path, imported_at)
-		 VALUES (?, ?, NULL, '2026-03-28T15:00:00Z')`,
+		`INSERT INTO sessions (source, session_id, cwd, repo_path, imported_at)
+		 VALUES ('claude_code', ?, ?, NULL, '2026-03-28T15:00:00Z')`,
 		sessionID, cwdArg,
 	); err != nil {
 		t.Fatalf("insertLegacySession: %v", err)
@@ -31,8 +36,8 @@ func insertLegacySession(t *testing.T, db *DB, sessionID string, cwd *string) {
 func insertLegacyMessage(t *testing.T, db *DB, sessionID, uuid string) {
 	t.Helper()
 	if _, err := db.db.Exec(
-		`INSERT INTO messages (uuid, session_id, parent_uuid, role, content, timestamp, is_sidechain)
-		 VALUES (?, ?, NULL, 'user', '{}', '2026-03-28T15:00:00Z', 0)`,
+		`INSERT INTO messages (uuid, source, session_id, parent_uuid, role, content, timestamp, is_sidechain)
+		 VALUES (?, 'claude_code', ?, NULL, 'user', '{}', '2026-03-28T15:00:00Z', 0)`,
 		uuid, sessionID,
 	); err != nil {
 		t.Fatalf("insertLegacyMessage: %v", err)
@@ -206,8 +211,8 @@ func TestBackfill_LeavesFilledSessions(t *testing.T) {
 	defer db.Close()
 
 	if _, err := db.db.Exec(
-		`INSERT INTO sessions (session_id, cwd, repo_path, imported_at)
-		 VALUES ('s1', '/Users/test/existing/.claude/worktrees/x', '/Users/test/existing', '2026-03-28T15:00:00Z')`,
+		`INSERT INTO sessions (source, session_id, cwd, repo_path, imported_at)
+		 VALUES ('claude_code', 's1', '/Users/test/existing/.claude/worktrees/x', '/Users/test/existing', '2026-03-28T15:00:00Z')`,
 	); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
@@ -363,8 +368,8 @@ func TestBackfill_KeepsSessionsWithMessages(t *testing.T) {
 	defer db.Close()
 
 	if _, err := db.db.Exec(
-		`INSERT INTO sessions (session_id, cwd, repo_path, imported_at)
-		 VALUES ('s1', '/Users/test/proj', '/Users/test/proj', '2026-03-28T15:00:00Z')`,
+		`INSERT INTO sessions (source, session_id, cwd, repo_path, imported_at)
+		 VALUES ('claude_code', 's1', '/Users/test/proj', '/Users/test/proj', '2026-03-28T15:00:00Z')`,
 	); err != nil {
 		t.Fatalf("insert: %v", err)
 	}
@@ -436,5 +441,285 @@ func TestCountOrphanSessions(t *testing.T) {
 	}
 	if count != 2 {
 		t.Errorf("count = %d, want 2", count)
+	}
+}
+
+// v03Schema is the pre-v0.4 (i.e. v0.3) shape of the three tables. Used by
+// migration tests that exercise MigrateToV04IfNeeded against a DB that still
+// has the old layout (no source column, sessions PK on session_id alone).
+const v03Schema = `
+CREATE TABLE sessions (
+    session_id TEXT PRIMARY KEY,
+    cwd TEXT,
+    repo_path TEXT,
+    git_branch TEXT,
+    custom_title TEXT,
+    agent_name TEXT,
+    version TEXT,
+    started_at TEXT,
+    ended_at TEXT,
+    imported_at TEXT NOT NULL
+);
+CREATE TABLE messages (
+    uuid TEXT PRIMARY KEY,
+    session_id TEXT NOT NULL REFERENCES sessions(session_id),
+    parent_uuid TEXT,
+    role TEXT NOT NULL,
+    content TEXT NOT NULL,
+    timestamp TEXT NOT NULL,
+    is_sidechain BOOLEAN DEFAULT FALSE,
+    UNIQUE(uuid)
+);
+CREATE TABLE import_state (
+    jsonl_path TEXT PRIMARY KEY,
+    file_size INTEGER,
+    last_offset INTEGER,
+    imported_at TEXT NOT NULL
+);
+`
+
+// setupV03DB returns a *DB whose underlying sqlite is on the v0.3 schema
+// (no source column, sessions PK on session_id alone). Bypasses OpenDB so
+// the v0.4 schema constant does not get applied.
+//
+// SetMaxOpenConns(1) is required because modernc.org/sqlite treats each
+// connection to ":memory:" as a separate DB instance.
+func setupV03DB(t *testing.T) *DB {
+	t.Helper()
+	rawDB, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	rawDB.SetMaxOpenConns(1)
+	t.Cleanup(func() { rawDB.Close() })
+	if _, err := rawDB.Exec(v03Schema); err != nil {
+		t.Fatalf("v03Schema exec: %v", err)
+	}
+	return &DB{db: rawDB}
+}
+
+// insertV03Session inserts a row using the v0.3 column set (no source).
+func insertV03Session(t *testing.T, db *DB, sessionID, cwd, repoPath string) {
+	t.Helper()
+	if _, err := db.db.Exec(
+		`INSERT INTO sessions (session_id, cwd, repo_path, imported_at)
+		 VALUES (?, ?, NULLIF(?, ''), '2026-03-28T15:00:00Z')`,
+		sessionID, cwd, repoPath,
+	); err != nil {
+		t.Fatalf("insertV03Session: %v", err)
+	}
+}
+
+// insertV03Message inserts a v0.3 messages row tied to sessionID.
+func insertV03Message(t *testing.T, db *DB, sessionID, uuid string) {
+	t.Helper()
+	if _, err := db.db.Exec(
+		`INSERT INTO messages (uuid, session_id, parent_uuid, role, content, timestamp, is_sidechain)
+		 VALUES (?, ?, NULL, 'user', '{}', '2026-03-28T15:00:00Z', 0)`,
+		uuid, sessionID,
+	); err != nil {
+		t.Fatalf("insertV03Message: %v", err)
+	}
+}
+
+// insertV03ImportState inserts a v0.3 import_state row.
+func insertV03ImportState(t *testing.T, db *DB, path string) {
+	t.Helper()
+	if _, err := db.db.Exec(
+		`INSERT INTO import_state (jsonl_path, file_size, last_offset, imported_at)
+		 VALUES (?, 100, 50, '2026-03-28T15:00:00Z')`,
+		path,
+	); err != nil {
+		t.Fatalf("insertV03ImportState: %v", err)
+	}
+}
+
+func TestBackfill_MigratesV03ToV04(t *testing.T) {
+	unsetAllGitEnv(t)
+
+	db := setupV03DB(t)
+
+	// Sample data on v0.3 schema.
+	insertV03Session(t, db, "s1", "/Users/test/proj", "/Users/test/proj")
+	insertV03Session(t, db, "s2", "/tmp", "")
+	insertV03Message(t, db, "s1", "m1")
+	insertV03Message(t, db, "s1", "m2")
+	insertV03ImportState(t, db, "/path/to/a.jsonl")
+	insertV03ImportState(t, db, "/path/to/b.jsonl")
+
+	result, err := Backfill(db)
+	if err != nil {
+		t.Fatalf("Backfill: %v", err)
+	}
+
+	if result.MigratedSessions != 2 || result.MigratedMessages != 2 || result.MigratedImportStates != 2 {
+		t.Errorf("migrated counts = {sessions:%d messages:%d import_states:%d}, want 2/2/2",
+			result.MigratedSessions, result.MigratedMessages, result.MigratedImportStates)
+	}
+
+	// Source column exists.
+	present, err := tableColumnPresent(db.db, "sessions", "source")
+	if err != nil || !present {
+		t.Fatalf("sessions.source missing after migration: present=%v err=%v", present, err)
+	}
+
+	// Composite PK on (source, session_id): two rows in PRAGMA table_info should
+	// have pk > 0.
+	pkCount := 0
+	rows, err := db.db.Query("PRAGMA table_info(sessions)")
+	if err != nil {
+		t.Fatalf("PRAGMA table_info: %v", err)
+	}
+	for rows.Next() {
+		var (
+			cid     int
+			name    string
+			colType string
+			notnull int
+			dflt    sql.NullString
+			pk      int
+		)
+		if err := rows.Scan(&cid, &name, &colType, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			t.Fatalf("scan PRAGMA: %v", err)
+		}
+		if pk > 0 {
+			pkCount++
+		}
+	}
+	rows.Close()
+	if pkCount != 2 {
+		t.Errorf("composite PK columns: got %d, want 2", pkCount)
+	}
+
+	// Round-trip data: existing rows are stamped source='claude_code'.
+	var src, sid, cwd string
+	if err := db.db.QueryRow(
+		`SELECT source, session_id, cwd FROM sessions WHERE session_id='s1'`,
+	).Scan(&src, &sid, &cwd); err != nil {
+		t.Fatalf("SELECT s1: %v", err)
+	}
+	if src != "claude_code" || sid != "s1" || cwd != "/Users/test/proj" {
+		t.Errorf("s1 round-trip mismatch: src=%q sid=%q cwd=%q", src, sid, cwd)
+	}
+}
+
+func TestBackfill_MigrationIdempotent(t *testing.T) {
+	unsetAllGitEnv(t)
+
+	db := setupV03DB(t)
+	insertV03Session(t, db, "s1", "/proj", "/proj")
+	insertV03Message(t, db, "s1", "m1")
+
+	first, err := Backfill(db)
+	if err != nil {
+		t.Fatalf("first Backfill: %v", err)
+	}
+	if first.MigratedSessions == 0 {
+		t.Errorf("first run: MigratedSessions = 0, want > 0")
+	}
+
+	second, err := Backfill(db)
+	if err != nil {
+		t.Fatalf("second Backfill: %v", err)
+	}
+	if second.MigratedSessions != 0 || second.MigratedMessages != 0 || second.MigratedImportStates != 0 {
+		t.Errorf("second run migrated counts = {%d %d %d}, want all 0",
+			second.MigratedSessions, second.MigratedMessages, second.MigratedImportStates)
+	}
+}
+
+func TestBackfill_MigrationWithOrphans(t *testing.T) {
+	unsetAllGitEnv(t)
+
+	db := setupV03DB(t)
+
+	// orphan: no messages, repo_path NULL → should be deleted by Backfill.
+	insertV03Session(t, db, "orphan", "/Users/test/proj", "")
+	// kept: has message, repo_path NULL but cwd is a worktree path → resolve.
+	insertV03Session(t, db, "kept", "/Users/test/proj/.claude/worktrees/feature", "")
+	insertV03Message(t, db, "kept", "m1")
+
+	result, err := Backfill(db)
+	if err != nil {
+		t.Fatalf("Backfill: %v", err)
+	}
+
+	if result.MigratedSessions != 2 || result.MigratedMessages != 1 || result.MigratedImportStates != 0 {
+		t.Errorf("migrated counts = {%d %d %d}, want 2/1/0",
+			result.MigratedSessions, result.MigratedMessages, result.MigratedImportStates)
+	}
+	if result.Deleted != 1 || result.Resolved != 1 || result.Unresolved != 0 {
+		t.Errorf("cleanup counts = {Deleted:%d Resolved:%d Unresolved:%d}, want 1/1/0",
+			result.Deleted, result.Resolved, result.Unresolved)
+	}
+}
+
+func TestBackfill_MigrationOnV04DB_NoOp(t *testing.T) {
+	unsetAllGitEnv(t)
+
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer db.Close()
+
+	result, err := Backfill(db)
+	if err != nil {
+		t.Fatalf("Backfill: %v", err)
+	}
+	if result.MigratedSessions != 0 || result.MigratedMessages != 0 || result.MigratedImportStates != 0 {
+		t.Errorf("v0.4 DB migrated counts = {%d %d %d}, want all 0",
+			result.MigratedSessions, result.MigratedMessages, result.MigratedImportStates)
+	}
+}
+
+func TestBackfill_MigrationCompositeFK(t *testing.T) {
+	unsetAllGitEnv(t)
+
+	db := setupV03DB(t)
+	insertV03Session(t, db, "s1", "/proj", "/proj")
+	insertV03Message(t, db, "s1", "m1")
+
+	if _, err := Backfill(db); err != nil {
+		t.Fatalf("Backfill: %v", err)
+	}
+
+	// FK list should mention composite (source, session_id).
+	rows, err := db.db.Query("PRAGMA foreign_key_list(messages)")
+	if err != nil {
+		t.Fatalf("PRAGMA foreign_key_list: %v", err)
+	}
+	defer rows.Close()
+	fkColumns := map[string]string{}
+	for rows.Next() {
+		var (
+			id, seq                   int
+			table, from, to, onUpdate string
+			onDelete, match           string
+		)
+		if err := rows.Scan(&id, &seq, &table, &from, &to, &onUpdate, &onDelete, &match); err != nil {
+			t.Fatalf("scan PRAGMA: %v", err)
+		}
+		if table != "sessions" {
+			t.Errorf("FK references %q, want sessions", table)
+		}
+		fkColumns[from] = to
+	}
+	if fkColumns["source"] != "source" || fkColumns["session_id"] != "session_id" {
+		t.Errorf("composite FK missing: got %+v", fkColumns)
+	}
+
+	// With foreign_keys = ON, inserting a messages row referencing a session
+	// that does not exist should fail.
+	if _, err := db.db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		t.Fatalf("PRAGMA foreign_keys: %v", err)
+	}
+	defer db.db.Exec("PRAGMA foreign_keys = OFF")
+
+	_, err = db.db.Exec(`INSERT INTO messages (uuid, source, session_id, parent_uuid, role, content, timestamp, is_sidechain)
+		 VALUES ('m-bad', 'codex', 'nonexistent', NULL, 'user', '', '2026-03-28T15:00:00Z', 0)`)
+	if err == nil {
+		t.Errorf("INSERT with missing FK reference should fail under foreign_keys=ON")
 	}
 }

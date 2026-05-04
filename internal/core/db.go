@@ -13,8 +13,17 @@ type DB struct {
 	db *sql.DB
 }
 
+// Source identifies the origin of a session/message/import_state row.
+// v0.4 で導入。Claude Code は SourceClaudeCode、Codex は将来 SourceCodex を追加予定。
+type Source string
+
+const (
+	SourceClaudeCode Source = "claude_code"
+)
+
 type ImportState struct {
 	JSONLPath  string
+	Source     Source
 	FileSize   int64
 	LastOffset int64
 	ImportedAt string
@@ -57,7 +66,7 @@ func OpenDB(dsn string) (*DB, error) {
 // Precondition: the sessions table exists. SQLite 3.35+ required for
 // DROP COLUMN.
 func ensureSessionsProjectDirColumnDropped(db *sql.DB) error {
-	_, present, err := sessionsColumnType(db, "project_dir")
+	present, err := tableColumnPresent(db, "sessions", "project_dir")
 	if err != nil {
 		return fmt.Errorf("inspect sessions table: %w", err)
 	}
@@ -69,7 +78,7 @@ func ensureSessionsProjectDirColumnDropped(db *sql.DB) error {
 		// it between our inspect and ALTER — treat as success. Any other state
 		// (re-check failed, or column still present) returns the original
 		// ALTER error.
-		if _, present2, pErr := sessionsColumnType(db, "project_dir"); pErr == nil && !present2 {
+		if present2, pErr := tableColumnPresent(db, "sessions", "project_dir"); pErr == nil && !present2 {
 			return nil
 		}
 		return fmt.Errorf("migrate drop project_dir column: %w", err)
@@ -80,7 +89,7 @@ func ensureSessionsProjectDirColumnDropped(db *sql.DB) error {
 // ensureSessionsRepoPathColumn adds sessions.repo_path if it is missing.
 // Precondition: the sessions table exists.
 func ensureSessionsRepoPathColumn(db *sql.DB) error {
-	_, present, err := sessionsColumnType(db, "repo_path")
+	present, err := tableColumnPresent(db, "sessions", "repo_path")
 	if err != nil {
 		return fmt.Errorf("inspect sessions table: %w", err)
 	}
@@ -93,7 +102,7 @@ func ensureSessionsRepoPathColumn(db *sql.DB) error {
 		// instance added the column between our inspect and ALTER. Only treat
 		// it as success when the column is actually present now — otherwise
 		// surface the original ALTER error.
-		if _, present2, pErr := sessionsColumnType(db, "repo_path"); pErr == nil && present2 {
+		if present2, pErr := tableColumnPresent(db, "sessions", "repo_path"); pErr == nil && present2 {
 			return nil
 		}
 		return fmt.Errorf("migrate repo_path column: %w", err)
@@ -101,13 +110,18 @@ func ensureSessionsRepoPathColumn(db *sql.DB) error {
 	return nil
 }
 
-// sessionsColumnType looks up a column on the sessions table via PRAGMA
-// table_info and returns its declared type. Precondition: the sessions table
-// exists. The returned bool reports whether the column was found.
-func sessionsColumnType(db *sql.DB, column string) (string, bool, error) {
-	rows, err := db.Query("PRAGMA table_info(sessions)")
+// tableColumnPresent reports whether the given column exists on the table.
+// Precondition: the table exists. PRAGMA table_info returns no rows when the
+// table is missing, so the caller must guarantee existence (e.g. by running
+// the schema constant first).
+//
+// SECURITY: `table` is interpolated into the SQL because PRAGMA does not
+// accept `?` placeholders. Pass only trusted internal constants
+// ("sessions", "messages", "import_state"); never propagate user input here.
+func tableColumnPresent(db *sql.DB, table, column string) (bool, error) {
+	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
 	if err != nil {
-		return "", false, err
+		return false, err
 	}
 	defer rows.Close()
 	for rows.Next() {
@@ -120,16 +134,16 @@ func sessionsColumnType(db *sql.DB, column string) (string, bool, error) {
 			pk        int
 		)
 		if err := rows.Scan(&cid, &name, &colType, &notnull, &dfltValue, &pk); err != nil {
-			return "", false, err
+			return false, err
 		}
 		if name == column {
-			return colType, true, nil
+			return true, nil
 		}
 	}
 	if err := rows.Err(); err != nil {
-		return "", false, err
+		return false, err
 	}
-	return "", false, nil
+	return false, nil
 }
 
 func (d *DB) Close() error {
@@ -146,9 +160,9 @@ func (d *DB) UpsertSession(meta SessionMeta, importedAt string) error {
 
 func upsertSession(e execer, meta SessionMeta, importedAt string) error {
 	_, err := e.Exec(`
-		INSERT INTO sessions (session_id, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
-		VALUES (?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
-		ON CONFLICT(session_id) DO UPDATE SET
+		INSERT INTO sessions (source, session_id, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
+		VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
+		ON CONFLICT(source, session_id) DO UPDATE SET
 		  cwd = COALESCE(NULLIF(excluded.cwd, ''), sessions.cwd),
 		  repo_path = COALESCE(NULLIF(excluded.repo_path, ''), sessions.repo_path),
 		  git_branch = COALESCE(NULLIF(excluded.git_branch, ''), sessions.git_branch),
@@ -156,7 +170,7 @@ func upsertSession(e execer, meta SessionMeta, importedAt string) error {
 		  started_at = COALESCE(MIN(sessions.started_at, excluded.started_at), excluded.started_at, sessions.started_at),
 		  ended_at = COALESCE(MAX(sessions.ended_at, excluded.ended_at), excluded.ended_at, sessions.ended_at),
 		  imported_at = excluded.imported_at`,
-		meta.SessionID, meta.CWD, meta.RepoPath, meta.GitBranch,
+		string(meta.Source), meta.SessionID, meta.CWD, meta.RepoPath, meta.GitBranch,
 		meta.Version, meta.StartedAt, meta.EndedAt, importedAt,
 	)
 	return err
@@ -168,32 +182,32 @@ func (d *DB) InsertMessage(msg ParsedMessage) error {
 
 func insertMessage(e execer, msg ParsedMessage) error {
 	_, err := e.Exec(`
-		INSERT OR IGNORE INTO messages (uuid, session_id, parent_uuid, role, content, timestamp, is_sidechain)
-		VALUES (?, ?, ?, ?, ?, ?, ?)`,
-		msg.UUID, msg.SessionID, msg.ParentUUID, msg.Role,
+		INSERT OR IGNORE INTO messages (uuid, source, session_id, parent_uuid, role, content, timestamp, is_sidechain)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+		msg.UUID, string(msg.Source), msg.SessionID, msg.ParentUUID, msg.Role,
 		msg.Content, msg.Timestamp, msg.IsSidechain,
 	)
 	return err
 }
 
-func (d *DB) UpdateSessionTitle(sessionID, title, importedAt string) error {
-	return updateSessionTitle(d.db, sessionID, title, importedAt)
+func (d *DB) UpdateSessionTitle(source Source, sessionID, title, importedAt string) error {
+	return updateSessionTitle(d.db, source, sessionID, title, importedAt)
 }
 
-func updateSessionTitle(e execer, sessionID, title, importedAt string) error {
-	_, err := e.Exec(`UPDATE sessions SET custom_title = ?, imported_at = ? WHERE session_id = ?`,
-		title, importedAt, sessionID,
+func updateSessionTitle(e execer, source Source, sessionID, title, importedAt string) error {
+	_, err := e.Exec(`UPDATE sessions SET custom_title = ?, imported_at = ? WHERE source = ? AND session_id = ?`,
+		title, importedAt, string(source), sessionID,
 	)
 	return err
 }
 
-func (d *DB) UpdateSessionAgentName(sessionID, agentName, importedAt string) error {
-	return updateSessionAgentName(d.db, sessionID, agentName, importedAt)
+func (d *DB) UpdateSessionAgentName(source Source, sessionID, agentName, importedAt string) error {
+	return updateSessionAgentName(d.db, source, sessionID, agentName, importedAt)
 }
 
-func updateSessionAgentName(e execer, sessionID, agentName, importedAt string) error {
-	_, err := e.Exec(`UPDATE sessions SET agent_name = ?, imported_at = ? WHERE session_id = ?`,
-		agentName, importedAt, sessionID,
+func updateSessionAgentName(e execer, source Source, sessionID, agentName, importedAt string) error {
+	_, err := e.Exec(`UPDATE sessions SET agent_name = ?, imported_at = ? WHERE source = ? AND session_id = ?`,
+		agentName, importedAt, string(source), sessionID,
 	)
 	return err
 }
@@ -204,33 +218,37 @@ func (d *DB) UpsertImportState(state ImportState) error {
 
 func upsertImportState(e execer, state ImportState) error {
 	_, err := e.Exec(`
-		INSERT INTO import_state (jsonl_path, file_size, last_offset, imported_at)
-		VALUES (?, ?, ?, ?)
+		INSERT INTO import_state (jsonl_path, source, file_size, last_offset, imported_at)
+		VALUES (?, ?, ?, ?, ?)
 		ON CONFLICT(jsonl_path) DO UPDATE SET
+		  source = excluded.source,
 		  file_size = excluded.file_size,
 		  last_offset = excluded.last_offset,
 		  imported_at = excluded.imported_at`,
-		state.JSONLPath, state.FileSize, state.LastOffset, state.ImportedAt,
+		state.JSONLPath, string(state.Source), state.FileSize, state.LastOffset, state.ImportedAt,
 	)
 	return err
 }
 
 func (d *DB) GetImportState(jsonlPath string) (*ImportState, error) {
 	var s ImportState
+	var src string
 	err := d.db.QueryRow(
-		"SELECT jsonl_path, file_size, last_offset, imported_at FROM import_state WHERE jsonl_path=?",
+		"SELECT jsonl_path, source, file_size, last_offset, imported_at FROM import_state WHERE jsonl_path=?",
 		jsonlPath,
-	).Scan(&s.JSONLPath, &s.FileSize, &s.LastOffset, &s.ImportedAt)
+	).Scan(&s.JSONLPath, &src, &s.FileSize, &s.LastOffset, &s.ImportedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	s.Source = Source(src)
 	return &s, nil
 }
 
 type SessionRow struct {
+	Source       Source
 	SessionID    string
 	CWD          string
 	RepoPath     string
@@ -248,9 +266,9 @@ type SessionFilter struct {
 
 func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	query := `
-		SELECT s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+		SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
 		FROM sessions s
-		LEFT JOIN messages m ON s.session_id = m.session_id`
+		LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id`
 
 	var conditions []string
 	var args []any
@@ -270,7 +288,7 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	query += " GROUP BY s.session_id ORDER BY s.started_at DESC"
+	query += " GROUP BY s.source, s.session_id ORDER BY s.started_at DESC"
 
 	rows, err := d.db.Query(query, args...)
 	if err != nil {
@@ -281,9 +299,11 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	result := []SessionRow{}
 	for rows.Next() {
 		var r SessionRow
-		if err := rows.Scan(&r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount); err != nil {
+		var src string
+		if err := rows.Scan(&src, &r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount); err != nil {
 			return nil, err
 		}
+		r.Source = Source(src)
 		result = append(result, r)
 	}
 	if err := rows.Err(); err != nil {
@@ -345,32 +365,34 @@ type MessageRow struct {
 	IsSidechain bool
 }
 
-func (d *DB) GetSession(sessionID string) (*SessionRow, error) {
+func (d *DB) GetSession(source Source, sessionID string) (*SessionRow, error) {
 	var r SessionRow
+	var src string
 	err := d.db.QueryRow(`
-		SELECT s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+		SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
 		FROM sessions s
-		LEFT JOIN messages m ON s.session_id = m.session_id
-		WHERE s.session_id = ?
-		GROUP BY s.session_id`,
-		sessionID,
-	).Scan(&r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount)
+		LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id
+		WHERE s.source = ? AND s.session_id = ?
+		GROUP BY s.source, s.session_id`,
+		string(source), sessionID,
+	).Scan(&src, &r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
+	r.Source = Source(src)
 	return &r, nil
 }
 
-func (d *DB) GetMessages(sessionID string) ([]MessageRow, error) {
+func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) {
 	rows, err := d.db.Query(`
 		SELECT uuid, role, content, timestamp, is_sidechain
 		FROM messages
-		WHERE session_id = ?
+		WHERE source = ? AND session_id = ?
 		ORDER BY timestamp ASC`,
-		sessionID,
+		string(source), sessionID,
 	)
 	if err != nil {
 		return nil, err
@@ -398,7 +420,7 @@ const (
 // Always filters to role='user' and is_sidechain=0. By default, also skips
 // entries whose content starts with clearCommandPrefix or
 // localCommandCaveatPrefix; includeClear=true disables that prefix skip only.
-func (d *DB) GetSummaryMessages(sessionID string, limit int, includeClear bool) ([]MessageRow, error) {
+func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, includeClear bool) ([]MessageRow, error) {
 	if limit <= 0 {
 		return nil, errors.New("limit must be >= 1")
 	}
@@ -406,10 +428,10 @@ func (d *DB) GetSummaryMessages(sessionID string, limit int, includeClear bool) 
 	query := `
 		SELECT uuid, role, content, timestamp, is_sidechain
 		FROM messages
-		WHERE session_id = ?
+		WHERE source = ? AND session_id = ?
 		  AND role = 'user'
 		  AND is_sidechain = 0`
-	args := []any{sessionID}
+	args := []any{string(source), sessionID}
 	if !includeClear {
 		query += `
 		  AND content NOT LIKE ?
@@ -456,7 +478,8 @@ func (d *DB) DeleteAll() error {
 
 const schema = `
 CREATE TABLE IF NOT EXISTS sessions (
-    session_id TEXT PRIMARY KEY,
+    source TEXT NOT NULL CHECK(source <> ''),
+    session_id TEXT NOT NULL,
     cwd TEXT,
     repo_path TEXT,
     git_branch TEXT,
@@ -465,22 +488,25 @@ CREATE TABLE IF NOT EXISTS sessions (
     version TEXT,
     started_at TEXT,
     ended_at TEXT,
-    imported_at TEXT NOT NULL
+    imported_at TEXT NOT NULL,
+    PRIMARY KEY (source, session_id)
 );
 
 CREATE TABLE IF NOT EXISTS messages (
     uuid TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL REFERENCES sessions(session_id),
+    source TEXT NOT NULL CHECK(source <> ''),
+    session_id TEXT NOT NULL,
     parent_uuid TEXT,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     is_sidechain BOOLEAN DEFAULT FALSE,
-    UNIQUE(uuid)
+    FOREIGN KEY (source, session_id) REFERENCES sessions(source, session_id)
 );
 
 CREATE TABLE IF NOT EXISTS import_state (
     jsonl_path TEXT PRIMARY KEY,
+    source TEXT NOT NULL CHECK(source <> ''),
     file_size INTEGER,
     last_offset INTEGER,
     imported_at TEXT NOT NULL

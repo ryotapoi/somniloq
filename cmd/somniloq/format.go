@@ -52,12 +52,12 @@ func formatSession(w io.Writer, session core.SessionRow, displayName string, mes
 }
 
 // formatSessions requires len(displayNames) == len(sessions).
-func formatSessions(w io.Writer, sessions []core.SessionRow, displayNames []string, getMessages func(sessionID string) ([]core.MessageRow, error), loc *time.Location) error {
+func formatSessions(w io.Writer, sessions []core.SessionRow, displayNames []string, getMessages func(source core.Source, sessionID string) ([]core.MessageRow, error), loc *time.Location) error {
 	for i, session := range sessions {
 		if i > 0 {
 			fmt.Fprint(w, "\n---\n\n")
 		}
-		msgs, err := getMessages(session.SessionID)
+		msgs, err := getMessages(session.Source, session.SessionID)
 		if err != nil {
 			return err
 		}

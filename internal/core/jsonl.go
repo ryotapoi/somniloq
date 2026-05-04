@@ -32,6 +32,7 @@ type ContentBlock struct {
 
 type ParsedMessage struct {
 	UUID        string
+	Source      Source
 	ParentUUID  *string
 	SessionID   string
 	Role        string
@@ -41,6 +42,7 @@ type ParsedMessage struct {
 }
 
 type SessionMeta struct {
+	Source    Source
 	SessionID string
 	CWD       string
 	RepoPath  string

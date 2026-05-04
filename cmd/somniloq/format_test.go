@@ -149,8 +149,8 @@ func TestFormatSession_SkipsSidechain(t *testing.T) {
 	}
 }
 
-func stubGetMessages(data map[string][]core.MessageRow) func(string) ([]core.MessageRow, error) {
-	return func(sessionID string) ([]core.MessageRow, error) {
+func stubGetMessages(data map[string][]core.MessageRow) func(core.Source, string) ([]core.MessageRow, error) {
+	return func(_ core.Source, sessionID string) ([]core.MessageRow, error) {
 		return data[sessionID], nil
 	}
 }

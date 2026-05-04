@@ -143,12 +143,14 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 				if perr != nil {
 					continue
 				}
+				msg.Source = SourceClaudeCode
 				repo, ok := repoCache[rec.CWD]
 				if !ok {
 					repo = ResolveRepoPath(rec.CWD)
 					repoCache[rec.CWD] = repo
 				}
 				meta := SessionMeta{
+					Source:    SourceClaudeCode,
 					SessionID: rec.SessionID,
 					CWD:       rec.CWD,
 					RepoPath:  repo,
@@ -191,18 +193,19 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 	}
 
 	for sid, t := range titles {
-		if uerr := updateSessionTitle(tx, sid, t, importedAt); uerr != nil {
+		if uerr := updateSessionTitle(tx, SourceClaudeCode, sid, t, importedAt); uerr != nil {
 			return offset, fmt.Errorf("flush title: %w", uerr)
 		}
 	}
 	for sid, name := range agentNames {
-		if uerr := updateSessionAgentName(tx, sid, name, importedAt); uerr != nil {
+		if uerr := updateSessionAgentName(tx, SourceClaudeCode, sid, name, importedAt); uerr != nil {
 			return offset, fmt.Errorf("flush agent name: %w", uerr)
 		}
 	}
 
 	if uerr := upsertImportState(tx, ImportState{
 		JSONLPath:  file.Path,
+		Source:     SourceClaudeCode,
 		FileSize:   fileSize,
 		LastOffset: currentOffset,
 		ImportedAt: importedAt,

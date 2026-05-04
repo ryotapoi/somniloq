@@ -145,10 +145,19 @@ func runBackfill(dbPath string, args []string) {
 // closes the DB it opens via the factory; tests that need to inspect the same
 // DB after backfillCmd returns must hand out a wrapper that survives Close
 // (or simply skip Close inside the factory).
+//
+// Order of operations (preflight first so v0.3 → v0.4 migration completes
+// before any v0.4-only SQL is executed):
+//  1. MigrateToV04IfNeeded — runs once on a v0.3 DB, no-op afterwards.
+//  2. Migration counts are emitted immediately so the user sees them even if
+//     the subsequent confirmation prompt is declined or hits a non-TTY error.
+//  3. CountOrphanSessions — requires the v0.4 schema (source column).
+//  4. Confirmation prompt (only if orphans exist and --yes not given).
+//  5. Backfill — orphan delete + repo_path resolve.
 func backfillCmd(args []string, openDB func() (*core.DB, error), in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
 	fs := flag.NewFlagSet("backfill", flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "skip confirmation prompt")
-	setUsage(fs, "Correct legacy session data (delete orphan sessions, resolve repo_path)", "somniloq backfill")
+	setUsage(fs, "Correct legacy session data (migrate v0.3→v0.4 schema, delete orphan sessions, resolve repo_path)", "somniloq backfill")
 	fs.SetOutput(errOut)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -165,6 +174,18 @@ func backfillCmd(args []string, openDB func() (*core.DB, error), in io.Reader, o
 		return 1, err
 	}
 	defer db.Close()
+
+	ms, mm, mi, migrateErr := core.MigrateToV04IfNeeded(db)
+	if ms > 0 || mm > 0 || mi > 0 {
+		// Emit before checking migrateErr: the migration tx may have committed
+		// successfully and only the foreign_keys PRAGMA restore in the deferred
+		// cleanup failed. The user must still see the migration counts so the
+		// next backfill (which will report 0) does not silently hide them.
+		fmt.Fprintf(out, "Migrated to v0.4: sessions=%d messages=%d import_states=%d\n", ms, mm, mi)
+	}
+	if migrateErr != nil {
+		return 1, migrateErr
+	}
 
 	count, err := core.CountOrphanSessions(db)
 	if err != nil {
@@ -270,16 +291,18 @@ func runShow(dbPath string, args []string) {
 	db := openDB(dbPath)
 	defer db.Close()
 
-	getMessages := db.GetMessages
+	getMessages := func(src core.Source, id string) ([]core.MessageRow, error) {
+		return db.GetMessages(src, id)
+	}
 	if *summary >= 1 {
 		n, ic := *summary, *includeClear
-		getMessages = func(id string) ([]core.MessageRow, error) {
-			return db.GetSummaryMessages(id, n, ic)
+		getMessages = func(src core.Source, id string) ([]core.MessageRow, error) {
+			return db.GetSummaryMessages(src, id, n, ic)
 		}
 	}
 
 	if sessionID != "" {
-		session, err := db.GetSession(sessionID)
+		session, err := db.GetSession(core.SourceClaudeCode, sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
@@ -289,7 +312,7 @@ func runShow(dbPath string, args []string) {
 			os.Exit(1)
 		}
 		proj := resolveDisplayName(session.RepoPath, *short)
-		messages, err := getMessages(sessionID)
+		messages, err := getMessages(core.SourceClaudeCode, sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)

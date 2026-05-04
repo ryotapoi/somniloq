@@ -145,7 +145,6 @@ CREATE TABLE messages (
     content TEXT NOT NULL,        -- text 部分のみ結合した文字列
     timestamp TEXT NOT NULL,
     is_sidechain BOOLEAN DEFAULT FALSE,
-    UNIQUE(uuid),
     FOREIGN KEY (source, session_id) REFERENCES sessions(source, session_id)
 );
 
