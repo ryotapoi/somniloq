@@ -6,6 +6,7 @@ type Source = ingest.Source
 
 const (
 	SourceClaudeCode = ingest.SourceClaudeCode
+	SourceCodex      = ingest.SourceCodex
 )
 
 type ImportState = ingest.ImportState

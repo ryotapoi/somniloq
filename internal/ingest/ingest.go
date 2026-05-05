@@ -5,6 +5,7 @@ type Source string
 
 const (
 	SourceClaudeCode Source = "claude_code"
+	SourceCodex      Source = "codex"
 )
 
 // File is a JSONL file discovered by a source-specific adapter.
