@@ -127,7 +127,7 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
-	if _, err := importWithAdapter(db, false, root, codex.NewAdapter(ResolveRepoPath)); err != nil {
+	if _, err := importWithAdapter(db, root, codex.NewAdapter(ResolveRepoPath)); err != nil {
 		t.Fatalf("first import failed: %v", err)
 	}
 
@@ -136,7 +136,7 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	if err := os.WriteFile(path, []byte(second), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
-	if _, err := importWithAdapter(db, false, root, codex.NewAdapter(ResolveRepoPath)); err != nil {
+	if _, err := importWithAdapter(db, root, codex.NewAdapter(ResolveRepoPath)); err != nil {
 		t.Fatalf("second import failed: %v", err)
 	}
 
@@ -149,7 +149,7 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	}
 }
 
-func TestImportCodex_UsesCodexAdapter(t *testing.T) {
+func TestImport_SourceCodexUsesCodexAdapter(t *testing.T) {
 	db := testDB(t)
 	root := t.TempDir()
 	nested := filepath.Join(root, "2026", "05", "01")
@@ -164,12 +164,12 @@ func TestImportCodex_UsesCodexAdapter(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	result, err := ImportCodex(db, ImportOptions{ProjectsDir: root})
+	result, err := Import(db, ImportOptions{CodexSessionsDir: root, Source: ImportSourceCodex})
 	if err != nil {
-		t.Fatalf("ImportCodex failed: %v", err)
+		t.Fatalf("Import failed: %v", err)
 	}
 	if result.FilesImported != 1 || result.FilesScanned != 1 || len(result.Errors) != 0 {
-		t.Fatalf("ImportCodex result: %+v", result)
+		t.Fatalf("Import result: %+v", result)
 	}
 
 	var count int

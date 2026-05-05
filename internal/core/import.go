@@ -19,25 +19,81 @@ type ImportResult struct {
 }
 
 type ImportOptions struct {
-	Full        bool
-	ProjectsDir string
+	Full             bool
+	ProjectsDir      string
+	CodexSessionsDir string
+	Source           ImportSource
 }
+
+type ImportSource string
+
+const (
+	ImportSourceAll        ImportSource = "all"
+	ImportSourceClaudeCode ImportSource = "claude-code"
+	ImportSourceCodex      ImportSource = "codex"
+)
 
 func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
-	return importWithAdapter(db, opts.Full, opts.ProjectsDir, claudecode.NewAdapter(ResolveRepoPath))
-}
-
-func ImportCodex(db *DB, opts ImportOptions) (*ImportResult, error) {
-	return importWithAdapter(db, opts.Full, opts.ProjectsDir, codex.NewAdapter(ResolveRepoPath))
-}
-
-func importWithAdapter(db *DB, full bool, rootDir string, adapter ingest.Adapter) (*ImportResult, error) {
-	if full {
+	source := opts.Source
+	if source == "" {
+		source = ImportSourceAll
+	}
+	if !source.valid() {
+		return nil, fmt.Errorf("unknown import source: %s", source)
+	}
+	if opts.Full {
 		if err := db.DeleteAll(); err != nil {
 			return nil, fmt.Errorf("delete all: %w", err)
 		}
 	}
 
+	result := &ImportResult{}
+	switch source {
+	case ImportSourceAll:
+		claudeResult, err := importWithAdapter(db, opts.ProjectsDir, claudecode.NewAdapter(ResolveRepoPath))
+		if err != nil {
+			return nil, err
+		}
+		result.add(claudeResult)
+		codexResult, err := importWithAdapter(db, opts.CodexSessionsDir, codex.NewAdapter(ResolveRepoPath))
+		if err != nil {
+			return nil, err
+		}
+		result.add(codexResult)
+	case ImportSourceClaudeCode:
+		claudeResult, err := importWithAdapter(db, opts.ProjectsDir, claudecode.NewAdapter(ResolveRepoPath))
+		if err != nil {
+			return nil, err
+		}
+		result.add(claudeResult)
+	case ImportSourceCodex:
+		codexResult, err := importWithAdapter(db, opts.CodexSessionsDir, codex.NewAdapter(ResolveRepoPath))
+		if err != nil {
+			return nil, err
+		}
+		result.add(codexResult)
+	}
+	return result, nil
+}
+
+func (s ImportSource) valid() bool {
+	switch s {
+	case ImportSourceAll, ImportSourceClaudeCode, ImportSourceCodex:
+		return true
+	default:
+		return false
+	}
+}
+
+func (r *ImportResult) add(other *ImportResult) {
+	r.FilesScanned += other.FilesScanned
+	r.FilesImported += other.FilesImported
+	r.FilesSkipped += other.FilesSkipped
+	r.FilesFailed += other.FilesFailed
+	r.Errors = append(r.Errors, other.Errors...)
+}
+
+func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportResult, error) {
 	files, err := adapter.ScanFiles(rootDir)
 	if err != nil {
 		return nil, fmt.Errorf("scan: %w", err)

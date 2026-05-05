@@ -22,11 +22,8 @@ go install github.com/ryotapoi/somniloq/cmd/somniloq@latest
 ## Quick Start
 
 ```bash
-# Import Claude Code session logs
+# Import Claude Code and Codex session logs
 somniloq import
-
-# Import Codex session logs
-somniloq import-codex
 
 # List sessions
 somniloq sessions
@@ -45,8 +42,7 @@ somniloq show --since 7d
 
 | Command | Description |
 |---------|-------------|
-| `import` | Import Claude Code JSONL files into SQLite |
-| `import-codex` | Import Codex JSONL files into SQLite |
+| `import` | Import Claude Code and Codex JSONL files into SQLite |
 | `backfill` | Migrate/repair existing DB rows |
 | `sessions` | List sessions |
 | `projects` | List projects with session counts |
@@ -56,21 +52,13 @@ somniloq show --since 7d
 
 ```bash
 somniloq import              # differential import (default)
+somniloq import --source claude-code
+somniloq import --source codex
 somniloq import --full       # full re-import (with confirmation)
 somniloq import --full --yes # skip confirmation
 ```
 
-Imports Claude Code JSONL from `~/.claude/projects/`.
-
-### import-codex
-
-```bash
-somniloq import-codex              # differential import (default)
-somniloq import-codex --full       # full re-import (with confirmation)
-somniloq import-codex --full --yes # skip confirmation
-```
-
-Imports Codex rollout JSONL from `~/.codex/sessions/`.
+Imports Claude Code JSONL from `~/.claude/projects/` and Codex rollout JSONL from `~/.codex/sessions/`. Use `--source all|claude-code|codex` to limit the import target. The default is `all`.
 
 ### backfill
 
@@ -156,7 +144,6 @@ v0.4 adds Codex support and changes the session key to include `source`. Existin
 3. **Import current logs.**
    ```bash
    somniloq import
-   somniloq import-codex
    ```
 4. **Optional — refill JSONL you previously archived.** If you moved old Claude Code JSONL out of `~/.claude/projects/`, copy only the missing files back, then re-import:
    ```bash
@@ -169,7 +156,7 @@ v0.4 adds Codex support and changes the session key to include `source`. Existin
 - `--project` now matches `repo_path` only. The previous fallback to a `project_dir` column is gone, so older sessions whose `repo_path` is still `NULL` will not match `--project` until you run `somniloq backfill`.
 - `sessions` / `projects` TSV output shows `repo_path` directly (no `project_dir` fallback column).
 - `--short` always shows `filepath.Base(repo_path)`.
-- `import` remains Claude Code-only. Use `import-codex` for Codex rollout logs.
+- `import` now imports both Claude Code and Codex logs by default. Use `--source claude-code` or `--source codex` to import only one source.
 
 ## Documentation
 

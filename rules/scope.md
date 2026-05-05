@@ -2,11 +2,13 @@
 
 ## 主要機能
 
-### 取り込み（import / import-codex）
+### 取り込み（import）
 
 source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。共通の正規化スキーマ（`sessions` / `messages`）に保存する点は両者で一致するが、ファイル配置・レコード形式・差分検出キーは source ごとに異なる。
 
-#### Claude Code 用（`somniloq import`）
+`somniloq import` はデフォルトで Claude Code と Codex の両方を同じ SQLite DB に取り込む。対象を絞る場合は `--source all|claude-code|codex` を使う。
+
+#### Claude Code 用（`somniloq import --source claude-code`）
 
 - `~/.claude/projects/` を走査し、各 JSONL ファイルを列挙
 - `import_state` と照合し、未取り込み or サイズ増加分を検出（差分取り込み）
@@ -21,7 +23,7 @@ source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。
   - `--yes` で確認をスキップ
   - 非対話環境（パイプ、CI 等）では `--yes` が必須
 
-#### Codex 用（`somniloq import-codex`）
+#### Codex 用（`somniloq import --source codex`）
 
 - `~/.codex/sessions/` 配下の日付ディレクトリを再帰走査し、rollout JSONL を列挙
 - 各 JSONL を行単位で読み、`response_item` かつ `payload.type == "message"` かつ `role in ("user", "assistant")` のレコードのみを取り込み対象とする
@@ -47,7 +49,7 @@ source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。
   - 副次的に、text 抽出結果が空の `user`/`assistant` レコードしか持たないセッション（`tool_use` のみ・添付のみ・空白のみ）も消える。取り込み側は text 非空判定の前に `upsertSession` を呼ぶため `messages` 0 件で残る仕様で、show / sessions 一覧で実体が無く実害はほぼゼロ。`--full` で再取り込みすれば戻る
 - `repo_path IS NULL` かつ `cwd` 非空 の行を `ResolveRepoPath` で埋める（手順 4 が cwd 返却になったため `cwd` 非空なら必ず解決される）
 - DELETE 対象が 1 件以上ある場合のみ件数を起動時に表示し確認プロンプトを出す（デフォルト No）。0 件なら無確認で進む。`--yes` で確認をスキップ。非対話環境（パイプ・CI 等）では DELETE 対象 1 件以上のとき `--yes` 必須（`import --full` と同じ作法）
-- `import` から独立。v0.3 / v0.4 へアップグレード後に一度叩く想定（v0.4 ではスキーマ移行が含まれるため、`import` / `import-codex` を叩く前の実行が必須）
+- `import` から独立。v0.3 / v0.4 へアップグレード後に一度叩く想定（v0.4 ではスキーマ移行が含まれるため、`import` を叩く前の実行が必須）
 
 ### セッション一覧（sessions）
 
@@ -84,12 +86,11 @@ source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。
 ## CLI インターフェース
 
 ```bash
-somniloq import                          # Claude Code の JSONL を差分取り込み
-somniloq import --full                   # Claude Code を全件再取り込み（確認あり）
+somniloq import                          # Claude Code / Codex の JSONL を差分取り込み
+somniloq import --source claude-code     # Claude Code の JSONL だけを差分取り込み
+somniloq import --source codex           # Codex の rollout JSONL だけを差分取り込み
+somniloq import --full                   # 全件再取り込み（確認あり）
 somniloq import --full --yes             # 確認なしで全件再取り込み
-somniloq import-codex                    # Codex の JSONL を差分取り込み
-somniloq import-codex --full             # Codex を全件再取り込み（確認あり）
-somniloq import-codex --full --yes       # 確認なしで全件再取り込み
 somniloq backfill                        # 既存セッションの補正（DELETE 対象があれば確認）
 somniloq backfill --yes                  # 確認なしで補正
 somniloq sessions                        # セッション一覧

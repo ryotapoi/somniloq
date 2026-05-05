@@ -163,7 +163,7 @@ func TestImport_FillsRepoPath(t *testing.T) {
 `
 	os.WriteFile(filepath.Join(projDir, "s1.jsonl"), []byte(jsonl), 0o644)
 
-	res, err := Import(db, ImportOptions{ProjectsDir: dir})
+	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 	if err != nil {
 		t.Fatalf("Import failed: %v", err)
 	}
@@ -291,7 +291,7 @@ func TestImport_Incremental(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl1), 0o644)
 
-	res, err := Import(db, ImportOptions{ProjectsDir: dir})
+	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 	if err != nil {
 		t.Fatalf("Import failed: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestImport_Incremental(t *testing.T) {
 `
 	os.WriteFile(path, []byte(jsonl2), 0o644)
 
-	res, err = Import(db, ImportOptions{ProjectsDir: dir})
+	res, err = Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 	if err != nil {
 		t.Fatalf("Import (2nd) failed: %v", err)
 	}
@@ -333,14 +333,14 @@ func TestImport_FileShrink(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	Import(db, ImportOptions{ProjectsDir: dir})
+	Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 
 	// Shrink file (simulate truncate/recreate)
 	smallJsonl := `{"type":"user","uuid":"u3","sessionId":"s1","timestamp":"2026-03-28T15:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"new"}}
 `
 	os.WriteFile(path, []byte(smallJsonl), 0o644)
 
-	res, _ := Import(db, ImportOptions{ProjectsDir: dir})
+	res, _ := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 	if res.FilesImported != 1 {
 		t.Errorf("shrunk file should be re-imported, got imported=%d", res.FilesImported)
 	}
@@ -366,7 +366,7 @@ func TestImport_Full(t *testing.T) {
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
 	// First import
-	Import(db, ImportOptions{ProjectsDir: dir})
+	Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 
 	var count int
 	db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count)
@@ -375,7 +375,7 @@ func TestImport_Full(t *testing.T) {
 	}
 
 	// Full re-import
-	res, err := Import(db, ImportOptions{Full: true, ProjectsDir: dir})
+	res, err := Import(db, ImportOptions{Full: true, ProjectsDir: dir, Source: ImportSourceClaudeCode})
 	if err != nil {
 		t.Fatalf("Import --full failed: %v", err)
 	}
@@ -386,6 +386,86 @@ func TestImport_Full(t *testing.T) {
 	db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count)
 	if count != 1 {
 		t.Errorf("expected 1 message after full re-import, got %d", count)
+	}
+}
+
+func TestImport_AllSources(t *testing.T) {
+	db := testDB(t)
+	claudeRoot := t.TempDir()
+	codexRoot := t.TempDir()
+
+	claudeProjectDir := filepath.Join(claudeRoot, "-test-claude")
+	if err := os.MkdirAll(claudeProjectDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll Claude dir failed: %v", err)
+	}
+	claudeJSONL := `{"type":"user","uuid":"claude-u1","sessionId":"claude-s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/claude","gitBranch":"main","version":"2.1.86","message":{"role":"user","content":"hello claude"}}
+`
+	if err := os.WriteFile(filepath.Join(claudeProjectDir, "claude-s1.jsonl"), []byte(claudeJSONL), 0o644); err != nil {
+		t.Fatalf("WriteFile Claude JSONL failed: %v", err)
+	}
+
+	codexDir := filepath.Join(codexRoot, "2026", "05", "01")
+	if err := os.MkdirAll(codexDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll Codex dir failed: %v", err)
+	}
+	codexJSONL := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-s1","timestamp":"2026-05-01T00:00:00.000Z","cwd":"/nonexistent/codex","cli_version":"0.128.0"}}
+{"timestamp":"2026-05-01T00:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello codex"}]}}
+`
+	if err := os.WriteFile(filepath.Join(codexDir, "rollout-codex-s1.jsonl"), []byte(codexJSONL), 0o644); err != nil {
+		t.Fatalf("WriteFile Codex JSONL failed: %v", err)
+	}
+
+	result, err := Import(db, ImportOptions{
+		ProjectsDir:      claudeRoot,
+		CodexSessionsDir: codexRoot,
+		Source:           ImportSourceAll,
+	})
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+	if result.FilesImported != 2 || result.FilesScanned != 2 || len(result.Errors) != 0 {
+		t.Fatalf("Import result: %+v", result)
+	}
+
+	for _, c := range []struct {
+		source    Source
+		sessionID string
+	}{
+		{SourceClaudeCode, "claude-s1"},
+		{SourceCodex, "codex-s1"},
+	} {
+		var count int
+		if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE source=? AND session_id=?", c.source, c.sessionID).Scan(&count); err != nil {
+			t.Fatalf("COUNT %s/%s failed: %v", c.source, c.sessionID, err)
+		}
+		if count != 1 {
+			t.Errorf("%s/%s messages: got %d, want 1", c.source, c.sessionID, count)
+		}
+	}
+}
+
+func TestImport_InvalidSourceDoesNotDelete(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "kept"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(ParsedMessage{
+		Source:    SourceClaudeCode,
+		UUID:      "kept-message",
+		SessionID: "kept",
+		Role:      "user",
+		Content:   "keep me",
+		Timestamp: "2026-03-28T15:00:00Z",
+	}))
+
+	if _, err := Import(db, ImportOptions{Full: true, Source: ImportSource("bad")}); err == nil {
+		t.Fatal("Import should reject an unknown source")
+	}
+
+	var count int
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE uuid='kept-message'").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("message count after failed import: got %d, want 1", count)
 	}
 }
 
@@ -510,7 +590,7 @@ func TestImport_MetaBeforeBody_AcrossInvocations(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(metaOnly), 0o644)
 
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir}); err != nil {
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("first Import failed: %v", err)
 	}
 
@@ -528,7 +608,7 @@ func TestImport_MetaBeforeBody_AcrossInvocations(t *testing.T) {
 `
 	os.WriteFile(path, []byte(appended), 0o644)
 
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir}); err != nil {
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("second Import failed: %v", err)
 	}
 
@@ -556,7 +636,7 @@ func TestImport_MetaAfterBody_AcrossInvocations(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(body), 0o644)
 
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir}); err != nil {
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("first Import failed: %v", err)
 	}
 
@@ -565,7 +645,7 @@ func TestImport_MetaAfterBody_AcrossInvocations(t *testing.T) {
 `
 	os.WriteFile(path, []byte(appended), 0o644)
 
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir}); err != nil {
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("second Import failed: %v", err)
 	}
 

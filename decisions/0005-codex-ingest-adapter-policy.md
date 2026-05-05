@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted. CLI サブコマンド方針は ADR 0006 で更新。
 
 ## Context
 

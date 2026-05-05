@@ -34,12 +34,11 @@ Usage:
   somniloq [flags] <command>
 
 Commands:
-  import        Import Claude Code session logs from JSONL files
-  import-codex  Import Codex session logs from JSONL files
-  backfill      Correct legacy session data
-  sessions      List sessions
-  show          Show session content in Markdown
-  projects      List projects
+  import    Import Claude Code and Codex session logs from JSONL files
+  backfill  Correct legacy session data
+  sessions  List sessions
+  show      Show session content in Markdown
+  projects  List projects
 
 Flags:
 `)
@@ -60,9 +59,7 @@ Flags:
 
 	switch args[0] {
 	case "import":
-		runImport(*dbPath, defaultProjectsDir, args[1:])
-	case "import-codex":
-		runImportCodex(*dbPath, defaultCodexSessionsDir, args[1:])
+		runImport(*dbPath, defaultProjectsDir, defaultCodexSessionsDir, args[1:])
 	case "backfill":
 		runBackfill(*dbPath, args[1:])
 	case "sessions":
@@ -90,20 +87,23 @@ func openDB(dbPath string) *core.DB {
 	return db
 }
 
-func runImport(dbPath, projectsDir string, args []string) {
-	runImportWith(dbPath, projectsDir, args, "import", "Import Claude Code session logs from JSONL files", "somniloq import [flags]", core.Import)
+func runImport(dbPath, projectsDir, codexSessionsDir string, args []string) {
+	runImportWith(dbPath, projectsDir, codexSessionsDir, args)
 }
 
-func runImportCodex(dbPath, sessionsDir string, args []string) {
-	runImportWith(dbPath, sessionsDir, args, "import-codex", "Import Codex session logs from JSONL files", "somniloq import-codex [flags]", core.ImportCodex)
-}
-
-func runImportWith(dbPath, rootDir string, args []string, name, description, usage string, importFunc func(*core.DB, core.ImportOptions) (*core.ImportResult, error)) {
-	fs := flag.NewFlagSet(name, flag.ExitOnError)
+func runImportWith(dbPath, projectsDir, codexSessionsDir string, args []string) {
+	fs := flag.NewFlagSet("import", flag.ExitOnError)
 	full := fs.Bool("full", false, "full re-import (delete all and re-import)")
 	yes := fs.Bool("yes", false, "skip confirmation prompt")
-	setUsage(fs, description, usage)
+	sourceValue := fs.String("source", string(core.ImportSourceAll), "source to import: all, claude-code, codex")
+	setUsage(fs, "Import Claude Code and Codex session logs from JSONL files", "somniloq import [--source all|claude-code|codex] [flags]")
 	fs.Parse(args)
+
+	source, err := parseImportSource(*sourceValue)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
 
 	if *full && !*yes {
 		if !isatty.IsTerminal(os.Stdin.Fd()) {
@@ -118,9 +118,11 @@ func runImportWith(dbPath, rootDir string, args []string, name, description, usa
 	db := openDB(dbPath)
 	defer db.Close()
 
-	result, err := importFunc(db, core.ImportOptions{
-		Full:        *full,
-		ProjectsDir: rootDir,
+	result, err := core.Import(db, core.ImportOptions{
+		Full:             *full,
+		ProjectsDir:      projectsDir,
+		CodexSessionsDir: codexSessionsDir,
+		Source:           source,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
@@ -136,6 +138,19 @@ func runImportWith(dbPath, rootDir string, args []string, name, description, usa
 
 	if result.FilesFailed > 0 {
 		os.Exit(1)
+	}
+}
+
+func parseImportSource(value string) (core.ImportSource, error) {
+	switch value {
+	case string(core.ImportSourceAll):
+		return core.ImportSourceAll, nil
+	case string(core.ImportSourceClaudeCode):
+		return core.ImportSourceClaudeCode, nil
+	case string(core.ImportSourceCodex):
+		return core.ImportSourceCodex, nil
+	default:
+		return "", fmt.Errorf("invalid --source %q (want all, claude-code, or codex)", value)
 	}
 }
 
