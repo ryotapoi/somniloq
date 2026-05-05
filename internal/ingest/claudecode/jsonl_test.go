@@ -1,4 +1,4 @@
-package core
+package claudecode
 
 import (
 	"encoding/json"

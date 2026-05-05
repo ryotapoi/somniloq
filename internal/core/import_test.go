@@ -4,7 +4,20 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/ryotapoi/somniloq/internal/ingest"
+	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
 )
+
+type JSONLFile = ingest.File
+
+func scanJSONLFiles(projectsDir string) ([]JSONLFile, error) {
+	return claudecode.NewAdapter(ResolveRepoPath).ScanFiles(projectsDir)
+}
+
+func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt string) (int64, error) {
+	return claudecode.NewAdapter(ResolveRepoPath).ProcessFile(db, file, offset, fileSize, importedAt)
+}
 
 func TestScanJSONLFiles(t *testing.T) {
 	dir := t.TempDir()
@@ -27,7 +40,7 @@ func TestScanJSONLFiles(t *testing.T) {
 	os.MkdirAll(memDir, 0o755)
 	os.WriteFile(filepath.Join(memDir, "data.md"), []byte("x"), 0o644)
 
-	files, err := ScanJSONLFiles(dir)
+	files, err := scanJSONLFiles(dir)
 	if err != nil {
 		t.Fatalf("ScanJSONLFiles failed: %v", err)
 	}
@@ -51,7 +64,7 @@ func TestScanJSONLFiles(t *testing.T) {
 func TestScanJSONLFiles_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 
-	files, err := ScanJSONLFiles(dir)
+	files, err := scanJSONLFiles(dir)
 	if err != nil {
 		t.Fatalf("ScanJSONLFiles failed: %v", err)
 	}
@@ -377,7 +390,7 @@ func TestImport_Full(t *testing.T) {
 }
 
 func TestScanJSONLFiles_NonexistentDir(t *testing.T) {
-	files, err := ScanJSONLFiles("/nonexistent/path")
+	files, err := scanJSONLFiles("/nonexistent/path")
 	if err != nil {
 		t.Fatalf("ScanJSONLFiles should not error on missing dir: %v", err)
 	}

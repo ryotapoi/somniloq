@@ -6,27 +6,13 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/ryotapoi/somniloq/internal/ingest"
+
 	_ "modernc.org/sqlite"
 )
 
 type DB struct {
 	db *sql.DB
-}
-
-// Source identifies the origin of a session/message/import_state row.
-// v0.4 で導入。Claude Code は SourceClaudeCode、Codex は将来 SourceCodex を追加予定。
-type Source string
-
-const (
-	SourceClaudeCode Source = "claude_code"
-)
-
-type ImportState struct {
-	JSONLPath  string
-	Source     Source
-	FileSize   int64
-	LastOffset int64
-	ImportedAt string
 }
 
 // execer abstracts *sql.DB and *sql.Tx for shared query methods.
@@ -152,6 +138,46 @@ func (d *DB) Close() error {
 
 func (d *DB) Begin() (*sql.Tx, error) {
 	return d.db.Begin()
+}
+
+func (d *DB) BeginImport() (ingest.ImportTransaction, error) {
+	tx, err := d.Begin()
+	if err != nil {
+		return nil, err
+	}
+	return importTx{tx: tx}, nil
+}
+
+type importTx struct {
+	tx *sql.Tx
+}
+
+func (t importTx) UpsertSession(meta ingest.SessionMeta, importedAt string) error {
+	return upsertSession(t.tx, meta, importedAt)
+}
+
+func (t importTx) InsertMessage(msg ingest.NormalizedMessage) error {
+	return insertMessage(t.tx, msg)
+}
+
+func (t importTx) UpdateSessionTitle(source ingest.Source, sessionID, title, importedAt string) error {
+	return updateSessionTitle(t.tx, source, sessionID, title, importedAt)
+}
+
+func (t importTx) UpdateSessionAgentName(source ingest.Source, sessionID, agentName, importedAt string) error {
+	return updateSessionAgentName(t.tx, source, sessionID, agentName, importedAt)
+}
+
+func (t importTx) UpsertImportState(state ingest.ImportState) error {
+	return upsertImportState(t.tx, state)
+}
+
+func (t importTx) Commit() error {
+	return t.tx.Commit()
+}
+
+func (t importTx) Rollback() error {
+	return t.tx.Rollback()
 }
 
 func (d *DB) UpsertSession(meta SessionMeta, importedAt string) error {

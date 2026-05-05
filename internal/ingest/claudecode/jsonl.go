@@ -1,8 +1,10 @@
-package core
+package claudecode
 
 import (
 	"encoding/json"
 	"strings"
+
+	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
 type RawRecord struct {
@@ -30,28 +32,6 @@ type ContentBlock struct {
 	Text string `json:"text"`
 }
 
-type ParsedMessage struct {
-	UUID        string
-	Source      Source
-	ParentUUID  *string
-	SessionID   string
-	Role        string
-	Content     string
-	Timestamp   string
-	IsSidechain bool
-}
-
-type SessionMeta struct {
-	Source    Source
-	SessionID string
-	CWD       string
-	RepoPath  string
-	GitBranch string
-	Version   string
-	StartedAt string
-	EndedAt   string
-}
-
 func ParseRecord(line []byte) (*RawRecord, error) {
 	var rec RawRecord
 	if err := json.Unmarshal(line, &rec); err != nil {
@@ -60,7 +40,28 @@ func ParseRecord(line []byte) (*RawRecord, error) {
 	return &rec, nil
 }
 
-func ParseMessage(rec *RawRecord) (*ParsedMessage, error) {
+func NormalizeRecord(rec *RawRecord, repoPath string) (*ingest.NormalizedRecord, error) {
+	msg, err := ParseMessage(rec)
+	if err != nil {
+		return nil, err
+	}
+
+	return &ingest.NormalizedRecord{
+		Session: ingest.SessionMeta{
+			Source:    ingest.SourceClaudeCode,
+			SessionID: rec.SessionID,
+			CWD:       rec.CWD,
+			RepoPath:  repoPath,
+			GitBranch: rec.GitBranch,
+			Version:   rec.Version,
+			StartedAt: rec.Timestamp,
+			EndedAt:   rec.Timestamp,
+		},
+		Message: *msg,
+	}, nil
+}
+
+func ParseMessage(rec *RawRecord) (*ingest.NormalizedMessage, error) {
 	var env MessageEnvelope
 	if err := json.Unmarshal(rec.Message, &env); err != nil {
 		return nil, err
@@ -71,8 +72,9 @@ func ParseMessage(rec *RawRecord) (*ParsedMessage, error) {
 		return nil, err
 	}
 
-	return &ParsedMessage{
+	return &ingest.NormalizedMessage{
 		UUID:        rec.UUID,
+		Source:      ingest.SourceClaudeCode,
 		ParentUUID:  rec.ParentUUID,
 		SessionID:   rec.SessionID,
 		Role:        env.Role,
