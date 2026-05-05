@@ -12,4 +12,4 @@
 - [x] CLI: `somniloq import-codex` サブコマンド追加（`somniloq import` は Claude Code 用のまま）。Codex のデフォルトパスは `~/.codex/sessions/`
 - [x] ドキュメント更新（README、scope.md、新 ADR で Codex 対応方針と複合主キー設計を記録）
 - [x] CLI: 推奨形へ変更する。`somniloq import` は Claude Code / Codex の両方を同じ SQLite DB へ取り込み、対象を絞る場合は `--source all|claude-code|codex` を使う。リリース前のため `import-codex` は互換 shim として残さず整理する
-- [ ] examples/skills/somniloq を v0.4 に合わせて更新する。Claude Code 専用の説明を Claude Code / Codex 両対応へ直し、`somniloq import` の両 source 取り込み、`--source`、`~/.claude/projects/` / `~/.codex/sessions/`、v0.4 backfill 前提を反映する
+- [x] examples/skills/somniloq を v0.4 に合わせて更新する。Claude Code 専用の説明を Claude Code / Codex 両対応へ直し、`somniloq import` の両 source 取り込み、`--source`、`~/.claude/projects/` / `~/.codex/sessions/`、v0.4 backfill 前提を反映する

@@ -1,16 +1,16 @@
 ---
 name: somniloq
 description: >
-  Complete reference for the somniloq CLI — a tool that imports Claude Code session logs into SQLite
+  Complete reference for the somniloq CLI — a tool that imports Claude Code and Codex session logs into SQLite
   and queries them. Use this skill whenever you need to look up past sessions, search conversation history,
   check what was worked on, list projects, or export session content. Trigger on: "session history",
   "past sessions", "what did I work on", "conversation log", "somniloq", or any request to search/browse
-  Claude Code usage history — even if the user doesn't name the tool directly.
+  Claude Code or Codex usage history — even if the user doesn't name the tool directly.
 ---
 
 # somniloq CLI Reference
 
-somniloq imports Claude Code session logs (JSONL under `~/.claude/projects/`) into a local SQLite database and lets you query them. It is already installed and available on the PATH.
+somniloq imports Claude Code session logs (JSONL under `~/.claude/projects/`) and Codex rollout logs (JSONL under `~/.codex/sessions/`) into a local SQLite database and lets you query them. It is already installed and available on the PATH.
 
 ## Quick start
 
@@ -41,16 +41,19 @@ somniloq --db /tmp/test.db sessions --since 7d
 
 ### import
 
-Scan `~/.claude/projects/` and import JSONL files into SQLite. Default is differential — only new or grown files are processed.
+Scan `~/.claude/projects/` and `~/.codex/sessions/` and import JSONL files into SQLite. Default is differential — only new or grown files are processed.
 
 ```bash
 somniloq import                # differential (default)
+somniloq import --source claude-code
+somniloq import --source codex
 somniloq import --full         # drop and re-import everything (confirms y/N)
 somniloq import --full --yes   # skip confirmation (for scripts/cron)
 ```
 
 | Flag | Default | Description |
 |------|---------|-------------|
+| `--source all|claude-code|codex` | `all` | Limit the import target. `all` imports both Claude Code and Codex into the same DB. |
 | `--full` | false | Re-import everything. Prompts for confirmation unless `--yes` is given. In non-interactive environments (pipes, cron), `--yes` is required or the command errors. |
 | `--yes` | false | Skip confirmation prompt. Only meaningful with `--full`. |
 
@@ -60,7 +63,7 @@ Output: `Imported <n> files (<scanned> scanned, <skipped> skipped, <failed> fail
 
 ### backfill
 
-Repair existing DB rows produced by older versions. Run once after upgrading from v0.2.x; safe to re-run.
+Repair existing DB rows produced by older versions. Run once after upgrading to v0.4 before importing; safe to re-run.
 
 ```bash
 somniloq backfill              # repair (prompts y/N if rows will be deleted)
@@ -73,6 +76,7 @@ somniloq backfill --yes        # skip confirmation (for scripts/cron)
 
 What it does:
 
+- Migrates v0.3 DBs to the v0.4 schema (`source` columns and `(source, session_id)` session keys).
 - Resolves `repo_path` for sessions where it is `NULL` and `cwd` is non-empty.
 - Deletes `sessions` rows that have no `messages` (leftover meta-only rows from v0.2.x).
 
