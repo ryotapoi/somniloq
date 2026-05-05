@@ -57,6 +57,10 @@ somniloq import --full --yes   # skip confirmation (for scripts/cron)
 | `--full` | false | Re-import everything. Prompts for confirmation unless `--yes` is given. In non-interactive environments (pipes, cron), `--yes` is required or the command errors. |
 | `--yes` | false | Skip confirmation prompt. Only meaningful with `--full`. |
 
+`--full` deletes the whole somniloq DB first. With `--source codex --full`, it still deletes Claude Code rows too, then re-imports only Codex.
+
+CLI `--source` values use `claude-code`, but DB rows store the source as `claude_code`.
+
 Output: `Imported <n> files (<scanned> scanned, <skipped> skipped, <failed> failed)`
 
 ---
@@ -146,6 +150,7 @@ somniloq show --short --since 24h
 - `--project` only applies in time-range mode. `--summary` works in both modes.
 - `--include-clear` without `--summary >= 1` is an error.
 - `--summary` takes an integer (v0.2+). Earlier versions accepted a bare `--summary` flag; that form no longer works.
+- Single-session `show <session-id>` searches across Claude Code and Codex. If the same `session_id` exists in multiple sources, somniloq exits with an ambiguity error and prints the matching source/session candidates.
 
 **Output structure:**
 

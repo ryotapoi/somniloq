@@ -1,8 +1,11 @@
 package main
 
 import (
+	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/ryotapoi/somniloq/internal/core"
 )
 
 func TestShowUsageSessionIDFormFlagsFirst(t *testing.T) {
@@ -27,5 +30,24 @@ func TestShowUsageSessionIDFormFlagsFirst(t *testing.T) {
 	}
 	if strings.Contains(tail, "--") {
 		t.Errorf("no flags should appear after <session-id>: tail=%q", tail)
+	}
+}
+
+func TestWriteAmbiguousSessionErrorListsSources(t *testing.T) {
+	var buf bytes.Buffer
+	writeAmbiguousSessionError(&buf, "same-id", []core.SessionRow{
+		{Source: core.SourceClaudeCode, SessionID: "same-id"},
+		{Source: core.SourceCodex, SessionID: "same-id"},
+	})
+
+	out := buf.String()
+	for _, want := range []string{
+		`error: session id "same-id" is ambiguous; matched multiple sources:`,
+		"claude_code\tsame-id",
+		"codex\tsame-id",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("output missing %q: %q", want, out)
+		}
 	}
 }

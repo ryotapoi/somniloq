@@ -4,9 +4,9 @@
 
 ### 取り込み（import）
 
-source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。共通の正規化スキーマ（`sessions` / `messages`）に保存する点は両者で一致するが、ファイル配置・レコード形式・差分検出キーは source ごとに異なる。
+source（DB 内部値は `claude_code` / `codex`）ごとに専用の adapter で取り込む。共通の正規化スキーマ（`sessions` / `messages`）に保存する点は両者で一致するが、ファイル配置・レコード形式・差分検出キーは source ごとに異なる。
 
-`somniloq import` はデフォルトで Claude Code と Codex の両方を同じ SQLite DB に取り込む。対象を絞る場合は `--source all|claude-code|codex` を使う。
+`somniloq import` はデフォルトで Claude Code と Codex の両方を同じ SQLite DB に取り込む。対象を絞る場合は CLI 表記の `--source all|claude-code|codex` を使う。
 
 #### Claude Code 用（`somniloq import --source claude-code`）
 
@@ -22,6 +22,7 @@ source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。
 - `--full` フラグで全件再取り込み（確認プロンプトあり、デフォルト No）
   - `--yes` で確認をスキップ
   - 非対話環境（パイプ、CI 等）では `--yes` が必須
+  - `--source` 指定時も DB 全体を削除し、指定 source だけを再取り込みする
 
 #### Codex 用（`somniloq import --source codex`）
 
@@ -73,6 +74,7 @@ source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。
 ### 内容表示（show）
 
 - セッション内容を Markdown で出力
+- `show <session-id>` は Claude Code / Codex を横断検索する。同じ `session_id` が複数 source に存在する場合は曖昧エラーとして候補を表示する
 - Started 行に `started_at ~ ended_at` の時刻範囲を表示。ended_at がない場合は `started_at ~`
 - `--since`/`--until` で期間指定して一括表示
 - `--summary N` で各セッションの user メッセージ先頭 N 件を表示（`/clear` と `<local-command-caveat>` はスキップ）。`0` または未指定で従来の全文表示

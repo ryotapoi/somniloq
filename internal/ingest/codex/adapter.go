@@ -88,6 +88,7 @@ func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileS
 	}
 	defer tx.Rollback()
 
+	// Incremental imports reuse session_meta recovered from the already-read prefix.
 	hasBody := offset > 0
 
 	for {

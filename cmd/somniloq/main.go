@@ -329,22 +329,27 @@ func runShow(dbPath string, args []string) {
 	}
 
 	if sessionID != "" {
-		session, err := db.GetSession(core.SourceClaudeCode, sessionID)
+		sessions, err := db.LookupSessionsByID(sessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		if session == nil {
+		if len(sessions) == 0 {
 			fmt.Fprintf(os.Stderr, "error: session not found: %s\n", sessionID)
 			os.Exit(1)
 		}
+		if len(sessions) > 1 {
+			writeAmbiguousSessionError(os.Stderr, sessionID, sessions)
+			os.Exit(1)
+		}
+		session := sessions[0]
 		proj := resolveDisplayName(session.RepoPath, *short)
-		messages, err := getMessages(core.SourceClaudeCode, sessionID)
+		messages, err := getMessages(session.Source, session.SessionID)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "error: %v\n", err)
 			os.Exit(1)
 		}
-		formatSession(os.Stdout, *session, proj, messages, time.Local)
+		formatSession(os.Stdout, session, proj, messages, time.Local)
 		return
 	}
 
@@ -372,6 +377,13 @@ func runShow(dbPath string, args []string) {
 	if err := formatSessions(os.Stdout, sessions, displayNames, getMessages, time.Local); err != nil {
 		fmt.Fprintf(os.Stderr, "error: %v\n", err)
 		os.Exit(1)
+	}
+}
+
+func writeAmbiguousSessionError(w io.Writer, sessionID string, sessions []core.SessionRow) {
+	fmt.Fprintf(w, "error: session id %q is ambiguous; matched multiple sources:\n", sessionID)
+	for _, session := range sessions {
+		fmt.Fprintf(w, "  %s\t%s\n", session.Source, session.SessionID)
 	}
 }
 

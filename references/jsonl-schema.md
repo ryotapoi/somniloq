@@ -2,6 +2,10 @@
 
 Claude Code / Codex のセッション履歴ファイルの構造。
 
+## source 値
+
+CLI の `--source` はユーザー向け表記として `all|claude-code|codex` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex` を保存する。
+
 ## Claude Code
 
 ### ファイルの場所

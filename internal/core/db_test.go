@@ -1105,6 +1105,41 @@ func TestGetSession_NotFound(t *testing.T) {
 	}
 }
 
+func TestLookupSessionsByID_CrossSource(t *testing.T) {
+	db := testDB(t)
+
+	for _, source := range []Source{SourceClaudeCode, SourceCodex} {
+		must(t, db.UpsertSession(SessionMeta{Source: source, SessionID: "same-id", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	}
+	must(t, db.InsertMessage(ParsedMessage{Source: SourceCodex, UUID: "codex-m1", SessionID: "same-id", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
+
+	got, err := db.LookupSessionsByID("same-id")
+	if err != nil {
+		t.Fatalf("LookupSessionsByID failed: %v", err)
+	}
+	if len(got) != 2 {
+		t.Fatalf("len(got): got %d, want 2", len(got))
+	}
+	if got[0].Source != SourceClaudeCode || got[1].Source != SourceCodex {
+		t.Errorf("sources: got %s, %s; want %s, %s", got[0].Source, got[1].Source, SourceClaudeCode, SourceCodex)
+	}
+	if got[1].MessageCount != 1 {
+		t.Errorf("codex MessageCount: got %d, want 1", got[1].MessageCount)
+	}
+}
+
+func TestLookupSessionsByID_NotFound(t *testing.T) {
+	db := testDB(t)
+
+	got, err := db.LookupSessionsByID("nonexistent")
+	if err != nil {
+		t.Fatalf("LookupSessionsByID failed: %v", err)
+	}
+	if len(got) != 0 {
+		t.Errorf("len(got): got %d, want 0", len(got))
+	}
+}
+
 func TestListProjects_Empty(t *testing.T) {
 	db := testDB(t)
 

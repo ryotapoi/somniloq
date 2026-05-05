@@ -412,6 +412,37 @@ func (d *DB) GetSession(source Source, sessionID string) (*SessionRow, error) {
 	return &r, nil
 }
 
+func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
+	rows, err := d.db.Query(`
+		SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+		FROM sessions s
+		LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id
+		WHERE s.session_id = ?
+		GROUP BY s.source, s.session_id
+		ORDER BY s.source ASC`,
+		sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []SessionRow{}
+	for rows.Next() {
+		var r SessionRow
+		var src string
+		if err := rows.Scan(&src, &r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount); err != nil {
+			return nil, err
+		}
+		r.Source = Source(src)
+		result = append(result, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) {
 	rows, err := d.db.Query(`
 		SELECT uuid, role, content, timestamp, is_sidechain

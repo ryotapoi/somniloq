@@ -39,6 +39,7 @@ v0.4 で Codex の rollout JSONL を取り込む。スキーマと migration 方
 
 - DB スキーマは ADR 0004 の `(source, session_id)` 複合主キー設計を前提にする。Codex は `source='codex'` と `session_meta.payload.id` の組で Claude Code セッションと分離する
 - `somniloq import-codex` を追加し、Codex のデフォルトパスは `~/.codex/sessions/` とする。既存 `somniloq import` は Claude Code 用のまま維持する
+  - 注記: この CLI サブコマンド方針は ADR 0006 で取り消し、`somniloq import --source all|claude-code|codex` に更新した
 - Codex adapter は `internal/ingest/codex/` に置き、`internal/core` や `cmd/somniloq` へ依存しない
 - 保存対象は `response_item` かつ `payload.type == "message"` かつ `role in ("user", "assistant")` のみ
 - `payload.content` は `input_text` / `output_text` / `text` block の `text` のみ抽出し、複数 block は空行区切りで結合する
@@ -50,6 +51,7 @@ v0.4 で Codex の rollout JSONL を取り込む。スキーマと migration 方
 
 - Claude Code と Codex の JSONL 形式差は adapter 配下に閉じ、`internal/core` は source ごとの adapter を選ぶだけで済む
 - CLI では `import` と `import-codex` が分かれるため、source ごとのデフォルトパスが明確になる
+  - 注記: この consequence は ADR 0006 の時点で無効。現在は `import` が統合入口で、`--source` が対象を選ぶ
 - function call / reasoning / event は保存されない。somniloq の現行スコープは「会話 text の検索・閲覧」であり、tool 実行履歴の完全保存は非目標として扱う
 - rollout ファイルの途中に過去行が挿入されるような形式変更が起きると、line number ベース ID は変わりうる。現行 rollout は追記型ログとして扱い、形式が変わったら `references/jsonl-schema.md` と adapter を見直す
 
