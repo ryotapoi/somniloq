@@ -60,6 +60,8 @@ somniloq import --full --yes # skip confirmation
 
 Imports Claude Code JSONL from `~/.claude/projects/` and Codex rollout JSONL from `~/.codex/sessions/`. Use `--source all|claude-code|codex` to limit the import target. The default is `all`.
 
+`--full` always clears the whole somniloq DB before re-importing. If you run `somniloq import --source codex --full`, Claude Code rows are deleted too, then only Codex logs are imported.
+
 ### backfill
 
 ```bash

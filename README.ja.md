@@ -58,6 +58,8 @@ somniloq import --full --yes # 確認なしで全件再取り込み
 
 Claude Code の JSONL を `~/.claude/projects/` から、Codex の rollout JSONL を `~/.codex/sessions/` から取り込む。対象を絞る場合は `--source all|claude-code|codex` を使う。デフォルトは `all`。
 
+`--full` は再取り込み前に somniloq DB 全体を削除する。`somniloq import --source codex --full` を実行した場合も Claude Code の行は削除され、その後 Codex のログだけを取り込む。
+
 ### backfill
 
 ```bash

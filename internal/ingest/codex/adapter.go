@@ -62,6 +62,7 @@ func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileS
 		return offset, errors.New("resolve repo path is nil")
 	}
 
+	// Incremental imports reuse session_meta recovered from the already-read prefix.
 	meta, hasMeta, lineNumber, err := a.scanPrefix(file.Path, offset)
 	if err != nil {
 		return offset, err
@@ -88,7 +89,6 @@ func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileS
 	}
 	defer tx.Rollback()
 
-	// Incremental imports reuse session_meta recovered from the already-read prefix.
 	hasBody := offset > 0
 
 	for {
