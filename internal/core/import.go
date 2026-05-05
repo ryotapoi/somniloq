@@ -7,6 +7,7 @@ import (
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
 	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
+	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
 
 type ImportResult struct {
@@ -24,6 +25,10 @@ type ImportOptions struct {
 
 func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 	return importWithAdapter(db, opts.Full, opts.ProjectsDir, claudecode.NewAdapter(ResolveRepoPath))
+}
+
+func ImportCodex(db *DB, opts ImportOptions) (*ImportResult, error) {
+	return importWithAdapter(db, opts.Full, opts.ProjectsDir, codex.NewAdapter(ResolveRepoPath))
 }
 
 func importWithAdapter(db *DB, full bool, rootDir string, adapter ingest.Adapter) (*ImportResult, error) {

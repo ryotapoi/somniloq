@@ -149,6 +149,38 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	}
 }
 
+func TestImportCodex_UsesCodexAdapter(t *testing.T) {
+	db := testDB(t)
+	root := t.TempDir()
+	nested := filepath.Join(root, "2026", "05", "01")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+
+	jsonl := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-public","timestamp":"2026-05-01T00:00:00.000Z","cwd":"/nonexistent/codex-public","cli_version":"0.128.0"}}
+{"timestamp":"2026-05-01T00:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
+`
+	if err := os.WriteFile(filepath.Join(nested, "rollout-public.jsonl"), []byte(jsonl), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	result, err := ImportCodex(db, ImportOptions{ProjectsDir: root})
+	if err != nil {
+		t.Fatalf("ImportCodex failed: %v", err)
+	}
+	if result.FilesImported != 1 || result.FilesScanned != 1 || len(result.Errors) != 0 {
+		t.Fatalf("ImportCodex result: %+v", result)
+	}
+
+	var count int
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE source='codex' AND session_id='codex-public'").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
+	if count != 1 {
+		t.Errorf("messages: got %d, want 1", count)
+	}
+}
+
 func TestCodexProcessFile_MetaOnlyDoesNotAdvanceImportState(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
