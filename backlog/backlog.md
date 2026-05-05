@@ -10,4 +10,4 @@
 - [x] 共通スキーマ型・adapter interface 定義 + 既存 Claude Code ingest の adapter 化（`internal/ingest/` に `Adapter` interface と `NormalizedRecord` 等の共通型を切り、現 `internal/core/import.go` の `processFile` を `internal/ingest/claudecode/` に移して Adapter として再構成。interface は実装と一緒に磨く前提で 1 タスクに統合。挙動は変えない）
 - [x] Codex adapter 実装（`internal/ingest/codex/`、`response_item` + `payload.type == "message"` + `role in ("user","assistant")` のみ。`session_meta.payload.cwd` から repo_path 解決、`(rollout_path, line_number)` ベースの一意性）
 - [x] CLI: `somniloq import-codex` サブコマンド追加（`somniloq import` は Claude Code 用のまま）。Codex のデフォルトパスは `~/.codex/sessions/`
-- [ ] ドキュメント更新（README、scope.md、新 ADR で Codex 対応方針と複合主キー設計を記録）
+- [x] ドキュメント更新（README、scope.md、新 ADR で Codex 対応方針と複合主キー設計を記録）

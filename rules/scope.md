@@ -23,10 +23,14 @@ source（`claude_code` / `codex`）ごとに専用の adapter で取り込む。
 
 #### Codex 用（`somniloq import-codex`）
 
-- `~/.codex/sessions/` 配下の rollout JSONL を走査・列挙
+- `~/.codex/sessions/` 配下の日付ディレクトリを再帰走査し、rollout JSONL を列挙
 - 各 JSONL を行単位で読み、`response_item` かつ `payload.type == "message"` かつ `role in ("user", "assistant")` のレコードのみを取り込み対象とする
+- `payload.content` は `input_text` / `output_text` / `text` block の `text` のみを抽出し、複数 block は空行区切りで結合する
+- `session_id` は `session_meta.payload.id` を使う。ファイル名 stem は走査時の補助 ID に留める
 - `session_meta.payload.cwd` から `repo_path` を解決して sessions に保存（解決ロジックは Claude Code 側と共有）
-- 一意性は `(rollout_path, line_number)` ベースで判定（Codex のレコードは Claude Code のような UUID を持たないため）
+- `git_branch` は `session_meta.payload.git.branch`、`version` は `session_meta.payload.cli_version` から保存する
+- `messages.uuid` の一意性は `(rollout_path, line_number)` ベースで判定（Codex のレコードは Claude Code のような UUID を持たないため）
+- 差分取り込みで追記分だけを読む場合も、offset 直前までの `session_meta` を先に読み直して session メタデータを復元する
 - 差分取り込み・`--full` 等のオプション体系は `import` と揃える
 
 ### バックフィル（backfill）
@@ -122,7 +126,7 @@ somniloq --version                          # バージョン表示
 -- セッション単位のメタデータ
 CREATE TABLE sessions (
     source TEXT NOT NULL,         -- 'claude_code' or 'codex'
-    session_id TEXT NOT NULL,     -- Claude Code は UUID、Codex は rollout 内で一意となる ID
+    session_id TEXT NOT NULL,     -- Claude Code は UUID、Codex は session_meta.payload.id
     cwd TEXT,                     -- 作業ディレクトリ。会話レコードでは通常非空
     repo_path TEXT,               -- ResolveRepoPath（internal/core/repo_path.go）で解決したリポジトリパス。会話セッションでは通常非空
     git_branch TEXT,
