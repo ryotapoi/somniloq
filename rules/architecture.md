@@ -32,6 +32,13 @@ cmd/somniloq → internal/core → internal/ingest/...
 
 source 別 JSONL 形式の差異は `internal/ingest/<source>/` に閉じ込める。DB スキーマ・SQL・検索は `internal/core` に残す。
 
+分割は YAGNI と責務境界を分けて判断する。
+
+- 未来の可能性だけで空に近いパッケージや汎用 abstraction を作らない。
+- 一方で、概念として独立しており、依存方向をコンパイラで固定したい境界は、小さくても分割してよい。
+- 「小さいから同居させる」は、責務名・公開 API・依存方向が明確な場合に限る。小さいことは雑に置いてよい理由にはしない。
+- 分割を見送る場合も、パッケージ境界・公開 interface・テストで責務を明確に保つ。
+
 追加分割を検討する目安:
 
 - `internal/core` / `internal/ingest` のどちらかで責務の異なるグループが明確になった場合
