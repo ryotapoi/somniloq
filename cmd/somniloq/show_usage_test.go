@@ -23,7 +23,7 @@ func TestShowUsageSessionIDFormFlagsFirst(t *testing.T) {
 	idx := strings.Index(line, "<session-id>")
 	head, tail := line[:idx], line[idx+len("<session-id>"):]
 
-	for _, f := range []string{"--turn", "--tail", "--summary", "--include-clear", "--short"} {
+	for _, f := range []string{"--turn", "--tail", "--summary", "--include-clear", "--short", "--format"} {
 		if !strings.Contains(head, f) {
 			t.Errorf("%s must appear before <session-id>: line=%q", f, line)
 		}

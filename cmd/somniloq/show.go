@@ -10,8 +10,8 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const showUsageLine = "somniloq show [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] <session-id>\n" +
-	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short]"
+const showUsageLine = "somniloq show [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>] <session-id>\n" +
+	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>]"
 
 // showCmd runs the show subcommand without calling os.Exit, so it can be
 // tested directly.
