@@ -41,7 +41,7 @@ func TestResolveTimeFlag(t *testing.T) {
 
 func TestBuildSessionFilter_SinceAfterUntil(t *testing.T) {
 	// Use dates far apart so TZ offset cannot invert the ordering.
-	_, err := buildSessionFilter("2027-01-01", "2026-01-01", "")
+	_, err := buildSessionFilter("2027-01-01", "2026-01-01", "", config{})
 	if err == nil {
 		t.Error("expected error for since >= until, got nil")
 	}

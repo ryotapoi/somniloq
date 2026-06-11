@@ -7,7 +7,9 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-func buildSessionFilter(since, until, project string) (core.SessionFilter, error) {
+// buildSessionFilter resolves the time flags and expands the --project value
+// through the config's alias groups, so callers cannot forget the expansion.
+func buildSessionFilter(since, until, project string, cfg config) (core.SessionFilter, error) {
 	now := time.Now().UTC()
 	var filter core.SessionFilter
 	if since != "" {
@@ -27,7 +29,7 @@ func buildSessionFilter(since, until, project string) (core.SessionFilter, error
 	if filter.Since != "" && filter.Until != "" && filter.Since >= filter.Until {
 		return filter, fmt.Errorf("--since must be before --until")
 	}
-	filter.Project = project
+	filter.Projects = cfg.expandProject(project)
 	return filter, nil
 }
 

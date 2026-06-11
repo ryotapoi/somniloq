@@ -12,7 +12,7 @@ func TestShowCmd_TurnRange(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--turn", "2", "sess-1"}, staticDB(db), &out, &errOut)
+	code, err := showCmd([]string{"--turn", "2", "sess-1"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -31,7 +31,7 @@ func TestShowCmd_Tail(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--tail", "1", "sess-1"}, staticDB(db), &out, &errOut)
+	code, err := showCmd([]string{"--tail", "1", "sess-1"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -50,7 +50,7 @@ func TestShowCmd_TurnRangeKeepsAssistantReplies(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--turn", "1", "sess-1"}, staticDB(db), &out, &errOut)
+	code, err := showCmd([]string{"--turn", "1", "sess-1"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestShowCmd_TurnFilterAppliesPerSessionInBulkMode(t *testing.T) {
 	insertOutlineMessage(t, db, "sess-2", "o1", "user", "only question", "2026-03-29T09:00:00Z", false)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--since", "2020-01-01", "--tail", "1"}, staticDB(db), &out, &errOut)
+	code, err := showCmd([]string{"--since", "2020-01-01", "--tail", "1"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -116,7 +116,7 @@ func TestShowCmd_TurnFlagErrors(t *testing.T) {
 	}
 	for _, tt := range tests {
 		var out, errOut bytes.Buffer
-		code, err := showCmd(tt.args, openDB, &out, &errOut)
+		code, err := showCmd(tt.args, openDB, config{}, &out, &errOut)
 		if code != 1 {
 			t.Errorf("%s: exit code = %d, want 1", tt.name, code)
 		}

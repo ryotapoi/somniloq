@@ -18,7 +18,7 @@ const snippetContext = 40
 
 // searchCmd runs the search subcommand without calling os.Exit, so it can be
 // tested directly.
-func searchCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writer) (int, error) {
+func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	since := fs.String("since", "", "filter by message time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter messages before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
@@ -41,7 +41,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Wr
 		return 1, nil
 	}
 
-	filter, err := buildSessionFilter(*since, *until, *project)
+	filter, err := buildSessionFilter(*since, *until, *project, cfg)
 	if err != nil {
 		return 1, err
 	}

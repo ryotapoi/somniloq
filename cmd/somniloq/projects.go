@@ -31,7 +31,7 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), out, errOut io.
 		return 1, nil
 	}
 
-	filter, err := buildSessionFilter(*since, *until, "")
+	filter, err := buildSessionFilter(*since, *until, "", config{})
 	if err != nil {
 		return 1, err
 	}

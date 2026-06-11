@@ -62,7 +62,7 @@ func TestSearchMessages_TimeFilterUsesMessageTimestamp(t *testing.T) {
 func TestSearchMessages_ProjectFilter(t *testing.T) {
 	db := newSearchTestDB(t)
 
-	rows, err := db.SearchMessages(SessionFilter{Project: "Brimday"}, "auth")
+	rows, err := db.SearchMessages(SessionFilter{Projects: []string{"Brimday"}}, "auth")
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -73,6 +73,20 @@ func TestSearchMessages_ProjectFilter(t *testing.T) {
 		if r.SessionID != "s1" {
 			t.Errorf("unexpected session %q in Brimday results", r.SessionID)
 		}
+	}
+}
+
+// Multiple patterns come from project-alias expansion: a row matches when
+// ANY pattern matches (OR), not when all do.
+func TestSearchMessages_MultipleProjectsMatchAny(t *testing.T) {
+	db := newSearchTestDB(t)
+
+	rows, err := db.SearchMessages(SessionFilter{Projects: []string{"Brimday", "somniloq"}}, "auth")
+	if err != nil {
+		t.Fatalf("SearchMessages: %v", err)
+	}
+	if len(rows) != 3 {
+		t.Fatalf("rows = %d, want 3 (both projects, sidechain excluded): %+v", len(rows), rows)
 	}
 }
 

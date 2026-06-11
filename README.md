@@ -159,11 +159,26 @@ Output is TSV: `session_id`, `time`, `snippet` (the text around the first match)
 - Strings are raw values (no tab/newline sanitizing; JSON escaping covers it). `title` is the raw custom title with no session-id fallback.
 - `project` honors `--short`; without it you get the raw `repo_path`.
 
+## Configuration
+
+Optional config file at `~/.somniloq/config.json` (override with the global `--config` flag). A missing file is fine; broken JSON is an error.
+
+```json
+{
+  "projectAliases": {
+    "newname": ["oldname"]
+  }
+}
+```
+
+`projectAliases` groups project names that refer to the same project over time (e.g. a renamed repository): current name → old names. When a `--project` value exactly matches any name in a group, the filter expands to the whole group, so sessions recorded under either name are found. Non-matching values behave as before. Applies to `sessions`, `show`, and `search`; the `projects` listing still shows each `repo_path` as its own row.
+
 ## Common Options
 
 | Option | Description | Default |
 |--------|-------------|---------|
 | `--db <path>` | Path to SQLite database | `~/.somniloq/somniloq.db` |
+| `--config <path>` | Path to config file (JSON) | `~/.somniloq/config.json` |
 | `--version` | Print version and exit | — |
 
 > Requires SQLite 3.35 or later (for `ALTER TABLE ... DROP COLUMN`). The bundled `modernc.org/sqlite` driver ships with a recent SQLite, so no separate install is needed.

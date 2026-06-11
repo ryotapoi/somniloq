@@ -15,7 +15,7 @@ const showUsageLine = "somniloq show [--turn <N|N..M>] [--tail <N>] [--summary <
 
 // showCmd runs the show subcommand without calling os.Exit, so it can be
 // tested directly.
-func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writer) (int, error) {
+func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs := flag.NewFlagSet("show", flag.ContinueOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
@@ -141,7 +141,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 	}
 
 	// --since/--until mode
-	filter, err := buildSessionFilter(*since, *until, *project)
+	filter, err := buildSessionFilter(*since, *until, *project, cfg)
 	if err != nil {
 		return 1, err
 	}

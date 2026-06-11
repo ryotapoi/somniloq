@@ -32,6 +32,7 @@ Always run `somniloq import` first if the user might have new sessions since the
 | Flag | Default | Description |
 |------|---------|-------------|
 | `--db <path>` | `~/.somniloq/somniloq.db` | Override the database path. Must come **before** the subcommand. |
+| `--config <path>` | `~/.somniloq/config.json` | Override the config file path (project aliases). Must come **before** the subcommand. |
 | `--version` | — | Print version and exit. |
 
 ```bash
@@ -353,5 +354,6 @@ somniloq show "$(somniloq sessions --since 24h | head -1 | cut -f1)"
 - **Sidechain messages** (subagent conversations) are excluded from `show`.
 - **Empty messages** (tool_use-only turns with no text) are excluded at import time.
 - **`--project`** is a substring match against `repo_path` — `--project app` matches `myapp` and `app-server`. Slash-spanning queries (e.g. `--project Sources/ryot`) also work.
+- **Project aliases**: `~/.somniloq/config.json` can map a renamed project's current name to its old names (`"projectAliases": {"newname": ["oldname"]}`). A `--project` value that exactly matches any name in a group expands to the whole group, so sessions recorded under either name are found.
 - **All timestamps** in output are local time.
 - Every subcommand supports `--help` for a quick flag reference.

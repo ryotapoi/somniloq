@@ -24,7 +24,7 @@ func TestSessionsCmd_OutputColumns(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := sessionsCmd(nil, staticDB(db), &out, &errOut)
+	code, err := sessionsCmd(nil, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("sessionsCmd: %v", err)
 	}

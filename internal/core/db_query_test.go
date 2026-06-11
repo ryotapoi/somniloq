@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 func TestListSessions_Empty(t *testing.T) {
 	db := testDB(t)
@@ -151,7 +154,7 @@ func TestListSessions_ProjectFilter(t *testing.T) {
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s2", RepoPath: "/Users/test/somniloq", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	rows, err := db.ListSessions(SessionFilter{Project: "Brimday"})
+	rows, err := db.ListSessions(SessionFilter{Projects: []string{"Brimday"}})
 	if err != nil {
 		t.Fatalf("ListSessions failed: %v", err)
 	}
@@ -229,7 +232,7 @@ func TestListSessions_ProjectFilter_LikeMetacharKnownLimitation(t *testing.T) {
 		StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 
-	rows, err := db.ListSessions(SessionFilter{Project: "Brim%day"})
+	rows, err := db.ListSessions(SessionFilter{Projects: []string{"Brim%day"}})
 	if err != nil {
 		t.Fatalf("ListSessions failed: %v", err)
 	}
@@ -248,7 +251,7 @@ func TestListSessions_ProjectFilter_SlashSpan(t *testing.T) {
 		StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"))
 
-	rows, err := db.ListSessions(SessionFilter{Project: "Sources/ryot"})
+	rows, err := db.ListSessions(SessionFilter{Projects: []string{"Sources/ryot"}})
 	if err != nil {
 		t.Fatalf("ListSessions failed: %v", err)
 	}
@@ -257,6 +260,34 @@ func TestListSessions_ProjectFilter_SlashSpan(t *testing.T) {
 	}
 	if rows[0].SessionID != "s1" {
 		t.Errorf("expected s1, got %s", rows[0].SessionID)
+	}
+}
+
+// Multiple patterns come from project-alias expansion: a row matches when
+// ANY pattern matches (OR), not when all do.
+func TestListSessions_MultipleProjectsMatchAny(t *testing.T) {
+	db := testDB(t)
+
+	for i, repoPath := range []string{"/Users/test/somniloq", "/Users/test/Brimday", "/Users/test/other"} {
+		must(t, db.UpsertSession(SessionMeta{
+			Source:    SourceClaudeCode,
+			SessionID: fmt.Sprintf("s%d", i+1),
+			RepoPath:  repoPath,
+			StartedAt: "2026-03-28T10:00:00Z",
+		}, "2026-03-28T15:00:00Z"))
+	}
+
+	rows, err := db.ListSessions(SessionFilter{Projects: []string{"somniloq", "Brimday"}})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("expected 2 rows (either project matches), got %d", len(rows))
+	}
+	for _, r := range rows {
+		if r.SessionID == "s3" {
+			t.Errorf("s3 (other) must not match")
+		}
 	}
 }
 
@@ -283,7 +314,7 @@ func TestListSessions_ProjectFilter_RepoPathOnly(t *testing.T) {
 	}, "2026-03-28T15:00:00Z"))
 
 	t.Run("repo-only", func(t *testing.T) {
-		rows, err := db.ListSessions(SessionFilter{Project: "UniqRepo"})
+		rows, err := db.ListSessions(SessionFilter{Projects: []string{"UniqRepo"}})
 		if err != nil {
 			t.Fatalf("ListSessions failed: %v", err)
 		}
@@ -295,7 +326,7 @@ func TestListSessions_ProjectFilter_RepoPathOnly(t *testing.T) {
 		}
 	})
 	t.Run("both", func(t *testing.T) {
-		rows, err := db.ListSessions(SessionFilter{Project: "Common"})
+		rows, err := db.ListSessions(SessionFilter{Projects: []string{"Common"}})
 		if err != nil {
 			t.Fatalf("ListSessions failed: %v", err)
 		}
@@ -307,7 +338,7 @@ func TestListSessions_ProjectFilter_RepoPathOnly(t *testing.T) {
 		}
 	})
 	t.Run("unrelated repo_path", func(t *testing.T) {
-		rows, err := db.ListSessions(SessionFilter{Project: "UniqProj"})
+		rows, err := db.ListSessions(SessionFilter{Projects: []string{"UniqProj"}})
 		if err != nil {
 			t.Fatalf("ListSessions failed: %v", err)
 		}
@@ -324,7 +355,7 @@ func TestListSessions_CombinedFilter(t *testing.T) {
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "new-brim", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "new-somniloq", RepoPath: "/Users/test/somniloq", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	rows, err := db.ListSessions(SessionFilter{Since: "2026-03-28T00:00:00Z", Project: "Brimday"})
+	rows, err := db.ListSessions(SessionFilter{Since: "2026-03-28T00:00:00Z", Projects: []string{"Brimday"}})
 	if err != nil {
 		t.Fatalf("ListSessions failed: %v", err)
 	}

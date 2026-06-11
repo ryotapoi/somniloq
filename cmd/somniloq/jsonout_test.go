@@ -33,7 +33,7 @@ func TestSessionsCmd_FormatJSON(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := sessionsCmd([]string{"--format", "json"}, staticDB(db), &out, &errOut)
+	code, err := sessionsCmd([]string{"--format", "json"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("sessionsCmd: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "sess-1"}, staticDB(db), &out, &errOut)
+	code, err := showCmd([]string{"--format", "json", "sess-1"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -159,7 +159,7 @@ func TestShowCmd_FormatJSON_TurnFilter(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "--turn", "2", "sess-1"}, staticDB(db), &out, &errOut)
+	code, err := showCmd([]string{"--format", "json", "--turn", "2", "sess-1"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -181,7 +181,7 @@ func TestShowCmd_FormatJSON_EmptyBulk(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "--since", "2031-01-01"}, staticDB(db), &out, &errOut)
+	code, err := showCmd([]string{"--format", "json", "--since", "2031-01-01"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -205,7 +205,7 @@ func TestFormatFlag_Unknown(t *testing.T) {
 	}{
 		{"sessions", func() (int, error) {
 			var out, errOut bytes.Buffer
-			return sessionsCmd([]string{"--format", "xml"}, openDB, &out, &errOut)
+			return sessionsCmd([]string{"--format", "xml"}, openDB, config{}, &out, &errOut)
 		}},
 		{"projects", func() (int, error) {
 			var out, errOut bytes.Buffer
@@ -217,7 +217,7 @@ func TestFormatFlag_Unknown(t *testing.T) {
 		}},
 		{"show", func() (int, error) {
 			var out, errOut bytes.Buffer
-			return showCmd([]string{"--format", "xml", "sess-1"}, openDB, &out, &errOut)
+			return showCmd([]string{"--format", "xml", "sess-1"}, openDB, config{}, &out, &errOut)
 		}},
 	}
 	for _, tt := range tests {

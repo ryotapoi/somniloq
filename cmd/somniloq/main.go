@@ -18,10 +18,12 @@ func main() {
 	}
 
 	defaultDB := filepath.Join(homeDir, ".somniloq", "somniloq.db")
+	defaultConfig := filepath.Join(homeDir, ".somniloq", "config.json")
 	defaultProjectsDir := filepath.Join(homeDir, ".claude", "projects")
 	defaultCodexSessionsDir := filepath.Join(homeDir, ".codex", "sessions")
 
 	dbPath := flag.String("db", defaultDB, "path to SQLite database")
+	configPath := flag.String("config", defaultConfig, "path to config file (JSON)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Usage = func() {
 		fmt.Fprint(os.Stderr, `Session log viewer for Claude Code and Codex
@@ -60,6 +62,12 @@ Flags:
 		return openDB(*dbPath)
 	}
 
+	cfg, err := loadConfig(*configPath)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "error: %v\n", err)
+		os.Exit(1)
+	}
+
 	var code int
 	var cmdErr error
 	switch args[0] {
@@ -68,13 +76,13 @@ Flags:
 	case "backfill":
 		code, cmdErr = backfillCmd(args[1:], open, os.Stdin, os.Stdout, os.Stderr, isTTY)
 	case "sessions":
-		code, cmdErr = sessionsCmd(args[1:], open, os.Stdout, os.Stderr)
+		code, cmdErr = sessionsCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	case "show":
-		code, cmdErr = showCmd(args[1:], open, os.Stdout, os.Stderr)
+		code, cmdErr = showCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	case "outline":
 		code, cmdErr = outlineCmd(args[1:], open, os.Stdout, os.Stderr)
 	case "search":
-		code, cmdErr = searchCmd(args[1:], open, os.Stdout, os.Stderr)
+		code, cmdErr = searchCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	case "projects":
 		code, cmdErr = projectsCmd(args[1:], open, os.Stdout, os.Stderr)
 	default:

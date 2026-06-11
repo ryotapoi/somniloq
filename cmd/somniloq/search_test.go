@@ -14,7 +14,7 @@ func TestSearchCmd_OutputColumns(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := searchCmd([]string{"second"}, staticDB(db), &out, &errOut)
+	code, err := searchCmd([]string{"second"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("searchCmd: %v", err)
 	}
@@ -33,7 +33,7 @@ func TestSearchCmd_ExcludesSidechain(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := searchCmd([]string{"sidechain"}, staticDB(db), &out, &errOut)
+	code, err := searchCmd([]string{"sidechain"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("searchCmd: %v", err)
 	}
@@ -49,7 +49,7 @@ func TestSearchCmd_MissingQueryPrintsUsage(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := searchCmd(nil, staticDB(db), &out, &errOut)
+	code, err := searchCmd(nil, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("searchCmd: %v", err)
 	}
@@ -68,7 +68,7 @@ func TestSearchCmd_TooManyArguments(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := searchCmd([]string{"one", "two"}, openDB, &out, &errOut)
+	code, err := searchCmd([]string{"one", "two"}, openDB, config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("searchCmd: %v", err)
 	}

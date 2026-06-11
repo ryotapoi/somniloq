@@ -294,9 +294,12 @@ type SessionRow struct {
 }
 
 type SessionFilter struct {
-	Since   string // RFC3339 UTC string. Empty = no filter.
-	Until   string // RFC3339 UTC string. Empty = no filter. Exclusive upper bound.
-	Project string // Empty = no filter.
+	Since string // RFC3339 UTC string. Empty = no filter.
+	Until string // RFC3339 UTC string. Empty = no filter. Exclusive upper bound.
+	// Projects holds repo_path substring patterns; a row matches when ANY
+	// pattern matches (project aliases expand one --project value into the
+	// whole alias group). Empty = no filter.
+	Projects []string
 }
 
 // sessionRowSelect is the SELECT/FROM head shared by every query that
@@ -346,8 +349,8 @@ func scanSessionRows(rows *sql.Rows) ([]SessionRow, error) {
 }
 
 // timeFilterConditions returns started_at range conditions for filter.Since /
-// filter.Until. filter.Project is intentionally not handled here: only
-// ListSessions supports it.
+// filter.Until. filter.Projects is intentionally not handled here: only
+// ListSessions and SearchMessages support it (via projectsCondition).
 func timeFilterConditions(filter SessionFilter) (conditions []string, args []any) {
 	if filter.Since != "" {
 		conditions = append(conditions, "s.started_at >= ?")
@@ -360,13 +363,28 @@ func timeFilterConditions(filter SessionFilter) (conditions []string, args []any
 	return conditions, args
 }
 
+// projectsCondition builds the repo_path substring condition for
+// filter.Projects: one LIKE per pattern, OR-joined so any alias-group name
+// matches. Returns "" when no patterns are given.
+func projectsCondition(projects []string) (condition string, args []any) {
+	if len(projects) == 0 {
+		return "", nil
+	}
+	likes := make([]string, len(projects))
+	for i, p := range projects {
+		likes[i] = "COALESCE(s.repo_path, '') LIKE '%' || ? || '%'"
+		args = append(args, p)
+	}
+	return "(" + strings.Join(likes, " OR ") + ")", args
+}
+
 func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	query := sessionRowSelect
 
 	conditions, args := timeFilterConditions(filter)
-	if filter.Project != "" {
-		conditions = append(conditions, "COALESCE(s.repo_path, '') LIKE '%' || ? || '%'")
-		args = append(args, filter.Project)
+	if cond, condArgs := projectsCondition(filter.Projects); cond != "" {
+		conditions = append(conditions, cond)
+		args = append(args, condArgs...)
 	}
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
@@ -386,6 +404,8 @@ type ProjectRow struct {
 	SessionCount int
 }
 
+// ListProjects deliberately ignores filter.Projects: the listing shows each
+// repo_path as its own row, without project-alias aggregation (ADR 0014).
 func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	query := `SELECT COALESCE(MIN(s.repo_path), ''), COUNT(*)
 	FROM sessions s`
@@ -560,9 +580,9 @@ func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, er
 		q += " AND m.timestamp < ?"
 		args = append(args, filter.Until)
 	}
-	if filter.Project != "" {
-		q += " AND COALESCE(s.repo_path, '') LIKE '%' || ? || '%'"
-		args = append(args, filter.Project)
+	if cond, condArgs := projectsCondition(filter.Projects); cond != "" {
+		q += " AND " + cond
+		args = append(args, condArgs...)
 	}
 	q += " ORDER BY m.timestamp DESC, m.rowid DESC"
 
