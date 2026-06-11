@@ -33,12 +33,38 @@ const (
 	ImportSourceCodex      ImportSource = "codex"
 )
 
+// importSourceSpec ties a concrete ImportSource to its adapter constructor
+// and to the ImportOptions field that carries its scan root. Adding a new
+// source means adding a constant, a table entry, an ImportOptions field, and
+// the CLI side in cmd/somniloq (default directory wiring plus the hand-written
+// source lists in usage/help/error strings).
+// ImportSourceAll is intentionally not listed: it means "every entry in this
+// table".
+type importSourceSpec struct {
+	source     ImportSource
+	newAdapter func() ingest.Adapter
+	rootDir    func(opts ImportOptions) string
+}
+
+var importSourceSpecs = []importSourceSpec{
+	{
+		source:     ImportSourceClaudeCode,
+		newAdapter: func() ingest.Adapter { return claudecode.NewAdapter(ResolveRepoPath) },
+		rootDir:    func(opts ImportOptions) string { return opts.ProjectsDir },
+	},
+	{
+		source:     ImportSourceCodex,
+		newAdapter: func() ingest.Adapter { return codex.NewAdapter(ResolveRepoPath) },
+		rootDir:    func(opts ImportOptions) string { return opts.CodexSessionsDir },
+	},
+}
+
 func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 	source := opts.Source
 	if source == "" {
 		source = ImportSourceAll
 	}
-	if !source.valid() {
+	if !source.Valid() {
 		return nil, fmt.Errorf("unknown import source: %s", source)
 	}
 	if opts.Full {
@@ -48,41 +74,31 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 	}
 
 	result := &ImportResult{}
-	switch source {
-	case ImportSourceAll:
-		claudeResult, err := importWithAdapter(db, opts.ProjectsDir, claudecode.NewAdapter(ResolveRepoPath))
+	for _, spec := range importSourceSpecs {
+		if source != ImportSourceAll && source != spec.source {
+			continue
+		}
+		r, err := importWithAdapter(db, spec.rootDir(opts), spec.newAdapter())
 		if err != nil {
 			return nil, err
 		}
-		result.add(claudeResult)
-		codexResult, err := importWithAdapter(db, opts.CodexSessionsDir, codex.NewAdapter(ResolveRepoPath))
-		if err != nil {
-			return nil, err
-		}
-		result.add(codexResult)
-	case ImportSourceClaudeCode:
-		claudeResult, err := importWithAdapter(db, opts.ProjectsDir, claudecode.NewAdapter(ResolveRepoPath))
-		if err != nil {
-			return nil, err
-		}
-		result.add(claudeResult)
-	case ImportSourceCodex:
-		codexResult, err := importWithAdapter(db, opts.CodexSessionsDir, codex.NewAdapter(ResolveRepoPath))
-		if err != nil {
-			return nil, err
-		}
-		result.add(codexResult)
+		result.add(r)
 	}
 	return result, nil
 }
 
-func (s ImportSource) valid() bool {
-	switch s {
-	case ImportSourceAll, ImportSourceClaudeCode, ImportSourceCodex:
+// Valid reports whether s is ImportSourceAll or one of the sources listed in
+// importSourceSpecs.
+func (s ImportSource) Valid() bool {
+	if s == ImportSourceAll {
 		return true
-	default:
-		return false
 	}
+	for _, spec := range importSourceSpecs {
+		if s == spec.source {
+			return true
+		}
+	}
+	return false
 }
 
 func (r *ImportResult) add(other *ImportResult) {

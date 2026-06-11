@@ -66,14 +66,9 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 }
 
 func parseImportSource(value string) (core.ImportSource, error) {
-	switch value {
-	case string(core.ImportSourceAll):
-		return core.ImportSourceAll, nil
-	case string(core.ImportSourceClaudeCode):
-		return core.ImportSourceClaudeCode, nil
-	case string(core.ImportSourceCodex):
-		return core.ImportSourceCodex, nil
-	default:
+	source := core.ImportSource(value)
+	if !source.Valid() {
 		return "", fmt.Errorf("invalid --source %q (want all, claude-code, or codex)", value)
 	}
+	return source, nil
 }
