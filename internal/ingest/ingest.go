@@ -55,13 +55,14 @@ type NormalizedRecord struct {
 	Message NormalizedMessage
 }
 
-// ImportTransaction is the persistence surface adapters need while processing
-// one file. internal/core owns the SQLite implementation behind this interface.
+// ImportTransaction is the source-neutral persistence surface adapters need
+// while processing one file. internal/core owns the SQLite implementation
+// behind this interface. Source-specific writes (e.g. claude-code session
+// titles) live in extension interfaces next to the adapter that needs them,
+// asserted against the concrete transaction.
 type ImportTransaction interface {
 	UpsertSession(meta SessionMeta, importedAt string) error
 	InsertMessage(msg NormalizedMessage) error
-	UpdateSessionTitle(source Source, sessionID, title, importedAt string) error
-	UpdateSessionAgentName(source Source, sessionID, agentName, importedAt string) error
 	UpsertImportState(state ImportState) error
 	Commit() error
 	Rollback() error

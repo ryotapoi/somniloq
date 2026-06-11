@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
+	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
 
 	_ "modernc.org/sqlite"
 )
@@ -151,6 +152,10 @@ func (d *DB) BeginImport() (ingest.ImportTransaction, error) {
 type importTx struct {
 	tx *sql.Tx
 }
+
+// importTx must keep satisfying the claude-code-specific extension interface
+// that claudecode's Flush asserts for at runtime.
+var _ claudecode.SessionMetaWriter = importTx{}
 
 func (t importTx) UpsertSession(meta ingest.SessionMeta, importedAt string) error {
 	return upsertSession(t.tx, meta, importedAt)

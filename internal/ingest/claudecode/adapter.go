@@ -1,11 +1,9 @@
 package claudecode
 
 import (
-	"bufio"
 	"bytes"
 	"errors"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -63,124 +61,99 @@ func (a Adapter) ScanFiles(projectsDir string) ([]ingest.File, error) {
 	return files, nil
 }
 
+// SessionMetaWriter is the claude-code-specific persistence surface for
+// custom-title / agent-name records buffered during a file pass. The shared
+// ingest.ImportTransaction stays source-neutral; the concrete transaction in
+// internal/core implements this interface and Flush asserts for it.
+type SessionMetaWriter interface {
+	UpdateSessionTitle(source ingest.Source, sessionID, title, importedAt string) error
+	UpdateSessionAgentName(source ingest.Source, sessionID, agentName, importedAt string) error
+}
+
+// fileHandler holds the per-file state of one ProcessFile pass.
+type fileHandler struct {
+	resolveRepoPath ingest.RepoResolver
+	importedAt      string
+	repoCache       map[string]string
+	titles          map[string]string
+	agentNames      map[string]string
+}
+
 func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileSize int64, importedAt string) (int64, error) {
 	if a.resolveRepoPath == nil {
 		return offset, errors.New("resolve repo path is nil")
 	}
-
-	f, err := os.Open(file.Path)
-	if err != nil {
-		return offset, err
+	h := &fileHandler{
+		resolveRepoPath: a.resolveRepoPath,
+		importedAt:      importedAt,
+		repoCache:       map[string]string{},
+		titles:          map[string]string{},
+		agentNames:      map[string]string{},
 	}
-	defer f.Close()
+	return ingest.ProcessJSONL(store, ingest.SourceClaudeCode, h, file, offset, fileSize, importedAt)
+}
 
-	if offset > 0 {
-		if _, err := f.Seek(offset, io.SeekStart); err != nil {
-			return offset, err
+func (h *fileHandler) Begin(path string, offset int64) error {
+	return nil
+}
+
+func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (bool, error) {
+	trimmed := bytes.TrimSpace(line)
+	if len(trimmed) == 0 {
+		return false, nil
+	}
+
+	rec, perr := ParseRecord(trimmed)
+	if perr != nil {
+		return false, nil
+	}
+
+	switch rec.Type {
+	case "user", "assistant":
+		repo, ok := h.repoCache[rec.CWD]
+		if !ok {
+			repo = h.resolveRepoPath(rec.CWD)
+			h.repoCache[rec.CWD] = repo
+		}
+		normalized, perr := NormalizeRecord(rec, repo)
+		if perr != nil {
+			return false, nil
+		}
+		if uerr := tx.UpsertSession(normalized.Session, h.importedAt); uerr != nil {
+			return false, fmt.Errorf("upsert session: %w", uerr)
+		}
+		if strings.TrimSpace(normalized.Message.Content) == "" {
+			return true, nil
+		}
+		if ierr := tx.InsertMessage(normalized.Message); ierr != nil {
+			return true, fmt.Errorf("insert message: %w", ierr)
+		}
+		return true, nil
+	case "custom-title":
+		h.titles[rec.SessionID] = rec.CustomTitle
+	case "agent-name":
+		h.agentNames[rec.SessionID] = rec.AgentName
+	}
+	return false, nil
+}
+
+func (h *fileHandler) Flush(tx ingest.ImportTransaction) error {
+	if len(h.titles) == 0 && len(h.agentNames) == 0 {
+		return nil
+	}
+	mw, ok := tx.(SessionMetaWriter)
+	if !ok {
+		return fmt.Errorf("transaction %T does not implement claudecode.SessionMetaWriter", tx)
+	}
+	for sid, t := range h.titles {
+		if uerr := mw.UpdateSessionTitle(ingest.SourceClaudeCode, sid, t, h.importedAt); uerr != nil {
+			return fmt.Errorf("flush title: %w", uerr)
 		}
 	}
-
-	reader := bufio.NewReaderSize(f, 64*1024)
-	currentOffset := offset
-
-	tx, err := store.BeginImport()
-	if err != nil {
-		return offset, err
-	}
-	defer tx.Rollback()
-
-	repoCache := map[string]string{}
-	titles := map[string]string{}
-	agentNames := map[string]string{}
-	// Tracks whether any user/assistant record has been seen in this file
-	// (across all imports, since meta-only files don't advance import_state).
-	// If false at EOF, no sessions row exists yet and the buffered title /
-	// agent-name UPDATEs would all be 0-row no-ops, permanently losing the
-	// values. In that case we skip the flush and import_state advance so the
-	// next import re-reads from offset 0.
-	hasBody := offset > 0
-
-	for {
-		line, err := reader.ReadBytes('\n')
-		if len(line) > 0 {
-			currentOffset += int64(len(line))
-			trimmed := bytes.TrimSpace(line)
-			if len(trimmed) == 0 {
-				continue
-			}
-
-			rec, perr := ParseRecord(trimmed)
-			if perr != nil {
-				continue
-			}
-
-			switch rec.Type {
-			case "user", "assistant":
-				repo, ok := repoCache[rec.CWD]
-				if !ok {
-					repo = a.resolveRepoPath(rec.CWD)
-					repoCache[rec.CWD] = repo
-				}
-				normalized, perr := NormalizeRecord(rec, repo)
-				if perr != nil {
-					continue
-				}
-				if uerr := tx.UpsertSession(normalized.Session, importedAt); uerr != nil {
-					return offset, fmt.Errorf("upsert session: %w", uerr)
-				}
-				hasBody = true
-				if strings.TrimSpace(normalized.Message.Content) == "" {
-					continue
-				}
-				if ierr := tx.InsertMessage(normalized.Message); ierr != nil {
-					return offset, fmt.Errorf("insert message: %w", ierr)
-				}
-			case "custom-title":
-				titles[rec.SessionID] = rec.CustomTitle
-			case "agent-name":
-				agentNames[rec.SessionID] = rec.AgentName
-			}
-		}
-
-		if err != nil {
-			if errors.Is(err, io.EOF) {
-				break
-			}
-			return offset, err
+	for sid, name := range h.agentNames {
+		if uerr := mw.UpdateSessionAgentName(ingest.SourceClaudeCode, sid, name, h.importedAt); uerr != nil {
+			return fmt.Errorf("flush agent name: %w", uerr)
 		}
 	}
-
-	if !hasBody {
-		// Meta-only file: no sessions row exists yet, so flushing titles /
-		// agent-names would silently no-op. Skip the flush and the import_state
-		// advance so the next import re-reads these meta records from offset 0
-		// after a body record finally appears.
-		return offset, nil
-	}
-
-	for sid, t := range titles {
-		if uerr := tx.UpdateSessionTitle(ingest.SourceClaudeCode, sid, t, importedAt); uerr != nil {
-			return offset, fmt.Errorf("flush title: %w", uerr)
-		}
-	}
-	for sid, name := range agentNames {
-		if uerr := tx.UpdateSessionAgentName(ingest.SourceClaudeCode, sid, name, importedAt); uerr != nil {
-			return offset, fmt.Errorf("flush agent name: %w", uerr)
-		}
-	}
-
-	if uerr := tx.UpsertImportState(ingest.ImportState{
-		JSONLPath:  file.Path,
-		Source:     ingest.SourceClaudeCode,
-		FileSize:   fileSize,
-		LastOffset: currentOffset,
-		ImportedAt: importedAt,
-	}); uerr != nil {
-		return offset, fmt.Errorf("upsert import state: %w", uerr)
-	}
-
-	if err := tx.Commit(); err != nil {
-		return offset, err
-	}
-	return currentOffset, nil
+	return nil
 }
