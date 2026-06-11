@@ -65,9 +65,9 @@ type fileHandler struct {
 	lineNumber      int
 }
 
-func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileSize int64, importedAt string) (int64, error) {
+func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
 	if a.resolveRepoPath == nil {
-		return offset, errors.New("resolve repo path is nil")
+		return ingest.ProcessResult{NewOffset: offset}, errors.New("resolve repo path is nil")
 	}
 	h := &fileHandler{
 		resolveRepoPath: a.resolveRepoPath,
@@ -111,50 +111,50 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 	return err
 }
 
-func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (bool, error) {
+func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (ingest.LineOutcome, error) {
 	h.lineNumber++
 	trimmed := bytes.TrimSpace(line)
 	if len(trimmed) == 0 {
-		return false, nil
+		return ingest.LineIgnored, nil
 	}
 
 	rec, perr := ParseRecord(trimmed)
 	if perr != nil {
-		return false, nil
+		return ingest.LineUnparsed, nil
 	}
 
 	if rec.Type == "session_meta" {
 		nextMeta, perr := ParseSessionMeta(rec, h.resolveRepoPathFromRecord(rec))
 		if perr != nil {
-			return false, nil
+			return ingest.LineUnparsed, nil
 		}
 		h.meta = *nextMeta
 		h.hasMeta = true
-		return false, nil
+		return ingest.LineIgnored, nil
 	}
 
 	ok, _, perr := IsMessageRecord(rec)
-	if perr != nil || !ok {
-		return false, nil
+	if perr != nil {
+		return ingest.LineUnparsed, nil
 	}
-	if !h.hasMeta {
-		return false, nil
+	if !ok || !h.hasMeta {
+		return ingest.LineIgnored, nil
 	}
 
 	normalized, perr := NormalizeMessage(rec, h.meta, h.path, h.lineNumber)
 	if perr != nil {
-		return false, nil
+		return ingest.LineUnparsed, nil
 	}
 	if uerr := tx.UpsertSession(normalized.Session, h.importedAt); uerr != nil {
-		return false, fmt.Errorf("upsert session: %w", uerr)
+		return ingest.LineIgnored, fmt.Errorf("upsert session: %w", uerr)
 	}
 	if strings.TrimSpace(normalized.Message.Content) == "" {
-		return true, nil
+		return ingest.LineWroteBody, nil
 	}
 	if ierr := tx.InsertMessage(normalized.Message); ierr != nil {
-		return true, fmt.Errorf("insert message: %w", ierr)
+		return ingest.LineWroteBody, fmt.Errorf("insert message: %w", ierr)
 	}
-	return true, nil
+	return ingest.LineWroteBody, nil
 }
 
 func (h *fileHandler) Flush(tx ingest.ImportTransaction) error {

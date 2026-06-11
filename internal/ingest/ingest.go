@@ -83,5 +83,5 @@ type RepoResolver func(cwd string) string
 type Adapter interface {
 	Source() Source
 	ScanFiles(rootDir string) ([]File, error)
-	ProcessFile(store Store, file File, offset, fileSize int64, importedAt string) (int64, error)
+	ProcessFile(store Store, file File, offset, fileSize int64, importedAt string) (ProcessResult, error)
 }

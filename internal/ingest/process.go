@@ -10,6 +10,31 @@ import (
 
 const readBufferSize = 64 * 1024
 
+// LineOutcome describes how a FileHandler consumed one line.
+type LineOutcome int
+
+const (
+	// LineIgnored means the line was understood and intentionally not stored:
+	// blank lines, metadata buffered for a later flush, or record types the
+	// source deliberately does not import.
+	LineIgnored LineOutcome = iota
+	// LineWroteBody means the line wrote a sessions row. It is reported per
+	// line, so returning it repeatedly is expected.
+	LineWroteBody
+	// LineUnparsed means the line could not be parsed or normalized and was
+	// dropped. ProcessJSONL counts these so imports can report them.
+	LineUnparsed
+)
+
+// ProcessResult reports the outcome of processing one file.
+type ProcessResult struct {
+	// NewOffset is the import cursor after this pass; on error or when no
+	// body record exists yet it stays at the old offset.
+	NewOffset int64
+	// UnparsedLines counts lines dropped as LineUnparsed during this pass.
+	UnparsedLines int
+}
+
 // FileHandler is the source-specific part of processing one JSONL file.
 // ProcessJSONL owns the shared skeleton (open, seek, offset tracking,
 // transaction lifecycle, import_state advance); the handler owns record
@@ -19,10 +44,10 @@ type FileHandler interface {
 	// any line is handled. Sources without resume state return nil.
 	Begin(path string, offset int64) error
 	// HandleLine receives each raw line including blank ones (some sources
-	// derive line numbers from them). wroteBody reports whether this line
-	// wrote a sessions row; it is reported per line, so returning true
-	// repeatedly is expected.
-	HandleLine(tx ImportTransaction, line []byte) (wroteBody bool, err error)
+	// derive line numbers from them) and reports how the line was consumed.
+	// On a non-nil error the outcome carries no meaning: the runner aborts
+	// the file and rolls back, discarding whatever outcome was returned.
+	HandleLine(tx ImportTransaction, line []byte) (LineOutcome, error)
 	// Flush writes metadata buffered during HandleLine. It runs at EOF, only
 	// when a body record has been written.
 	Flush(tx ImportTransaction) error
@@ -34,49 +59,56 @@ type FileHandler interface {
 // record has ever been written for the file, it commits nothing and keeps the
 // old offset so the next import re-reads the meta-only prefix once a body
 // record finally appears.
-func ProcessJSONL(store Store, source Source, handler FileHandler, file File, offset, fileSize int64, importedAt string) (int64, error) {
+func ProcessJSONL(store Store, source Source, handler FileHandler, file File, offset, fileSize int64, importedAt string) (ProcessResult, error) {
+	keep := ProcessResult{NewOffset: offset}
+
 	if err := handler.Begin(file.Path, offset); err != nil {
-		return offset, err
+		return keep, err
 	}
 
 	f, err := os.Open(file.Path)
 	if err != nil {
-		return offset, err
+		return keep, err
 	}
 	defer f.Close()
 
 	if offset > 0 {
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {
-			return offset, err
+			return keep, err
 		}
 	}
 
 	tx, err := store.BeginImport()
 	if err != nil {
-		return offset, err
+		return keep, err
 	}
 	defer tx.Rollback()
 
 	// import_state only advances after a body record was committed, so a
 	// positive offset proves a sessions row already exists for this file.
 	hasBody := offset > 0
+	var unparsed int
 	consumed, err := ForEachLine(f, -1, func(line []byte) error {
-		wroteBody, herr := handler.HandleLine(tx, line)
-		if wroteBody {
+		outcome, herr := handler.HandleLine(tx, line)
+		switch outcome {
+		case LineWroteBody:
 			hasBody = true
+		case LineUnparsed:
+			unparsed++
 		}
 		return herr
 	})
+	keep.UnparsedLines = unparsed
 	if err != nil {
-		return offset, err
+		return keep, err
 	}
 
 	if !hasBody {
-		return offset, nil
+		return keep, nil
 	}
 
 	if err := handler.Flush(tx); err != nil {
-		return offset, err
+		return keep, err
 	}
 
 	if err := tx.UpsertImportState(ImportState{
@@ -86,13 +118,14 @@ func ProcessJSONL(store Store, source Source, handler FileHandler, file File, of
 		LastOffset: offset + consumed,
 		ImportedAt: importedAt,
 	}); err != nil {
-		return offset, fmt.Errorf("upsert import state: %w", err)
+		return keep, fmt.Errorf("upsert import state: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return offset, err
+		return keep, err
 	}
-	return offset + consumed, nil
+	keep.NewOffset = offset + consumed
+	return keep, nil
 }
 
 // ForEachLine feeds r's lines (newline included, blank lines included) to fn

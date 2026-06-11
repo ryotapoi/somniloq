@@ -52,8 +52,8 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 		return 1, err
 	}
 
-	fmt.Fprintf(out, "Imported %d files (%d scanned, %d skipped, %d failed)\n",
-		result.FilesImported, result.FilesScanned, result.FilesSkipped, result.FilesFailed)
+	fmt.Fprintf(out, "Imported %d files (%d scanned, %d skipped, %d failed, %d unparsed lines)\n",
+		result.FilesImported, result.FilesScanned, result.FilesSkipped, result.FilesFailed, result.UnparsedLines)
 
 	for _, e := range result.Errors {
 		fmt.Fprintf(errOut, "  error: %v\n", e)

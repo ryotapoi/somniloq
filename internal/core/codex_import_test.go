@@ -10,13 +10,14 @@ import (
 )
 
 func processCodexFile(db *DB, path, sessionID, jsonl string) (int64, error) {
-	return codex.NewAdapter(ResolveRepoPath).ProcessFile(
+	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(
 		db,
 		JSONLFile{Path: path, SessionID: sessionID},
 		0,
 		int64(len(jsonl)),
 		"2026-05-01T00:10:00Z",
 	)
+	return pr.NewOffset, err
 }
 
 func TestCodexScanFiles_Recursive(t *testing.T) {
@@ -41,6 +42,44 @@ func TestCodexScanFiles_Recursive(t *testing.T) {
 	}
 	if files[0].SessionID != "rollout-a" {
 		t.Errorf("SessionID: got %q, want rollout-a", files[0].SessionID)
+	}
+}
+
+func TestCodexProcessFile_CountsUnparsedLines(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	// One broken JSON line and one message with a malformed content payload;
+	// the non-message event_msg record is deliberately ignored.
+	jsonl := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-session","cwd":"/nonexistent/codex-project","cli_version":"0.128.0","git":{"branch":"main"}}}
+{broken json
+{"timestamp":"2026-05-01T00:00:01.000Z","type":"event_msg","payload":{"type":"token_count"}}
+{"timestamp":"2026-05-01T00:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":"not a block array"}}
+{"timestamp":"2026-05-01T00:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
+`
+	path := filepath.Join(dir, "rollout.jsonl")
+	if err := os.WriteFile(path, []byte(jsonl), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+
+	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(
+		db,
+		JSONLFile{Path: path, SessionID: "rollout"},
+		0,
+		int64(len(jsonl)),
+		"2026-05-01T00:10:00Z",
+	)
+	if err != nil {
+		t.Fatalf("ProcessFile failed: %v", err)
+	}
+	if pr.UnparsedLines != 2 {
+		t.Errorf("UnparsedLines: got %d, want 2", pr.UnparsedLines)
+	}
+
+	var count int
+	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='codex-session'").Scan(&count)
+	if count != 1 {
+		t.Errorf("messages: got %d, want 1", count)
 	}
 }
 

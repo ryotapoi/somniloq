@@ -16,7 +16,8 @@ func scanJSONLFiles(projectsDir string) ([]JSONLFile, error) {
 }
 
 func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt string) (int64, error) {
-	return claudecode.NewAdapter(ResolveRepoPath).ProcessFile(db, file, offset, fileSize, importedAt)
+	pr, err := claudecode.NewAdapter(ResolveRepoPath).ProcessFile(db, file, offset, fileSize, importedAt)
+	return pr.NewOffset, err
 }
 
 func TestScanJSONLFiles(t *testing.T) {
@@ -177,6 +178,40 @@ func TestImport_FillsRepoPath(t *testing.T) {
 	}
 	if repoPath != "/Users/test/proj" {
 		t.Errorf("repo_path: got %q, want /Users/test/proj", repoPath)
+	}
+}
+
+func TestImport_CountsUnparsedLines(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+
+	projDir := filepath.Join(dir, "-Users-test-proj")
+	os.MkdirAll(projDir, 0o755)
+
+	// One valid record, one broken JSON line, one record with a malformed
+	// message envelope, and one deliberately ignored record type.
+	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
+{broken json
+{"type":"user","uuid":"u2","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":"not an envelope object"}
+{"type":"summary","summary":"ignored record type"}
+`
+	os.WriteFile(filepath.Join(projDir, "s1.jsonl"), []byte(jsonl), 0o644)
+
+	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+	if res.FilesImported != 1 {
+		t.Fatalf("FilesImported: got %d, want 1", res.FilesImported)
+	}
+	if res.UnparsedLines != 2 {
+		t.Errorf("UnparsedLines: got %d, want 2", res.UnparsedLines)
+	}
+
+	var count int
+	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count)
+	if count != 1 {
+		t.Errorf("messages: got %d, want 1", count)
 	}
 }
 

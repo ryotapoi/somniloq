@@ -15,6 +15,10 @@ type ImportResult struct {
 	FilesImported int
 	FilesSkipped  int
 	FilesFailed   int
+	// UnparsedLines counts lines that could not be parsed or normalized and
+	// were dropped (broken JSON, malformed payloads). Record types a source
+	// deliberately ignores are not counted.
+	UnparsedLines int
 	Errors        []error
 }
 
@@ -106,6 +110,7 @@ func (r *ImportResult) add(other *ImportResult) {
 	r.FilesImported += other.FilesImported
 	r.FilesSkipped += other.FilesSkipped
 	r.FilesFailed += other.FilesFailed
+	r.UnparsedLines += other.UnparsedLines
 	r.Errors = append(r.Errors, other.Errors...)
 }
 
@@ -147,11 +152,13 @@ func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportR
 		}
 
 		importedAt := timeNow()
-		if _, perr := adapter.ProcessFile(db, file, offset, fi.Size(), importedAt); perr != nil {
+		pr, perr := adapter.ProcessFile(db, file, offset, fi.Size(), importedAt)
+		if perr != nil {
 			result.FilesFailed++
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", file.Path, perr))
 			continue
 		}
+		result.UnparsedLines += pr.UnparsedLines
 		result.FilesImported++
 	}
 

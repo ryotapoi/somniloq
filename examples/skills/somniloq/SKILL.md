@@ -61,7 +61,9 @@ somniloq import --full --yes   # skip confirmation (for scripts/cron)
 
 CLI `--source` values use `claude-code`, but DB rows store the source as `claude_code`.
 
-Output: `Imported <n> files (<scanned> scanned, <skipped> skipped, <failed> failed)`
+Output: `Imported <n> files (<scanned> scanned, <skipped> skipped, <failed> failed, <unparsed> unparsed lines)`
+
+`unparsed lines` counts lines that could not be parsed (broken JSON, malformed payloads). Record types somniloq deliberately ignores are not counted.
 
 ---
 
