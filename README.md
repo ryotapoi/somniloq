@@ -62,6 +62,8 @@ Imports Claude Code JSONL from `~/.claude/projects/` and Codex rollout JSONL fro
 
 `--full` always clears the whole somniloq DB before re-importing. If you run `somniloq import --source codex --full`, Claude Code rows are deleted too, then only Codex logs are imported.
 
+Errors are non-fatal: lines that cannot be parsed (broken JSON, malformed payloads) are skipped and counted in the summary (`... N unparsed lines`), and unreadable directories or files are skipped while the rest is still imported. Skipped errors are listed on stderr and the exit code is 1 when any occurred. A missing source directory is treated as an unused source, not an error.
+
 ### backfill
 
 ```bash

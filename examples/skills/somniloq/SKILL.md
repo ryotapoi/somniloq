@@ -65,6 +65,8 @@ Output: `Imported <n> files (<scanned> scanned, <skipped> skipped, <failed> fail
 
 `unparsed lines` counts lines that could not be parsed (broken JSON, malformed payloads). Record types somniloq deliberately ignores are not counted.
 
+Errors are non-fatal: unreadable directories and failed files are skipped, the rest is imported, skipped errors go to stderr, and the exit code is 1 when any occurred. Exit code 1 therefore does not mean the import did nothing.
+
 ---
 
 ### backfill
