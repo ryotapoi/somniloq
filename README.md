@@ -48,6 +48,7 @@ somniloq show --since 7d
 | `projects` | List projects with session counts |
 | `show` | Show session content in Markdown |
 | `outline` | List a session's user messages as turn number, time, and first line |
+| `search` | Search message content across sessions |
 
 ### import
 
@@ -138,6 +139,16 @@ somniloq outline --format json <session-id>  # JSON instead of TSV
 ```
 
 Grasp the structure of a long session before `show`ing it in full. Output is TSV: `turn`, `time`, `first_line`. Turn numbers start at 1 and increment on each user message (sidechain rows are excluded). With `--format json`: `turn`, `timestamp`, `firstLine`.
+
+### search
+
+```bash
+somniloq search "auth bug"                          # search all message bodies
+somniloq search --since 7d "auth"                   # messages written in the last 7 days
+somniloq search --since 7d --project myapp "auth"   # narrowed by project
+```
+
+Output is TSV: `session_id`, `time`, `snippet` (the text around the first match), newest first. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Sidechain messages are excluded.
 
 ### JSON output
 

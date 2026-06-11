@@ -18,6 +18,12 @@ Claude Code の JSONL タイムスタンプはミリ秒付き RFC3339（例: `20
 
 対処: `ORDER BY timestamp ASC, rowid ASC` で挿入順をタイブレーカーにする。`messages` は `INSERT OR IGNORE` のみで REPLACE しないため、rowid は JSONL の行順を安定して保持する。
 
+## `strings.ToLower` はバイト長を変えることがある
+
+`strings.ToLower(s)` は一部の非 ASCII 文字でバイト長が変わる（例: `İ` U+0130 は 2 バイトだが、小文字化すると `i` + 結合ドットの 3 バイトになる）。lowered 文字列で `strings.Index` した結果のオフセットを元の文字列にそのまま適用すると、位置がズレるだけでなく `len(original)` 以上になり得て、ガードなしの添字アクセスは panic する。
+
+対処: オフセットを元文字列に使う前に `idx >= len(original)` を弾き、`utf8.RuneStart` で rune 境界に再アンカーする（`searchSnippet` の実装と `TestSearchSnippet_NoPanicOnAdversarialContent` 参照）。
+
 ## modernc.org/sqlite の `:memory:` は接続ごとに別 DB
 
 `:memory:` DSN は `database/sql` の接続プールの各物理接続ごとに独立したインメモリ DB を作る。同じ `*sql.DB` でもクエリごとに別の接続に割り振られると、先の PRAGMA で見ていたテーブルが次の ALTER では存在しない、といった事故になる。

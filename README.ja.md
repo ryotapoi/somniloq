@@ -46,6 +46,7 @@ somniloq show --since 7d
 | `projects` | プロジェクト一覧を表示（セッション数付き） |
 | `show` | セッション内容を Markdown 形式で出力 |
 | `outline` | セッションの user メッセージをターン番号・時刻・先頭 1 行で一覧表示 |
+| `search` | 全メッセージ本文を横断検索 |
 
 ### import
 
@@ -136,6 +137,16 @@ somniloq outline --format json <session-id>  # TSV の代わりに JSON
 ```
 
 長いセッションを全文 `show` する前に構造を掴むためのコマンド。出力は TSV 形式: `turn`, `time`, `first_line`。ターン番号は user メッセージごとに 1 増える 1 始まりの連番（sidechain は除外）。`--format json` では `turn`, `timestamp`, `firstLine`。
+
+### search
+
+```bash
+somniloq search "auth バグ"                          # 全メッセージ本文を検索
+somniloq search --since 7d "auth"                    # 直近 7 日間に書かれたメッセージ
+somniloq search --since 7d --project myapp "auth"    # プロジェクトで絞り込み
+```
+
+出力は TSV 形式: `session_id`, `time`, `snippet`（最初のマッチ前後の本文）。新しい順。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。sidechain メッセージは除外。
 
 ### JSON 出力
 

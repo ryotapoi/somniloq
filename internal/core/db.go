@@ -529,6 +529,65 @@ func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, incl
 	return scanMessages(rows)
 }
 
+// SearchRow is one message that matched a search query.
+type SearchRow struct {
+	Source    Source
+	SessionID string
+	Timestamp string
+	Content   string
+}
+
+// SearchMessages returns non-sidechain messages whose content contains the
+// query, newest first. Matching uses SQLite LIKE: ASCII-only
+// case-insensitivity, and `%`/`_` in the query act as wildcards (the same
+// known limitation as the --project filter). filter.Since/Until apply to the
+// message timestamp, not the session start, because the search target is the
+// message. rowid breaks timestamp ties like GetMessages, inverted to follow
+// the DESC order.
+func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, error) {
+	q := `
+		SELECT m.source, m.session_id, m.timestamp, m.content
+		FROM messages m
+		JOIN sessions s ON m.source = s.source AND m.session_id = s.session_id
+		WHERE m.is_sidechain = 0
+		  AND m.content LIKE '%' || ? || '%'`
+	args := []any{query}
+	if filter.Since != "" {
+		q += " AND m.timestamp >= ?"
+		args = append(args, filter.Since)
+	}
+	if filter.Until != "" {
+		q += " AND m.timestamp < ?"
+		args = append(args, filter.Until)
+	}
+	if filter.Project != "" {
+		q += " AND COALESCE(s.repo_path, '') LIKE '%' || ? || '%'"
+		args = append(args, filter.Project)
+	}
+	q += " ORDER BY m.timestamp DESC, m.rowid DESC"
+
+	rows, err := d.db.Query(q, args...)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	result := []SearchRow{}
+	for rows.Next() {
+		var r SearchRow
+		var src string
+		if err := rows.Scan(&src, &r.SessionID, &r.Timestamp, &r.Content); err != nil {
+			return nil, err
+		}
+		r.Source = Source(src)
+		result = append(result, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
 func scanMessages(rows *sql.Rows) ([]MessageRow, error) {
 	defer rows.Close()
 

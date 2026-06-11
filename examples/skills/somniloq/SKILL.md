@@ -17,6 +17,7 @@ somniloq imports Claude Code session logs (JSONL under `~/.claude/projects/`) an
 ```bash
 somniloq import              # pull new sessions into the DB
 somniloq sessions --since 7d # list recent sessions
+somniloq search "auth bug"   # find messages mentioning a topic
 somniloq outline <session-id>          # map a long session (turn / time / first line)
 somniloq show --turn 40..60 <session-id>  # read only those turns
 somniloq show <session-id>   # read a session in full
@@ -215,6 +216,35 @@ Turn    Time    FirstLine
 
 ---
 
+### search
+
+Search all message bodies (LIKE full scan; fast at current DB sizes). Returns one row per matching message, newest first.
+
+```bash
+somniloq search "auth bug"
+somniloq search --since 7d "auth"
+somniloq search --since 7d --project myapp "auth"
+```
+
+| Flag | Default | Description |
+|------|---------|-------------|
+| `--since` | — | Start time filter — on the **message** timestamp, not the session start |
+| `--until` | — | End time filter (message timestamp) |
+| `--project` | — | Substring match on `repo_path` |
+
+**Columns** (tab-separated):
+
+```
+SessionID    Time    Snippet
+```
+
+- `Snippet` is the text around the first match (40 runes each side, `...` marks truncation).
+- Matching follows SQLite LIKE: ASCII-only case-insensitivity; `%` and `_` in the query act as wildcards.
+- Sidechain messages are excluded, so every hit is readable via `show`.
+- Typical flow: `search` → take the `SessionID` → `outline` it → `show --turn N..M`.
+
+---
+
 ### projects
 
 List projects with session counts, sorted by most-recently-active first. Output is TSV.
@@ -296,8 +326,8 @@ somniloq import && somniloq show --summary 1 --since 24h
 somniloq import && somniloq sessions --since 7d --short
 
 # find sessions about a topic
-somniloq sessions --since 7d | grep -i "auth"
-somniloq show --since 7d | grep -i "auth" -B2 -A5
+somniloq search --since 7d "auth"
+somniloq sessions --since 7d | grep -i "auth"   # title/path match only
 
 # project overview
 somniloq projects --since 30d --short
