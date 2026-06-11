@@ -90,13 +90,18 @@ func ProcessJSONL(store Store, source Source, handler FileHandler, file File, of
 	var unparsed int
 	consumed, err := ForEachLine(f, -1, func(line []byte) error {
 		outcome, herr := handler.HandleLine(tx, line)
+		if herr != nil {
+			// Per the FileHandler contract the outcome carries no meaning
+			// alongside an error; discard it before it can touch any state.
+			return herr
+		}
 		switch outcome {
 		case LineWroteBody:
 			hasBody = true
 		case LineUnparsed:
 			unparsed++
 		}
-		return herr
+		return nil
 	})
 	keep.UnparsedLines = unparsed
 	if err != nil {
