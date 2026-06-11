@@ -15,7 +15,7 @@
 - [x] import のディレクトリ走査エラーをファイル単位エラーと同じ非致命扱いにする: 現状、ログディレクトリ配下に読めないディレクトリが 1 つあると import 全体が即エラー終了する（`--source all` なら他 source 分も含め 1 ファイルも取り込まれない）。ファイル単位の失敗は `FilesFailed` カウント + 続行なので、走査の失敗も同様にスキップして `ImportResult.Errors` に記録し、exit code に反映して続行する（両 source の `ScanFiles` が対象）。`ScanFiles` の戻り値契約（部分結果 + 非致命エラー）が変わるため、adapter 骨格タスクで決めた interface 設計に合わせること
 - [x] `internal/core/db_test.go`（1745 行）を機能別に分割する: migration 系 / write 系 / query 系で分け、仕様索引としての探索性を回復する
 - [x] `decisions/` の連番桁数を統一する: `001-language-go.md` のみ 3 桁で他は 4 桁。リネームと参照箇所の更新
-- [ ] `rules/scope.md`「Known limitations / 移行期限定」の削除条件を具体化する: 「データ補正完了が一般化したら削除する」とあるが判定条件がなく恒久残置になりかけている。条件を決めるか、いま削除可否を判断する
+- [x] `rules/scope.md`「Known limitations / 移行期限定」の削除条件を具体化する: 「データ補正完了が一般化したら削除する」とあるが判定条件がなく恒久残置になりかけている。条件を決めるか、いま削除可否を判断する
 
 ## v0.6
 

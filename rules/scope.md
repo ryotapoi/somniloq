@@ -171,20 +171,7 @@ CREATE TABLE import_state (
 
 ## Known limitations
 
-### 移行期限定（v0.2.x → v0.3）
-
-データ補正完了が一般化したら本書から削除する。
-
-- 過去に `repo_path NULL` のまま取り込まれた v0.2.x 由来セッションが DB に残っている（= `somniloq backfill` を未実行）状態だと、以下の影響が出る:
-  - `projects` 集約で `repo_path` キーが空のグループに、複数の異なるリポジトリの NULL セッションがまとめて潰れて 1 行表示される（`GROUP BY repo_path` 一本のため）
-  - `sessions` / `projects` / `show` の通常表示で「Project 列が空欄になる」（フォールバック削除によるストレートな退行）
-  - `--short` 表示も空のままになり得る
-  - `sessions --project <repo>` および `show --project <repo>` フィルタでヒットしない（`repo_path IS NULL` の行は LIKE にマッチしないため。旧仕様では `project_dir` 経由で引けていた）
-  - `somniloq backfill` 実行で `repo_path` 補完と `messages` を持たない残骸の DELETE が同時に走り、上記すべて解消する
-
-### 恒久的な制約
-
-- Claude Code が将来 `cwd` 空の `user`/`assistant` レコードを生成する仕様になった場合、somniloq 側ではそのまま `repo_path` 空で保存する。`projects` 集約で「複数リポジトリが空グループに潰れる」上記の問題と同根。その時点で対応方針を再検討する
+- Claude Code が将来 `cwd` 空の `user`/`assistant` レコードを生成する仕様になった場合、somniloq 側ではそのまま `repo_path` 空で保存する。`projects` 集約で複数リポジトリが空グループに潰れる（`GROUP BY repo_path` 一本のため）。その時点で対応方針を再検討する
 - `--project` の値は SQLite LIKE のメタ文字（`%`、`_`）を素通しでクエリに渡す（既存挙動の継承）。例: `--project my_repo` は `_` が 1 文字ワイルドカードとして解釈されるため `myXrepo` のような値にも誤マッチする可能性がある
 
 ## スキーマ変更への対応方針
