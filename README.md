@@ -8,8 +8,9 @@ It parses JSONL files under `~/.claude/projects/` and `~/.codex/sessions/`, enab
 ## Features
 
 - **Differential import** — Auto-detects Claude Code and Codex JSONL files and imports only what's new
-- **Cross-session search** — Filter by project name and time range to quickly find past conversations
-- **Markdown output** — Export session content as Markdown for daily notes and retrospectives
+- **Cross-session search** — Search message bodies and filter by project name and time range
+- **Long-session navigation** — Check session size, skim an outline, then read only the turns you need
+- **Markdown and JSON output** — Export readable Markdown or script-friendly JSON
 - **Built for Coding Agents** — Invoke from skills to use past sessions as context
 - **Fully local** — No external services required. Pure Go + SQLite
 
@@ -30,6 +31,13 @@ somniloq sessions
 
 # Sessions from the last 24 hours
 somniloq sessions --since 24h
+
+# Search message bodies
+somniloq search --since 7d "auth bug"
+
+# Skim a long session, then read only relevant turns
+somniloq outline <session-id>
+somniloq show --turn 40..60 <session-id>
 
 # Show session content
 somniloq show <session-id>

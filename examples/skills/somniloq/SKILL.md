@@ -20,6 +20,7 @@ somniloq sessions --since 7d # list recent sessions
 somniloq search "auth bug"   # find messages mentioning a topic
 somniloq outline <session-id>          # map a long session (turn / time / first line)
 somniloq show --turn 40..60 <session-id>  # read only those turns
+somniloq show --format json <session-id>  # emit structured session content for scripts
 somniloq show <session-id>   # read a session in full
 ```
 
@@ -98,7 +99,7 @@ Rows whose `repo_path` cannot be resolved (e.g. `cwd` is empty) stay `NULL` and 
 
 ### sessions
 
-List sessions, newest first. Output is TSV.
+List sessions, newest first. Output is TSV by default.
 
 ```bash
 somniloq sessions                                # all sessions
@@ -128,6 +129,7 @@ SessionID    TimeRange    RepoPath    CustomTitle    MessageCount    BodySize
 - `--short` shows `filepath.Base(repo_path)` (e.g. `myapp`, hyphens preserved).
 - `BodySize` is the total body size in bytes (sidechain excluded): approximately how much `show` would print (show adds Markdown headers on top). Use it to spot sessions worth `outline`-ing first — `MessageCount` alone can hide a single huge message.
 - `--format json` fields: `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messageCount`, `bodySize`.
+- Prefer `--format json` when another script or agent will consume the result. Prefer TSV for quick shell scans.
 
 ---
 
@@ -330,9 +332,22 @@ somniloq import && somniloq sessions --since 7d --short
 somniloq search --since 7d "auth"
 somniloq sessions --since 7d | grep -i "auth"   # title/path match only
 
+# robust machine-readable search flow
+somniloq sessions --since 7d --format json | jq -r '.[] | select(.bodySize > 50000) | .sessionId'
+somniloq show --format json --turn 10..15 <session-id> | jq -r '.[0].messages[].content'
+
+# inspect a large session without dumping it all
+somniloq sessions --since 7d --short
+somniloq outline <session-id>
+somniloq show --turn 10..15 <session-id>
+
 # project overview
 somniloq projects --since 30d --short
 somniloq sessions --since 30d --project somniloq --short
+
+# renamed project history, after configuring projectAliases
+somniloq sessions --since 30d --project somniloq --short   # same command now also finds sessions under old names
+somniloq search --project old-somniloq "migration"         # an old name resolves to the same group
 
 # export
 somniloq show --since 24h > daily-log.md
@@ -355,5 +370,5 @@ somniloq show "$(somniloq sessions --since 24h | head -1 | cut -f1)"
 - **Empty messages** (tool_use-only turns with no text) are excluded at import time.
 - **`--project`** is a substring match against `repo_path` — `--project app` matches `myapp` and `app-server`. Slash-spanning queries (e.g. `--project Sources/ryot`) also work.
 - **Project aliases**: `~/.somniloq/config.json` can map a renamed project's current name to its old names (`"projectAliases": {"newname": ["oldname"]}`). A `--project` value that exactly matches any name in a group expands to the whole group, so sessions recorded under either name are found.
-- **All timestamps** in output are local time.
+- **Timestamps** in TSV/Markdown output are local time. JSON output uses stored RFC3339 UTC timestamps.
 - Every subcommand supports `--help` for a quick flag reference.
