@@ -290,14 +290,51 @@ type SessionFilter struct {
 	Project string // Empty = no filter.
 }
 
-func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
-	query := `
-		SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
-		FROM sessions s
-		LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id`
+// sessionRowSelect is the SELECT/FROM head shared by every query that
+// produces SessionRow values. scanSessionRow consumes exactly these columns,
+// so the two must change together.
+const sessionRowSelect = `
+	SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+	FROM sessions s
+	LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id`
 
-	var conditions []string
-	var args []any
+// rowScanner abstracts *sql.Row and *sql.Rows so scanSessionRow serves both
+// single-row and multi-row queries.
+type rowScanner interface {
+	Scan(dest ...any) error
+}
+
+func scanSessionRow(row rowScanner) (SessionRow, error) {
+	var r SessionRow
+	var src string
+	if err := row.Scan(&src, &r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount); err != nil {
+		return SessionRow{}, err
+	}
+	r.Source = Source(src)
+	return r, nil
+}
+
+func scanSessionRows(rows *sql.Rows) ([]SessionRow, error) {
+	defer rows.Close()
+
+	result := []SessionRow{}
+	for rows.Next() {
+		r, err := scanSessionRow(rows)
+		if err != nil {
+			return nil, err
+		}
+		result = append(result, r)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+// timeFilterConditions returns started_at range conditions for filter.Since /
+// filter.Until. filter.Project is intentionally not handled here: only
+// ListSessions supports it.
+func timeFilterConditions(filter SessionFilter) (conditions []string, args []any) {
 	if filter.Since != "" {
 		conditions = append(conditions, "s.started_at >= ?")
 		args = append(args, filter.Since)
@@ -306,6 +343,13 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 		conditions = append(conditions, "s.started_at < ?")
 		args = append(args, filter.Until)
 	}
+	return conditions, args
+}
+
+func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
+	query := sessionRowSelect
+
+	conditions, args := timeFilterConditions(filter)
 	if filter.Project != "" {
 		conditions = append(conditions, "COALESCE(s.repo_path, '') LIKE '%' || ? || '%'")
 		args = append(args, filter.Project)
@@ -320,22 +364,7 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result := []SessionRow{}
-	for rows.Next() {
-		var r SessionRow
-		var src string
-		if err := rows.Scan(&src, &r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount); err != nil {
-			return nil, err
-		}
-		r.Source = Source(src)
-		result = append(result, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return scanSessionRows(rows)
 }
 
 type ProjectRow struct {
@@ -347,16 +376,7 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	query := `SELECT COALESCE(MIN(s.repo_path), ''), COUNT(*)
 	FROM sessions s`
 
-	var conditions []string
-	var args []any
-	if filter.Since != "" {
-		conditions = append(conditions, "s.started_at >= ?")
-		args = append(args, filter.Since)
-	}
-	if filter.Until != "" {
-		conditions = append(conditions, "s.started_at < ?")
-		args = append(args, filter.Until)
-	}
+	conditions, args := timeFilterConditions(filter)
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
@@ -392,31 +412,23 @@ type MessageRow struct {
 }
 
 func (d *DB) GetSession(source Source, sessionID string) (*SessionRow, error) {
-	var r SessionRow
-	var src string
-	err := d.db.QueryRow(`
-		SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
-		FROM sessions s
-		LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id
+	row := d.db.QueryRow(sessionRowSelect+`
 		WHERE s.source = ? AND s.session_id = ?
 		GROUP BY s.source, s.session_id`,
 		string(source), sessionID,
-	).Scan(&src, &r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount)
+	)
+	r, err := scanSessionRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, err
 	}
-	r.Source = Source(src)
 	return &r, nil
 }
 
 func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
-	rows, err := d.db.Query(`
-		SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
-		FROM sessions s
-		LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id
+	rows, err := d.db.Query(sessionRowSelect+`
 		WHERE s.session_id = ?
 		GROUP BY s.source, s.session_id
 		ORDER BY s.source ASC`,
@@ -425,22 +437,7 @@ func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
-
-	result := []SessionRow{}
-	for rows.Next() {
-		var r SessionRow
-		var src string
-		if err := rows.Scan(&src, &r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount); err != nil {
-			return nil, err
-		}
-		r.Source = Source(src)
-		result = append(result, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return result, nil
+	return scanSessionRows(rows)
 }
 
 func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) {
