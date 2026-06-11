@@ -1,6 +1,6 @@
 # Backlog
 
-## v0.6
+## v0.6.0
 
 2026-06-11 Knowledge 側の運用（/jot /retro /rem、LLM Wiki 連携の見据え）からの機能追加。順序は上から。
 
