@@ -16,3 +16,14 @@
 - [ ] `internal/core/db_test.go`（1745 行）を機能別に分割する: migration 系 / write 系 / query 系で分け、仕様索引としての探索性を回復する
 - [ ] `decisions/` の連番桁数を統一する: `001-language-go.md` のみ 3 桁で他は 4 桁。リネームと参照箇所の更新
 - [ ] `rules/scope.md`「Known limitations / 移行期限定」の削除条件を具体化する: 「データ補正完了が一般化したら削除する」とあるが判定条件がなく恒久残置になりかけている。条件を決めるか、いま削除可否を判断する
+
+## v0.6
+
+2026-06-11 Knowledge 側の運用（/jot /retro /rem、LLM Wiki 連携の見据え）からの機能追加。順序は上から。
+
+- [ ] セッションのアウトライン表示を追加する: ユーザーメッセージだけを「ターン番号・時刻・先頭 1 行」で時系列に並べ、長いセッションの構造を全文 show する前に掴めるようにする（`somniloq outline <session-id>` か `show --toc` かは実装時に判断）。sidechain 除外は show と同じ扱い。Knowledge の /jot が「長セッションは全文をファイルに出して haiku subagent に時系列地図を作らせる」手順で代替している箇所の置き換え先
+- [ ] show の部分読みを追加する: `show <session-id> --turn 40..60` / `--tail <N>` のようにターン範囲を指定して読めるようにする。アウトラインで見つけた範囲だけ読む用途。ターン番号はアウトライン表示と同一の採番を共有すること
+- [ ] sessions 一覧にサイズ列を追加する: セッションの本文合計サイズ（文字数 or バイト数）を列に出し、show する前に「大きいセッションか」を判定できるようにする。MessageCount だけでは 1 メッセージが巨大なセッションを見分けられない
+- [ ] `--format json` を追加する: sessions / show / projects（アウトラインも）で JSON 出力を選べるようにする。Knowledge の list-sessions.sh が show の Markdown を awk でパースしている脆さの解消先
+- [ ] search コマンドを追加する: `somniloq search <query> [--since] [--until] [--project]` で、セッション ID・時刻・マッチ前後のスニペットを返す。実装は LIKE 全走査でよい（本文 42 MB の現 DB で実測 0.11 秒。FTS5 は日本語だと trigram 必須で、索引が本文の 2〜3 倍に膨らむ・3 文字未満のクエリが索引で引けない制約があるため、LIKE で困るスケールになるまで見送り）
+- [ ] project alias 設定を追加する: `~/.somniloq/config.json`（`--config` フラグで上書き可、JSON なので依存追加なし）に `projectAliases`（例: `"brimday": ["whisday"]`）を持ち、`--project` 指定時にグループ内のどの名前でもマッチするよう展開する。リネーム済みリポジトリの歴史を 1 つの project として引けるようにし、Knowledge の daily-guide にベタ書きされている旧名対応表の移設先にする
