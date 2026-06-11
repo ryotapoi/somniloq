@@ -17,7 +17,9 @@ somniloq imports Claude Code session logs (JSONL under `~/.claude/projects/`) an
 ```bash
 somniloq import              # pull new sessions into the DB
 somniloq sessions --since 7d # list recent sessions
-somniloq show <session-id>   # read a session
+somniloq outline <session-id>          # map a long session (turn / time / first line)
+somniloq show --turn 40..60 <session-id>  # read only those turns
+somniloq show <session-id>   # read a session in full
 ```
 
 Always run `somniloq import` first if the user might have new sessions since the last import.
@@ -132,6 +134,11 @@ Display session content as Markdown. Accepts either a single session ID or a tim
 somniloq show <session-id>
 somniloq show --short <session-id>
 
+# partial reads (turn numbers come from `somniloq outline`)
+somniloq show --turn 40 <session-id>
+somniloq show --turn 40..60 <session-id>
+somniloq show --tail 3 <session-id>
+
 # by time range
 somniloq show --since 24h
 somniloq show --since 7d --project myapp
@@ -147,11 +154,14 @@ somniloq show --short --since 24h
 | `--short` | false | Show repo basename (`filepath.Base(repo_path)`) |
 | `--summary <N>` | 0 | Show first N user messages per session after skipping `/clear` and `<local-command-caveat>`. `0` disables (full output). Requires an integer argument — bare `--summary` is an error (use `--summary 1` for the old default). |
 | `--include-clear` | false | Requires `--summary >= 1`; disable `/clear` + caveat skipping (sidechain still excluded). Debug use. |
+| `--turn <N\|N..M>` | — | Show only turn N or turns N..M (inclusive). Turn numbers match `outline`. A turn = a user message plus the replies that follow it. Out-of-range turns print the session header with no body (exit 0). |
+| `--tail <N>` | 0 | Show only the last N turns. `0` disables. |
 | `--format` | markdown | Output format (only `markdown` is supported) |
 
 **Constraints:**
 - `<session-id>` and `--since`/`--until` are mutually exclusive.
-- `--project` only applies in time-range mode. `--summary` works in both modes.
+- `--project` only applies in time-range mode. `--summary`, `--turn`, and `--tail` work in both modes (applied per session in time-range mode).
+- `--turn` and `--tail` are mutually exclusive, and neither can be combined with `--summary`.
 - `--include-clear` without `--summary >= 1` is an error.
 - `--summary` takes an integer (v0.2+). Earlier versions accepted a bare `--summary` flag; that form no longer works.
 - Single-session `show <session-id>` searches across Claude Code and Codex. If the same `session_id` exists in multiple sources, somniloq exits with an ambiguity error and prints the matching source/session candidates.
@@ -175,6 +185,26 @@ somniloq show --short --since 24h
 ```
 
 Multiple sessions are separated by `---`. Sidechain messages (subagent internals) are excluded.
+
+---
+
+### outline
+
+Map a long session before reading it: one TSV row per user message with its turn number, local time, and first line. Use the turn numbers with `show --turn`.
+
+```bash
+somniloq outline <session-id>
+```
+
+**Columns** (tab-separated):
+
+```
+Turn    Time    FirstLine
+```
+
+- Turn numbers are 1-based and increment on each user message (sidechain excluded, same as `show`).
+- Synthetic user messages (`/clear` echo, `<local-command-caveat>`) count as turns and are listed.
+- Recommended flow for long sessions: `outline` → pick the relevant turns → `show --turn N..M`.
 
 ---
 

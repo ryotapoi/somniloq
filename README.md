@@ -115,7 +115,11 @@ somniloq show --since 7d --project myapp                # filter by project
 somniloq show --summary 1 --since 24h                   # first user message per session
 somniloq show --summary 3 --since 24h                   # first 3 user messages per session
 somniloq show --short --since 24h                       # basename of repo_path
+somniloq show --turn 40..60 <session-id>                # only turns 40-60
+somniloq show --tail 3 <session-id>                     # only the last 3 turns
 ```
+
+`--turn` / `--tail` use the same turn numbering as `outline` (1-based, incremented on each user message), so you can skim the outline first and read only the range you need. A turn includes the user message and the replies that follow it. `--turn` and `--tail` are mutually exclusive, cannot be combined with `--summary`, and in bulk mode (`--since`/`--until`) apply to each listed session independently.
 
 ### outline
 

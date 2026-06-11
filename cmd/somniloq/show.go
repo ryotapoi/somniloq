@@ -10,8 +10,8 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const showUsageLine = "somniloq show [--summary <N>] [--include-clear] [--short] <session-id>\n" +
-	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--summary <N>] [--include-clear] [--short]"
+const showUsageLine = "somniloq show [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] <session-id>\n" +
+	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short]"
 
 // showCmd runs the show subcommand without calling os.Exit, so it can be
 // tested directly.
@@ -23,6 +23,8 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 	short := fs.Bool("short", false, "shorten project to repo basename")
 	summary := fs.Int("summary", 0, "show first N user messages skipping /clear and local-command-caveat (0 disables)")
 	includeClear := fs.Bool("include-clear", false, "keep /clear and local-command-caveat messages in --summary output (requires --summary >= 1)")
+	turnRange := fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)")
+	tail := fs.Int("tail", 0, "show only the last N turns (0 disables)")
 	format := fs.String("format", "markdown", "output format (markdown)")
 	setUsage(fs, "Show session content in Markdown", showUsageLine)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
@@ -34,6 +36,33 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 	}
 	if *includeClear && *summary == 0 {
 		return 1, errors.New("--include-clear requires --summary >= 1")
+	}
+	if *tail < 0 {
+		return 1, errors.New("--tail must be >= 0")
+	}
+	// Detect --turn via Visit so an explicit empty value (e.g. an unset shell
+	// variable) is rejected by parseTurnRange instead of silently showing the
+	// whole session.
+	turnSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "turn" {
+			turnSet = true
+		}
+	})
+	if turnSet && *tail > 0 {
+		return 1, errors.New("specify either --turn or --tail, not both")
+	}
+	turnFiltered := turnSet || *tail > 0
+	if turnFiltered && *summary > 0 {
+		return 1, errors.New("--turn/--tail cannot be combined with --summary")
+	}
+	var turnLo, turnHi int
+	if turnSet {
+		var err error
+		turnLo, turnHi, err = parseTurnRange(*turnRange)
+		if err != nil {
+			return 1, err
+		}
 	}
 
 	if *format != "markdown" {
@@ -71,6 +100,21 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 		n, ic := *summary, *includeClear
 		getMessages = func(src core.Source, id string) ([]core.MessageRow, error) {
 			return db.GetSummaryMessages(src, id, n, ic)
+		}
+	}
+	if turnFiltered {
+		// Turn filtering must run on the full GetMessages output so the
+		// numbers match outline (see assignTurns).
+		tailN := *tail
+		getMessages = func(src core.Source, id string) ([]core.MessageRow, error) {
+			msgs, err := db.GetMessages(src, id)
+			if err != nil {
+				return nil, err
+			}
+			if tailN > 0 {
+				return filterLastTurns(msgs, tailN), nil
+			}
+			return filterTurns(msgs, turnLo, turnHi), nil
 		}
 	}
 
