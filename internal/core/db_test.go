@@ -992,8 +992,8 @@ func TestGetMessages_OrderByTimestamp(t *testing.T) {
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	// Insert in reverse order
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "world", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "world", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
 	msgs, err := db.GetMessages(SourceClaudeCode, "s1")
 	if err != nil {
@@ -1016,9 +1016,6 @@ func TestGetMessages_OrderByTimestamp(t *testing.T) {
 	if msgs[0].Timestamp != "2026-03-28T10:00:00Z" {
 		t.Errorf("first message Timestamp: got %s, want 2026-03-28T10:00:00Z", msgs[0].Timestamp)
 	}
-	if msgs[0].IsSidechain != true {
-		t.Errorf("first message IsSidechain: got %v, want true", msgs[0].IsSidechain)
-	}
 
 	if msgs[1].UUID != "m2" {
 		t.Errorf("second message UUID: got %s, want m2", msgs[1].UUID)
@@ -1026,8 +1023,25 @@ func TestGetMessages_OrderByTimestamp(t *testing.T) {
 	if msgs[1].Role != "assistant" {
 		t.Errorf("second message Role: got %s, want assistant", msgs[1].Role)
 	}
-	if msgs[1].IsSidechain != false {
-		t.Errorf("second message IsSidechain: got %v, want false", msgs[1].IsSidechain)
+}
+
+func TestGetMessages_ExcludesSidechain(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "sidechain thought", Timestamp: "2026-03-28T10:00:30Z", IsSidechain: true}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s1", Role: "assistant", Content: "visible reply", Timestamp: "2026-03-28T10:01:00Z"}))
+
+	msgs, err := db.GetMessages(SourceClaudeCode, "s1")
+	if err != nil {
+		t.Fatalf("GetMessages failed: %v", err)
+	}
+	if len(msgs) != 2 {
+		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	}
+	if msgs[0].UUID != "m1" || msgs[1].UUID != "m3" {
+		t.Errorf("expected m1 and m3 (sidechain m2 excluded), got %s and %s", msgs[0].UUID, msgs[1].UUID)
 	}
 }
 
@@ -1460,9 +1474,6 @@ func TestGetSummaryMessages_ReturnsFirstUserMessage(t *testing.T) {
 	}
 	if msgs[0].Timestamp != "2026-03-28T10:00:00Z" {
 		t.Errorf("Timestamp: got %s, want 2026-03-28T10:00:00Z", msgs[0].Timestamp)
-	}
-	if msgs[0].IsSidechain != false {
-		t.Errorf("IsSidechain: got %v, want false", msgs[0].IsSidechain)
 	}
 }
 

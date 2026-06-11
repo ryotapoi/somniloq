@@ -122,33 +122,6 @@ func TestFormatSession_EmptyTitle(t *testing.T) {
 	}
 }
 
-func TestFormatSession_SkipsSidechain(t *testing.T) {
-	var buf bytes.Buffer
-
-	session := core.SessionRow{
-		SessionID: "s1",
-		StartedAt: "2026-03-28T10:00:00Z",
-	}
-	messages := []core.MessageRow{
-		{UUID: "m1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: false},
-		{UUID: "m2", Role: "assistant", Content: "sidechain thought", Timestamp: "2026-03-28T10:00:30Z", IsSidechain: true},
-		{UUID: "m3", Role: "assistant", Content: "visible reply", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false},
-	}
-
-	formatSession(&buf, session, "-test", messages, time.UTC)
-	got := buf.String()
-
-	if strings.Contains(got, "sidechain thought") {
-		t.Errorf("sidechain message should be excluded, got:\n%s", got)
-	}
-	if !strings.Contains(got, "hello") {
-		t.Errorf("expected non-sidechain user message, got:\n%s", got)
-	}
-	if !strings.Contains(got, "visible reply") {
-		t.Errorf("expected non-sidechain assistant message, got:\n%s", got)
-	}
-}
-
 func stubGetMessages(data map[string][]core.MessageRow) func(core.Source, string) ([]core.MessageRow, error) {
 	return func(_ core.Source, sessionID string) ([]core.MessageRow, error) {
 		return data[sessionID], nil

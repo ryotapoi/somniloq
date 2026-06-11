@@ -40,9 +40,6 @@ func formatSession(w io.Writer, session core.SessionRow, displayName string, mes
 	fmt.Fprintf(w, "- **Started**: `%s`\n", formatTimeRange(session.StartedAt, session.EndedAt, loc))
 
 	for _, msg := range messages {
-		if msg.IsSidechain {
-			continue
-		}
 		heading := msg.Role
 		if len(heading) > 0 {
 			heading = strings.ToUpper(heading[:1]) + heading[1:]

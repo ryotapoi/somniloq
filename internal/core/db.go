@@ -403,12 +403,14 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	return result, nil
 }
 
+// MessageRow deliberately has no IsSidechain field: every query that
+// produces it excludes sidechain rows in SQL, so the value would always be
+// false.
 type MessageRow struct {
-	UUID        string
-	Role        string
-	Content     string
-	Timestamp   string
-	IsSidechain bool
+	UUID      string
+	Role      string
+	Content   string
+	Timestamp string
 }
 
 func (d *DB) GetSession(source Source, sessionID string) (*SessionRow, error) {
@@ -440,11 +442,15 @@ func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
 	return scanSessionRows(rows)
 }
 
+// GetMessages returns the session's messages in chronological order.
+// Sidechain rows are excluded: they are subagent transcripts, not part of the
+// user-facing conversation.
 func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) {
 	rows, err := d.db.Query(`
-		SELECT uuid, role, content, timestamp, is_sidechain
+		SELECT uuid, role, content, timestamp
 		FROM messages
 		WHERE source = ? AND session_id = ?
+		  AND is_sidechain = 0
 		ORDER BY timestamp ASC`,
 		string(source), sessionID,
 	)
@@ -480,7 +486,7 @@ func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, incl
 	}
 
 	query := `
-		SELECT uuid, role, content, timestamp, is_sidechain
+		SELECT uuid, role, content, timestamp
 		FROM messages
 		WHERE source = ? AND session_id = ?
 		  AND role = 'user'
@@ -510,7 +516,7 @@ func scanMessages(rows *sql.Rows) ([]MessageRow, error) {
 	result := []MessageRow{}
 	for rows.Next() {
 		var m MessageRow
-		if err := rows.Scan(&m.UUID, &m.Role, &m.Content, &m.Timestamp, &m.IsSidechain); err != nil {
+		if err := rows.Scan(&m.UUID, &m.Role, &m.Content, &m.Timestamp); err != nil {
 			return nil, err
 		}
 		result = append(result, m)
