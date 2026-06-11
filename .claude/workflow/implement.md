@@ -15,6 +15,7 @@
 - 既存の局所パターンに従う。変える場合は理由を説明可能にする
 - 型定義・API・依存方向は実物で確認（推測しない）
 - TDD でやる場合は `tdd` スキルに従う（Normal / High-risk の振る舞い変更は基本 TDD。Small は省略可）
+- 振る舞い変更や bug fix では、同じ commit に unit test / regression test を追加または更新する。テストできない場合は理由を明記する
 - 振る舞いが変わるなら `specs/`（あれば）の該当箇所を同期する
 - backlog に積んでいた項目を実装完了したら `backlog/backlog.md` の該当行を `[x]` 等で更新する
 - 実装中に見つかった別タスクは、今やる理由がなければ `backlog/backlog.md` に逃がす
@@ -27,13 +28,6 @@
 - テスト: `go test ./...`
 - 静的チェック: `go vet ./...`
 - フォーマット: `gofmt` / `goimports` は PostToolUse hook（`.claude/hooks/go-format.sh`）で自動実行されるため手動不要
-
-## Worktree Check
-
-Primary working directory が `.claude/worktrees/` 配下のときだけ:
-
-- 環境変数や git status から実際の作業先を確認する
-- 不一致なら作業を中断してユーザーに報告し、`claude -w` で再起動を依頼する
 
 ## Acceptance
 

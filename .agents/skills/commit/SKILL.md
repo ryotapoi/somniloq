@@ -12,7 +12,7 @@ description: Use when the current repository changes are ready to be committed. 
   - コミットメッセージは英語。
   - summary は小文字始まり・70 文字以内・末尾ピリオドなし。
   - `.env`、credentials、不要な生成物はコミットしない。
-  - `--no-verify` は使わない。
+  - `--no-verify` で hooks をスキップしない。
 - **Acceptance**:
   - commit が作成されている。
   - `git status` で残差分が意図したものだけである。

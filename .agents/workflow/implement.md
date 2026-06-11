@@ -7,6 +7,7 @@
   - 既存の局所パターンに従う。変える場合は理由を説明できるようにする。
   - 型定義・API・依存方向は実物で確認する。
   - 振る舞い変更があるなら、必要に応じて `specs/`、`rules/scope.md`、README、テストを同期する。
+  - 振る舞い変更や bug fix では、同じ commit に unit test / regression test を追加または更新する。テストできない場合は理由を明記する。
   - 実装中に見つかった別タスクは、今やる理由がなければ `backlog/backlog.md` に逃がす。
   - ループ内で時刻を扱う場合は各反復で取得する（ループ外で 1 回だけ取得しない）。
 - **Acceptance**:
@@ -28,6 +29,7 @@
   - `internal/core` に CLI 入出力や `os.Exit` を持ち込まない。
   - `cmd/somniloq` に DB 操作や JSONL パースを持ち込まない。
   - SQLite/JSONL/CLI 仕様に触れる変更はテストを先に置くか、少なくとも仕様を検証するテストを追加する。
+  - 振る舞い変更や bug fix では unit test / regression test を同じ commit に含め、含められない場合は理由を残す。
 - **Acceptance**: plan と実装上の事実が食い違っていない。
 - **Relevant**: 変更対象コード、関連テスト、関連 specs / rules。
 
