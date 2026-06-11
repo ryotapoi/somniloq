@@ -42,8 +42,8 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), out, errOut io.
 	for _, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
 		proj := resolveDisplayName(r.RepoPath, *short)
-		fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%d\n",
-			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), proj, title, r.MessageCount)
+		fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%d\t%d\n",
+			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), proj, title, r.MessageCount, r.BodySize)
 	}
 	return 0, nil
 }

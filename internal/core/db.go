@@ -287,6 +287,10 @@ type SessionRow struct {
 	EndedAt      string
 	CustomTitle  string
 	MessageCount int
+	// BodySize is the total content size in bytes (UTF-8, not runes) of the
+	// session's non-sidechain messages: approximately what `show` would
+	// print, excluding the Markdown headers show adds.
+	BodySize int
 }
 
 type SessionFilter struct {
@@ -298,8 +302,13 @@ type SessionFilter struct {
 // sessionRowSelect is the SELECT/FROM head shared by every query that
 // produces SessionRow values. scanSessionRow consumes exactly these columns,
 // so the two must change together.
+//
+// The body-size sum counts bytes (OCTET_LENGTH; LENGTH on TEXT would count
+// characters) and skips sidechain rows so the value predicts what `show`
+// prints. MessageCount keeps counting every row.
 const sessionRowSelect = `
-	SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid)
+	SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''), COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''), COUNT(m.uuid),
+	       COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.is_sidechain = 0), 0)
 	FROM sessions s
 	LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id`
 
@@ -312,7 +321,7 @@ type rowScanner interface {
 func scanSessionRow(row rowScanner) (SessionRow, error) {
 	var r SessionRow
 	var src string
-	if err := row.Scan(&src, &r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount); err != nil {
+	if err := row.Scan(&src, &r.SessionID, &r.CWD, &r.RepoPath, &r.StartedAt, &r.EndedAt, &r.CustomTitle, &r.MessageCount, &r.BodySize); err != nil {
 		return SessionRow{}, err
 	}
 	r.Source = Source(src)

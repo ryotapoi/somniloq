@@ -116,12 +116,13 @@ somniloq sessions --short                        # short project names
 **Columns** (tab-separated):
 
 ```
-SessionID    TimeRange    RepoPath    CustomTitle    MessageCount
+SessionID    TimeRange    RepoPath    CustomTitle    MessageCount    BodySize
 ```
 
 - `TimeRange` is displayed as `YYYY-MM-DD HH:MM ~ YYYY-MM-DD HH:MM` (started ~ ended) in local time. If `ended_at` is unavailable, the format is `YYYY-MM-DD HH:MM ~`.
 - `RepoPath` column shows `repo_path` (e.g. `/Users/ryota/Sources/myapp`). Empty when unresolved.
 - `--short` shows `filepath.Base(repo_path)` (e.g. `myapp`, hyphens preserved).
+- `BodySize` is the total body size in bytes (sidechain excluded): approximately how much `show` would print (show adds Markdown headers on top). Use it to spot sessions worth `outline`-ing first — `MessageCount` alone can hide a single huge message.
 
 ---
 

@@ -474,6 +474,49 @@ func TestGetMessages_OrderByTimestamp(t *testing.T) {
 	}
 }
 
+func TestListSessions_BodySizeCountsBytesExcludingSidechain(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	// "héllo" is 5 runes / 6 bytes: BodySize must count bytes, not runes.
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "héllo", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "abcd", Timestamp: "2026-03-28T10:01:00Z"}))
+	// Sidechain content must not count toward BodySize (show excludes it)
+	// even though MessageCount includes the row.
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s1", Role: "assistant", Content: "sidechain", Timestamp: "2026-03-28T10:02:00Z", IsSidechain: true}))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].BodySize != 10 {
+		t.Errorf("BodySize: got %d, want 10 (6 + 4 bytes)", rows[0].BodySize)
+	}
+	if rows[0].MessageCount != 3 {
+		t.Errorf("MessageCount: got %d, want 3 (sidechain still counted)", rows[0].MessageCount)
+	}
+}
+
+func TestListSessions_BodySizeZeroWithoutMessages(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("expected 1 row, got %d", len(rows))
+	}
+	if rows[0].BodySize != 0 {
+		t.Errorf("BodySize: got %d, want 0", rows[0].BodySize)
+	}
+}
+
 func TestGetMessages_EqualTimestampsKeepInsertionOrder(t *testing.T) {
 	db := testDB(t)
 

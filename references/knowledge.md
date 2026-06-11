@@ -8,6 +8,10 @@ Claude Code の JSONL タイムスタンプはミリ秒付き RFC3339（例: `20
 
 対処: `"2006-01-02T15:04:05.000Z"` フォーマットを使い、常に3桁のミリ秒を出力する。
 
+## TEXT のバイト数は `OCTET_LENGTH` で取る
+
+`LENGTH(text)` は文字数を返すため、UTF-8 のバイト数が欲しい場合は `OCTET_LENGTH(text)`（SQLite 3.43+、同梱の modernc.org/sqlite は対応済み）を使う。`LENGTH(CAST(x AS BLOB))` でも同じ値になるが、CAST は本文の overflow ページ読み出しを強制するのに対し、`OCTET_LENGTH` はレコードヘッダのシリアル型から計算するため本文を読まない。
+
 ## `ORDER BY timestamp` 単独では同値行の順序が不定
 
 旧形式の Codex rollout は per-record timestamp を持たず、全レコードが `session_meta` の timestamp を継承するため、1 セッション内のメッセージが timestamp で全件タイになる。SQLite は同値キーのソート順を保証しないので、`ORDER BY timestamp ASC` 単独だと実行ごとに行順（＝ターン採番）が揺れうる。

@@ -93,7 +93,9 @@ somniloq sessions --project myapp        # substring match against repo_path
 somniloq sessions --short                # basename of repo_path
 ```
 
-Output is TSV: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title`, `message_count`
+Output is TSV: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title`, `message_count`, `body_size`
+
+`body_size` is the total body size in bytes (sidechain excluded), so you can tell whether a session is large before `show`ing it.
 
 ### projects
 

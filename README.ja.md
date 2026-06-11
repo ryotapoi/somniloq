@@ -91,7 +91,9 @@ somniloq sessions --project myapp        # repo_path への substring マッチ
 somniloq sessions --short                # repo_path の basename
 ```
 
-出力は TSV 形式: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title`, `message_count`
+出力は TSV 形式: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title`, `message_count`, `body_size`
+
+`body_size` は本文（sidechain 除く）の合計バイト数。`show` する前に大きいセッションかどうかを判定できる。
 
 ### projects
 
