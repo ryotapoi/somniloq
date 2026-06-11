@@ -91,11 +91,14 @@ somniloq sessions --until 2026-03-28     # before a date (local time)
 somniloq sessions --since 7d --until 2h  # 7 days ago to 2 hours ago
 somniloq sessions --project myapp        # substring match against repo_path
 somniloq sessions --short                # basename of repo_path
+somniloq sessions --format json          # JSON array instead of TSV
 ```
 
 Output is TSV: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title`, `message_count`, `body_size`
 
 `body_size` is the total body size in bytes (sidechain excluded), so you can tell whether a session is large before `show`ing it.
+
+`--format json` emits a JSON array with `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messageCount`, `bodySize`. JSON timestamps are the stored RFC3339 UTC values (see "JSON output" below).
 
 ### projects
 
@@ -103,9 +106,10 @@ Output is TSV: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title
 somniloq projects             # all projects
 somniloq projects --since 7d  # projects active in the last 7 days
 somniloq projects --short     # basename of repo_path
+somniloq projects --format json
 ```
 
-Output is TSV: `repo_path`, `session_count`
+Output is TSV: `repo_path`, `session_count`. With `--format json`: `project`, `sessionCount`.
 
 ### show
 
@@ -119,17 +123,30 @@ somniloq show --summary 3 --since 24h                   # first 3 user messages 
 somniloq show --short --since 24h                       # basename of repo_path
 somniloq show --turn 40..60 <session-id>                # only turns 40-60
 somniloq show --tail 3 <session-id>                     # only the last 3 turns
+somniloq show --format json <session-id>                # JSON instead of Markdown
 ```
 
 `--turn` / `--tail` use the same turn numbering as `outline` (1-based, incremented on each user message), so you can skim the outline first and read only the range you need. A turn includes the user message and the replies that follow it. `--turn` and `--tail` are mutually exclusive, cannot be combined with `--summary`, and in bulk mode (`--since`/`--until`) apply to each listed session independently.
 
+`--format json` emits a JSON array of sessions — always an array, even for a single session ID — where each element has `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, and `messages` (`role`, `content`, `timestamp`). `--summary` / `--turn` / `--tail` filtering applies to `messages` as-is.
+
 ### outline
 
 ```bash
-somniloq outline <session-id>   # user messages as turn number, time, and first line
+somniloq outline <session-id>                 # user messages as turn number, time, and first line
+somniloq outline --format json <session-id>  # JSON instead of TSV
 ```
 
-Grasp the structure of a long session before `show`ing it in full. Output is TSV: `turn`, `time`, `first_line`. Turn numbers start at 1 and increment on each user message (sidechain rows are excluded).
+Grasp the structure of a long session before `show`ing it in full. Output is TSV: `turn`, `time`, `first_line`. Turn numbers start at 1 and increment on each user message (sidechain rows are excluded). With `--format json`: `turn`, `timestamp`, `firstLine`.
+
+### JSON output
+
+`sessions`, `projects`, `outline` (`--format tsv|json`) and `show` (`--format markdown|json`) support JSON output for scripts. Rules common to all commands:
+
+- Always a JSON array; empty results print `[]`.
+- Timestamps are the stored RFC3339 UTC values, not the local-time display format.
+- Strings are raw values (no tab/newline sanitizing; JSON escaping covers it). `title` is the raw custom title with no session-id fallback.
+- `project` honors `--short`; without it you get the raw `repo_path`.
 
 ## Common Options
 

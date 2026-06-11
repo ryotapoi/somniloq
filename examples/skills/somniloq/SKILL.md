@@ -104,6 +104,7 @@ somniloq sessions --since 24h                    # last 24 hours
 somniloq sessions --since 7d --project myapp     # filtered by project
 somniloq sessions --since 2026-03-28 --until 2026-03-29
 somniloq sessions --short                        # short project names
+somniloq sessions --format json                  # JSON array instead of TSV
 ```
 
 | Flag | Default | Description |
@@ -112,6 +113,7 @@ somniloq sessions --short                        # short project names
 | `--until` | — | End time filter |
 | `--project` | — | Substring match on `repo_path` |
 | `--short` | false | Show repo basename (`filepath.Base(repo_path)`) |
+| `--format` | tsv | `tsv` or `json` (see "JSON output") |
 
 **Columns** (tab-separated):
 
@@ -123,6 +125,7 @@ SessionID    TimeRange    RepoPath    CustomTitle    MessageCount    BodySize
 - `RepoPath` column shows `repo_path` (e.g. `/Users/ryota/Sources/myapp`). Empty when unresolved.
 - `--short` shows `filepath.Base(repo_path)` (e.g. `myapp`, hyphens preserved).
 - `BodySize` is the total body size in bytes (sidechain excluded): approximately how much `show` would print (show adds Markdown headers on top). Use it to spot sessions worth `outline`-ing first — `MessageCount` alone can hide a single huge message.
+- `--format json` fields: `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messageCount`, `bodySize`.
 
 ---
 
@@ -139,6 +142,7 @@ somniloq show --short <session-id>
 somniloq show --turn 40 <session-id>
 somniloq show --turn 40..60 <session-id>
 somniloq show --tail 3 <session-id>
+somniloq show --format json <session-id>
 
 # by time range
 somniloq show --since 24h
@@ -157,7 +161,7 @@ somniloq show --short --since 24h
 | `--include-clear` | false | Requires `--summary >= 1`; disable `/clear` + caveat skipping (sidechain still excluded). Debug use. |
 | `--turn <N\|N..M>` | — | Show only turn N or turns N..M (inclusive). Turn numbers match `outline`. A turn = a user message plus the replies that follow it. Out-of-range turns print the session header with no body (exit 0). |
 | `--tail <N>` | 0 | Show only the last N turns. `0` disables. |
-| `--format` | markdown | Output format (only `markdown` is supported) |
+| `--format` | markdown | `markdown` or `json` (see "JSON output") |
 
 **Constraints:**
 - `<session-id>` and `--since`/`--until` are mutually exclusive.
@@ -195,6 +199,7 @@ Map a long session before reading it: one TSV row per user message with its turn
 
 ```bash
 somniloq outline <session-id>
+somniloq outline --format json <session-id>
 ```
 
 **Columns** (tab-separated):
@@ -206,6 +211,7 @@ Turn    Time    FirstLine
 - Turn numbers are 1-based and increment on each user message (sidechain excluded, same as `show`).
 - Synthetic user messages (`/clear` echo, `<local-command-caveat>`) count as turns and are listed.
 - Recommended flow for long sessions: `outline` → pick the relevant turns → `show --turn N..M`.
+- `--format json` fields: `turn`, `timestamp`, `firstLine`.
 
 ---
 
@@ -218,6 +224,7 @@ somniloq projects                          # all projects
 somniloq projects --since 7d               # active in last 7 days
 somniloq projects --short                  # short project names
 somniloq projects --since 30d --short
+somniloq projects --format json
 ```
 
 | Flag | Default | Description |
@@ -225,6 +232,7 @@ somniloq projects --since 30d --short
 | `--since` | — | Start time filter |
 | `--until` | — | End time filter |
 | `--short` | false | Show repo basename (`filepath.Base(repo_path)`) |
+| `--format` | tsv | `tsv` or `json` (see "JSON output") |
 
 **Columns** (tab-separated):
 
@@ -232,7 +240,27 @@ somniloq projects --since 30d --short
 RepoPath    SessionCount
 ```
 
-`RepoPath` shows `repo_path` (empty when unresolved). Worktree and subdirectory sessions are merged into their root project via `repo_path` aggregation in SQL — session counts are combined.
+`RepoPath` shows `repo_path` (empty when unresolved). Worktree and subdirectory sessions are merged into their root project via `repo_path` aggregation in SQL — session counts are combined. `--format json` fields: `project`, `sessionCount`.
+
+---
+
+## JSON output
+
+`sessions`, `projects`, `outline` (`--format tsv|json`) and `show` (`--format markdown|json`) emit JSON for scripting — prefer it over parsing TSV/Markdown. Shared rules:
+
+- Always a JSON array; empty results print `[]`. Single-session `show` is an array with one element.
+- Timestamps are the stored RFC3339 UTC values (e.g. `2026-06-11T05:08:19.794Z`), not the local-time display format.
+- Strings are raw (no tab/newline sanitizing). `title` is the raw custom title — no session-id fallback.
+- `project` honors `--short`; without it you get the raw `repo_path`.
+- `show --format json` elements: `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messages` (array of `role`, `content`, `timestamp`). `--summary` / `--turn` / `--tail` filtering applies to `messages`.
+
+```bash
+# sessions of the last day as id + size pairs
+somniloq sessions --since 24h --format json | jq -r '.[] | "\(.sessionId)\t\(.bodySize)"'
+
+# all user messages of a session
+somniloq show --format json <session-id> | jq -r '.[0].messages[] | select(.role == "user") | .content'
+```
 
 ---
 

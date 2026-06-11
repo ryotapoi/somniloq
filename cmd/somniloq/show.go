@@ -25,7 +25,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 	includeClear := fs.Bool("include-clear", false, "keep /clear and local-command-caveat messages in --summary output (requires --summary >= 1)")
 	turnRange := fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)")
 	tail := fs.Int("tail", 0, "show only the last N turns (0 disables)")
-	format := fs.String("format", "markdown", "output format (markdown)")
+	format := fs.String("format", "markdown", "output format (markdown, json)")
 	setUsage(fs, "Show session content in Markdown", showUsageLine)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
@@ -65,8 +65,8 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 		}
 	}
 
-	if *format != "markdown" {
-		return 1, fmt.Errorf("unknown format: %q", *format)
+	if err := validateFormat(*format, "markdown", "json"); err != nil {
+		return 1, err
 	}
 
 	showUsage := "usage: " + showUsageLine
@@ -128,6 +128,14 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 		if err != nil {
 			return 1, err
 		}
+		if *format == "json" {
+			// Always an array, so consumers parse single-session and
+			// time-range output the same way.
+			if err := writeJSON(out, []showSessionJSON{newShowSessionJSON(session, proj, messages)}); err != nil {
+				return 1, err
+			}
+			return 0, nil
+		}
 		formatSession(out, session, proj, messages, time.Local)
 		return 0, nil
 	}
@@ -141,6 +149,20 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 	sessions, err := db.ListSessions(filter)
 	if err != nil {
 		return 1, err
+	}
+	if *format == "json" {
+		entries := make([]showSessionJSON, len(sessions))
+		for i, session := range sessions {
+			messages, err := getMessages(session.Source, session.SessionID)
+			if err != nil {
+				return 1, err
+			}
+			entries[i] = newShowSessionJSON(session, resolveDisplayName(session.RepoPath, *short), messages)
+		}
+		if err := writeJSON(out, entries); err != nil {
+			return 1, err
+		}
+		return 0, nil
 	}
 	if len(sessions) == 0 {
 		return 0, nil

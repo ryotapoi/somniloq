@@ -18,9 +18,14 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), out, errOut io.
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter by repo path (substring match)")
 	short := fs.Bool("short", false, "shorten project to repo basename")
+	format := fs.String("format", "tsv", "output format (tsv, json)")
 	setUsage(fs, "List sessions", "somniloq sessions [flags]")
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
+	}
+
+	if err := validateFormat(*format, "tsv", "json"); err != nil {
+		return 1, err
 	}
 
 	filter, err := buildSessionFilter(*since, *until, *project)
@@ -37,6 +42,17 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), out, errOut io.
 	rows, err := db.ListSessions(filter)
 	if err != nil {
 		return 1, err
+	}
+
+	if *format == "json" {
+		entries := make([]sessionJSON, len(rows))
+		for i, r := range rows {
+			entries[i] = newSessionJSON(r, resolveDisplayName(r.RepoPath, *short))
+		}
+		if err := writeJSON(out, entries); err != nil {
+			return 1, err
+		}
+		return 0, nil
 	}
 
 	for _, r := range rows {

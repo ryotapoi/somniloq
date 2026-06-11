@@ -10,15 +10,20 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const outlineUsageLine = "somniloq outline <session-id>"
+const outlineUsageLine = "somniloq outline [--format <fmt>] <session-id>"
 
 // outlineCmd runs the outline subcommand without calling os.Exit, so it can
 // be tested directly.
 func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writer) (int, error) {
 	fs := flag.NewFlagSet("outline", flag.ContinueOnError)
+	format := fs.String("format", "tsv", "output format (tsv, json)")
 	setUsage(fs, "List a session's user messages as turn number, time, and first line", outlineUsageLine)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
+	}
+
+	if err := validateFormat(*format, "tsv", "json"); err != nil {
+		return 1, err
 	}
 
 	outlineUsage := "usage: " + outlineUsageLine
@@ -48,6 +53,24 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 	messages, err := db.GetMessages(session.Source, session.SessionID)
 	if err != nil {
 		return 1, err
+	}
+
+	if *format == "json" {
+		entries := []outlineEntryJSON{}
+		for _, tm := range assignTurns(messages) {
+			if tm.Msg.Role != "user" {
+				continue
+			}
+			entries = append(entries, outlineEntryJSON{
+				Turn:      tm.Turn,
+				Timestamp: tm.Msg.Timestamp,
+				FirstLine: firstLine(tm.Msg.Content),
+			})
+		}
+		if err := writeJSON(out, entries); err != nil {
+			return 1, err
+		}
+		return 0, nil
 	}
 
 	for _, tm := range assignTurns(messages) {
