@@ -534,7 +534,7 @@ func insertV03ImportState(t *testing.T, db *DB, path string) {
 	}
 }
 
-func TestBackfill_MigratesV03ToV04(t *testing.T) {
+func TestMigrateToV04IfNeeded_MigratesV03ToV04(t *testing.T) {
 	unsetAllGitEnv(t)
 
 	db := setupV03DB(t)
@@ -547,14 +547,13 @@ func TestBackfill_MigratesV03ToV04(t *testing.T) {
 	insertV03ImportState(t, db, "/path/to/a.jsonl")
 	insertV03ImportState(t, db, "/path/to/b.jsonl")
 
-	result, err := Backfill(db)
+	ms, mm, mi, err := MigrateToV04IfNeeded(db)
 	if err != nil {
-		t.Fatalf("Backfill: %v", err)
+		t.Fatalf("MigrateToV04IfNeeded: %v", err)
 	}
 
-	if result.MigratedSessions != 2 || result.MigratedMessages != 2 || result.MigratedImportStates != 2 {
-		t.Errorf("migrated counts = {sessions:%d messages:%d import_states:%d}, want 2/2/2",
-			result.MigratedSessions, result.MigratedMessages, result.MigratedImportStates)
+	if ms != 2 || mm != 2 || mi != 2 {
+		t.Errorf("migrated counts = {sessions:%d messages:%d import_states:%d}, want 2/2/2", ms, mm, mi)
 	}
 
 	// Source column exists.
@@ -604,32 +603,33 @@ func TestBackfill_MigratesV03ToV04(t *testing.T) {
 	}
 }
 
-func TestBackfill_MigrationIdempotent(t *testing.T) {
+func TestMigrateToV04IfNeeded_Idempotent(t *testing.T) {
 	unsetAllGitEnv(t)
 
 	db := setupV03DB(t)
 	insertV03Session(t, db, "s1", "/proj", "/proj")
 	insertV03Message(t, db, "s1", "m1")
 
-	first, err := Backfill(db)
+	ms, _, _, err := MigrateToV04IfNeeded(db)
 	if err != nil {
-		t.Fatalf("first Backfill: %v", err)
+		t.Fatalf("first MigrateToV04IfNeeded: %v", err)
 	}
-	if first.MigratedSessions == 0 {
-		t.Errorf("first run: MigratedSessions = 0, want > 0")
+	if ms == 0 {
+		t.Errorf("first run: migrated sessions = 0, want > 0")
 	}
 
-	second, err := Backfill(db)
+	ms, mm, mi, err := MigrateToV04IfNeeded(db)
 	if err != nil {
-		t.Fatalf("second Backfill: %v", err)
+		t.Fatalf("second MigrateToV04IfNeeded: %v", err)
 	}
-	if second.MigratedSessions != 0 || second.MigratedMessages != 0 || second.MigratedImportStates != 0 {
-		t.Errorf("second run migrated counts = {%d %d %d}, want all 0",
-			second.MigratedSessions, second.MigratedMessages, second.MigratedImportStates)
+	if ms != 0 || mm != 0 || mi != 0 {
+		t.Errorf("second run migrated counts = {%d %d %d}, want all 0", ms, mm, mi)
 	}
 }
 
-func TestBackfill_MigrationWithOrphans(t *testing.T) {
+// TestBackfill_AfterMigrationWithOrphans mirrors the CLI flow: preflight
+// MigrateToV04IfNeeded, then Backfill on the migrated DB.
+func TestBackfill_AfterMigrationWithOrphans(t *testing.T) {
 	unsetAllGitEnv(t)
 
 	db := setupV03DB(t)
@@ -640,14 +640,17 @@ func TestBackfill_MigrationWithOrphans(t *testing.T) {
 	insertV03Session(t, db, "kept", "/Users/test/proj/.claude/worktrees/feature", "")
 	insertV03Message(t, db, "kept", "m1")
 
+	ms, mm, mi, err := MigrateToV04IfNeeded(db)
+	if err != nil {
+		t.Fatalf("MigrateToV04IfNeeded: %v", err)
+	}
+	if ms != 2 || mm != 1 || mi != 0 {
+		t.Errorf("migrated counts = {%d %d %d}, want 2/1/0", ms, mm, mi)
+	}
+
 	result, err := Backfill(db)
 	if err != nil {
 		t.Fatalf("Backfill: %v", err)
-	}
-
-	if result.MigratedSessions != 2 || result.MigratedMessages != 1 || result.MigratedImportStates != 0 {
-		t.Errorf("migrated counts = {%d %d %d}, want 2/1/0",
-			result.MigratedSessions, result.MigratedMessages, result.MigratedImportStates)
 	}
 	if result.Deleted != 1 || result.Resolved != 1 || result.Unresolved != 0 {
 		t.Errorf("cleanup counts = {Deleted:%d Resolved:%d Unresolved:%d}, want 1/1/0",
@@ -655,7 +658,7 @@ func TestBackfill_MigrationWithOrphans(t *testing.T) {
 	}
 }
 
-func TestBackfill_MigrationOnV04DB_NoOp(t *testing.T) {
+func TestMigrateToV04IfNeeded_NoOpOnV04DB(t *testing.T) {
 	unsetAllGitEnv(t)
 
 	db, err := OpenDB(":memory:")
@@ -664,25 +667,24 @@ func TestBackfill_MigrationOnV04DB_NoOp(t *testing.T) {
 	}
 	defer db.Close()
 
-	result, err := Backfill(db)
+	ms, mm, mi, err := MigrateToV04IfNeeded(db)
 	if err != nil {
-		t.Fatalf("Backfill: %v", err)
+		t.Fatalf("MigrateToV04IfNeeded: %v", err)
 	}
-	if result.MigratedSessions != 0 || result.MigratedMessages != 0 || result.MigratedImportStates != 0 {
-		t.Errorf("v0.4 DB migrated counts = {%d %d %d}, want all 0",
-			result.MigratedSessions, result.MigratedMessages, result.MigratedImportStates)
+	if ms != 0 || mm != 0 || mi != 0 {
+		t.Errorf("v0.4 DB migrated counts = {%d %d %d}, want all 0", ms, mm, mi)
 	}
 }
 
-func TestBackfill_MigrationCompositeFK(t *testing.T) {
+func TestMigrateToV04IfNeeded_CompositeFK(t *testing.T) {
 	unsetAllGitEnv(t)
 
 	db := setupV03DB(t)
 	insertV03Session(t, db, "s1", "/proj", "/proj")
 	insertV03Message(t, db, "s1", "m1")
 
-	if _, err := Backfill(db); err != nil {
-		t.Fatalf("Backfill: %v", err)
+	if _, _, _, err := MigrateToV04IfNeeded(db); err != nil {
+		t.Fatalf("MigrateToV04IfNeeded: %v", err)
 	}
 
 	// FK list should mention composite (source, session_id).

@@ -10,16 +10,6 @@ type backfillTarget struct {
 
 // BackfillResult reports per-category counts from a single Backfill run.
 type BackfillResult struct {
-	// MigratedSessions / MigratedMessages / MigratedImportStates report the
-	// number of rows migrated from v0.3 to v0.4 schema. CLI callers should
-	// invoke MigrateToV04IfNeeded directly to capture these counts because
-	// Backfill is idempotent and re-runs the migration step (which produces 0
-	// when CLI already ran it). These fields are meaningful only for
-	// tests / other direct callers of Backfill.
-	MigratedSessions     int
-	MigratedMessages     int
-	MigratedImportStates int
-
 	Deleted    int
 	Resolved   int
 	Unresolved int
@@ -28,9 +18,8 @@ type BackfillResult struct {
 // MigrateToV04IfNeeded performs v0.3 → v0.4 schema migration if the DB is
 // still on v0.3. Idempotent: returns (0, 0, 0, nil) on a v0.4 DB.
 //
-// CLI callers should run this preflight before CountOrphanSessions because
-// the v0.4 SQL it emits requires the source column. Backfill also calls this
-// internally to keep direct-callers safe.
+// Callers must run this preflight before CountOrphanSessions and Backfill
+// because the v0.4 SQL they emit requires the source column.
 func MigrateToV04IfNeeded(db *DB) (sessions, messages, importStates int, err error) {
 	needs, err := needsV04Migration(db)
 	if err != nil {
@@ -218,7 +207,7 @@ func selectBackfillTargets(db *DB) ([]backfillTarget, error) {
 // Used by the CLI to decide whether to prompt before a destructive backfill.
 //
 // Precondition: the v0.4 schema (source column, composite PK) is in place.
-// Callers should run MigrateToV04IfNeeded first when the DB may still be on
+// Callers must run MigrateToV04IfNeeded first when the DB may still be on
 // v0.3.
 func CountOrphanSessions(db *DB) (int, error) {
 	var count int
@@ -232,27 +221,18 @@ func CountOrphanSessions(db *DB) (int, error) {
 }
 
 // Backfill corrects legacy session data:
-//  1. Migrates v0.3 → v0.4 schema if needed (idempotent).
-//  2. Deletes sessions that have no messages (v0.2.x meta-prefix INSERT residue).
-//  3. Resolves repo_path for sessions where it is still NULL and cwd is populated.
+//  1. Deletes sessions that have no messages (v0.2.x meta-prefix INSERT residue).
+//  2. Resolves repo_path for sessions where it is still NULL and cwd is populated.
 //
 // Idempotent: re-running is a no-op once the DB is clean.
 // The unresolved branch guards against residual pathological inputs (e.g. cwd
 // starts with the worktree fragment → ResolveRepoPath returns "").
 //
-// MigratedXxx fields in BackfillResult are populated by the internal
-// MigrateToV04IfNeeded call. CLI callers preflight migration separately and
-// will see 0 here for the second invocation, which is expected.
+// Precondition: the v0.4 schema (source column, composite PK) is in place.
+// Callers must run MigrateToV04IfNeeded first when the DB may still be on
+// v0.3.
 func Backfill(db *DB) (BackfillResult, error) {
 	var result BackfillResult
-
-	ms, mm, mi, err := MigrateToV04IfNeeded(db)
-	if err != nil {
-		return result, err
-	}
-	result.MigratedSessions = ms
-	result.MigratedMessages = mm
-	result.MigratedImportStates = mi
 
 	todo, err := selectBackfillTargets(db)
 	if err != nil {
