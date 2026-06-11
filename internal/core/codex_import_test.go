@@ -1,8 +1,11 @@
 package core
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -215,13 +218,36 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 		t.Fatalf("second import failed: %v", err)
 	}
 
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE source='codex' AND session_id='codex-incremental'").Scan(&count); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
+	// Pin the UUIDs, not just the count: they are derived from path + line
+	// number, so a regression in prefix-replay line counting would silently
+	// shift them (or collide with already-imported rows).
+	rows, err := db.db.Query("SELECT uuid FROM messages WHERE source='codex' AND session_id='codex-incremental' ORDER BY timestamp")
+	if err != nil {
+		t.Fatalf("messages query failed: %v", err)
 	}
-	if count != 2 {
-		t.Errorf("messages: got %d, want 2", count)
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var uuid string
+		if err := rows.Scan(&uuid); err != nil {
+			t.Fatalf("Scan failed: %v", err)
+		}
+		got = append(got, uuid)
 	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("Rows failed: %v", err)
+	}
+	want := []string{codexMessageUUID(path, 2), codexMessageUUID(path, 3)}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("uuids:\ngot  %q\nwant %q", got, want)
+	}
+}
+
+// codexMessageUUID mirrors the UUID derivation in internal/ingest/codex so the
+// test pins the on-disk identity of imported messages.
+func codexMessageUUID(path string, lineNumber int) string {
+	sum := sha256.Sum256([]byte(path + "\x00" + strconv.Itoa(lineNumber)))
+	return "codex:" + hex.EncodeToString(sum[:])
 }
 
 func TestImport_SourceCodexUsesCodexAdapter(t *testing.T) {
