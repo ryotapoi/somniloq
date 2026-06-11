@@ -23,16 +23,17 @@ func (a Adapter) Source() ingest.Source {
 	return ingest.SourceClaudeCode
 }
 
-func (a Adapter) ScanFiles(projectsDir string) ([]ingest.File, error) {
+func (a Adapter) ScanFiles(projectsDir string) ([]ingest.File, []error) {
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, err
+		return nil, []error{fmt.Errorf("scan %s: %w", projectsDir, err)}
 	}
 
 	var files []ingest.File
+	var errs []error
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
@@ -41,7 +42,8 @@ func (a Adapter) ScanFiles(projectsDir string) ([]ingest.File, error) {
 		subPath := filepath.Join(projectsDir, projDir)
 		subEntries, err := os.ReadDir(subPath)
 		if err != nil {
-			return nil, fmt.Errorf("read dir %s: %w", subPath, err)
+			errs = append(errs, fmt.Errorf("scan %s: %w", subPath, err))
+			continue
 		}
 		for _, se := range subEntries {
 			if se.IsDir() {
@@ -58,7 +60,7 @@ func (a Adapter) ScanFiles(projectsDir string) ([]ingest.File, error) {
 			})
 		}
 	}
-	return files, nil
+	return files, errs
 }
 
 // SessionMetaWriter is the claude-code-specific persistence surface for

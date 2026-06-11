@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
@@ -11,7 +12,7 @@ import (
 
 type JSONLFile = ingest.File
 
-func scanJSONLFiles(projectsDir string) ([]JSONLFile, error) {
+func scanJSONLFiles(projectsDir string) ([]JSONLFile, []error) {
 	return claudecode.NewAdapter(ResolveRepoPath).ScanFiles(projectsDir)
 }
 
@@ -41,9 +42,9 @@ func TestScanJSONLFiles(t *testing.T) {
 	os.MkdirAll(memDir, 0o755)
 	os.WriteFile(filepath.Join(memDir, "data.md"), []byte("x"), 0o644)
 
-	files, err := scanJSONLFiles(dir)
-	if err != nil {
-		t.Fatalf("ScanJSONLFiles failed: %v", err)
+	files, errs := scanJSONLFiles(dir)
+	if len(errs) != 0 {
+		t.Fatalf("ScanJSONLFiles failed: %v", errs)
 	}
 
 	if len(files) != 3 {
@@ -65,9 +66,9 @@ func TestScanJSONLFiles(t *testing.T) {
 func TestScanJSONLFiles_EmptyDir(t *testing.T) {
 	dir := t.TempDir()
 
-	files, err := scanJSONLFiles(dir)
-	if err != nil {
-		t.Fatalf("ScanJSONLFiles failed: %v", err)
+	files, errs := scanJSONLFiles(dir)
+	if len(errs) != 0 {
+		t.Fatalf("ScanJSONLFiles failed: %v", errs)
 	}
 	if len(files) != 0 {
 		t.Errorf("expected 0 files, got %d", len(files))
@@ -505,12 +506,79 @@ func TestImport_InvalidSourceDoesNotDelete(t *testing.T) {
 }
 
 func TestScanJSONLFiles_NonexistentDir(t *testing.T) {
-	files, err := scanJSONLFiles("/nonexistent/path")
-	if err != nil {
-		t.Fatalf("ScanJSONLFiles should not error on missing dir: %v", err)
+	files, errs := scanJSONLFiles("/nonexistent/path")
+	if len(errs) != 0 {
+		t.Fatalf("ScanJSONLFiles should not error on missing dir: %v", errs)
 	}
 	if len(files) != 0 {
 		t.Errorf("expected 0 files, got %d", len(files))
+	}
+}
+
+func TestScanJSONLFiles_UnreadableProjectDirIsNonFatal(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission checks do not apply to root")
+	}
+	dir := t.TempDir()
+	projA := filepath.Join(dir, "-Users-test-projA")
+	os.MkdirAll(projA, 0o755)
+	os.WriteFile(filepath.Join(projA, "sess1.jsonl"), []byte("{}"), 0o644)
+	projBad := filepath.Join(dir, "-Users-test-projBad")
+	os.MkdirAll(projBad, 0o755)
+	if err := os.Chmod(projBad, 0o000); err != nil {
+		t.Fatalf("Chmod failed: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(projBad, 0o755) })
+
+	files, errs := scanJSONLFiles(dir)
+	if len(errs) != 1 {
+		t.Fatalf("got %d scan errors, want 1: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0].Error(), projBad) {
+		t.Errorf("scan error should name the unreadable dir: %v", errs[0])
+	}
+	if len(files) != 1 {
+		t.Fatalf("got %d files, want 1: %+v", len(files), files)
+	}
+	if files[0].SessionID != "sess1" {
+		t.Errorf("SessionID: got %q, want sess1", files[0].SessionID)
+	}
+}
+
+func TestImport_ScanErrorsAreNonFatal(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission checks do not apply to root")
+	}
+	db := testDB(t)
+	projectsDir := t.TempDir()
+	projA := filepath.Join(projectsDir, "-Users-test-projA")
+	os.MkdirAll(projA, 0o755)
+	jsonl := `{"type":"user","uuid":"u1","parentUuid":null,"sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
+`
+	os.WriteFile(filepath.Join(projA, "s1.jsonl"), []byte(jsonl), 0o644)
+	projBad := filepath.Join(projectsDir, "-Users-test-projBad")
+	os.MkdirAll(projBad, 0o755)
+	if err := os.Chmod(projBad, 0o000); err != nil {
+		t.Fatalf("Chmod failed: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(projBad, 0o755) })
+
+	result, err := Import(db, ImportOptions{
+		ProjectsDir:      projectsDir,
+		CodexSessionsDir: filepath.Join(projectsDir, "no-codex-sessions"),
+		Source:           ImportSourceAll,
+	})
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+	if result.FilesImported != 1 {
+		t.Errorf("FilesImported: got %d, want 1", result.FilesImported)
+	}
+	if len(result.Errors) != 1 {
+		t.Fatalf("got %d errors, want 1: %v", len(result.Errors), result.Errors)
+	}
+	if !strings.Contains(result.Errors[0].Error(), projBad) {
+		t.Errorf("error should name the unreadable dir: %v", result.Errors[0])
 	}
 }
 

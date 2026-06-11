@@ -25,11 +25,17 @@ func (a Adapter) Source() ingest.Source {
 	return ingest.SourceCodex
 }
 
-func (a Adapter) ScanFiles(rootDir string) ([]ingest.File, error) {
+func (a Adapter) ScanFiles(rootDir string) ([]ingest.File, []error) {
 	var files []ingest.File
-	err := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
+	var errs []error
+	walkErr := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			return err
+			// A missing rootDir means the source is unused.
+			if path == rootDir && errors.Is(err, os.ErrNotExist) {
+				return err
+			}
+			errs = append(errs, fmt.Errorf("scan %s: %w", path, err))
+			return nil
 		}
 		if d.IsDir() {
 			return nil
@@ -44,13 +50,12 @@ func (a Adapter) ScanFiles(rootDir string) ([]ingest.File, error) {
 		})
 		return nil
 	})
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, err
+	if walkErr != nil {
+		// The callback propagates an error only for a missing rootDir
+		// (source unused); every other failure is recorded in errs above.
+		return nil, nil
 	}
-	return files, nil
+	return files, errs
 }
 
 // fileHandler holds the per-file state of one ProcessFile pass. Line numbers

@@ -115,12 +115,11 @@ func (r *ImportResult) add(other *ImportResult) {
 }
 
 func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportResult, error) {
-	files, err := adapter.ScanFiles(rootDir)
-	if err != nil {
-		return nil, fmt.Errorf("scan: %w", err)
-	}
+	files, scanErrs := adapter.ScanFiles(rootDir)
 
+	// Scan errors already carry their "scan <path>:" context from the adapter.
 	result := &ImportResult{FilesScanned: len(files)}
+	result.Errors = append(result.Errors, scanErrs...)
 
 	for _, file := range files {
 		state, err := db.GetImportState(file.Path)

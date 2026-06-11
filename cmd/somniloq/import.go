@@ -59,7 +59,8 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 		fmt.Fprintf(errOut, "  error: %v\n", e)
 	}
 
-	if result.FilesFailed > 0 {
+	// Errors covers failed files and non-fatal scan failures alike.
+	if len(result.Errors) > 0 {
 		return 1, nil
 	}
 	return 0, nil

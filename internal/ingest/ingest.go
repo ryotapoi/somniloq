@@ -82,6 +82,10 @@ type RepoResolver func(cwd string) string
 // Adapter scans and imports one source's JSONL format into normalized records.
 type Adapter interface {
 	Source() Source
-	ScanFiles(rootDir string) ([]File, error)
+	// ScanFiles walks rootDir for importable JSONL files. Scan failures are
+	// non-fatal: unreadable directories are skipped and reported in errs
+	// alongside the files that could be discovered. A missing rootDir means
+	// the source is unused and yields no files and no errors.
+	ScanFiles(rootDir string) (files []File, errs []error)
 	ProcessFile(store Store, file File, offset, fileSize int64, importedAt string) (ProcessResult, error)
 }

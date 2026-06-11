@@ -33,9 +33,45 @@ func TestCodexScanFiles_Recursive(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	files, err := codex.NewAdapter(ResolveRepoPath).ScanFiles(root)
-	if err != nil {
-		t.Fatalf("ScanFiles failed: %v", err)
+	files, errs := codex.NewAdapter(ResolveRepoPath).ScanFiles(root)
+	if len(errs) != 0 {
+		t.Fatalf("ScanFiles failed: %v", errs)
+	}
+	if len(files) != 1 {
+		t.Fatalf("got %d files, want 1: %+v", len(files), files)
+	}
+	if files[0].SessionID != "rollout-a" {
+		t.Errorf("SessionID: got %q, want rollout-a", files[0].SessionID)
+	}
+}
+
+func TestCodexScanFiles_UnreadableSubdirIsNonFatal(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission checks do not apply to root")
+	}
+	root := t.TempDir()
+	readable := filepath.Join(root, "2026", "05", "01")
+	if err := os.MkdirAll(readable, 0o755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(readable, "rollout-a.jsonl"), []byte("{}"), 0o644); err != nil {
+		t.Fatalf("WriteFile failed: %v", err)
+	}
+	unreadable := filepath.Join(root, "2026", "05", "02")
+	if err := os.MkdirAll(unreadable, 0o755); err != nil {
+		t.Fatalf("MkdirAll failed: %v", err)
+	}
+	if err := os.Chmod(unreadable, 0o000); err != nil {
+		t.Fatalf("Chmod failed: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(unreadable, 0o755) })
+
+	files, errs := codex.NewAdapter(ResolveRepoPath).ScanFiles(root)
+	if len(errs) != 1 {
+		t.Fatalf("got %d scan errors, want 1: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0].Error(), unreadable) {
+		t.Errorf("scan error should name the unreadable dir: %v", errs[0])
 	}
 	if len(files) != 1 {
 		t.Fatalf("got %d files, want 1: %+v", len(files), files)
