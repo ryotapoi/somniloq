@@ -202,11 +202,11 @@ func upsertSession(e execer, meta SessionMeta, importedAt string) error {
 	return err
 }
 
-func (d *DB) InsertMessage(msg ParsedMessage) error {
+func (d *DB) InsertMessage(msg NormalizedMessage) error {
 	return insertMessage(d.db, msg)
 }
 
-func insertMessage(e execer, msg ParsedMessage) error {
+func insertMessage(e execer, msg NormalizedMessage) error {
 	_, err := e.Exec(`
 		INSERT OR IGNORE INTO messages (uuid, source, session_id, parent_uuid, role, content, timestamp, is_sidechain)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,

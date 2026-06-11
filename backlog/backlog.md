@@ -4,7 +4,7 @@
 
 2026-06-11 のコード・ドキュメント監査（thermo-nuclear-code-quality-review）より。変更容易性・メンテナンス性の改善。順序は上から。
 
-- [ ] cmd / ingest 層の小掃除: `runImport` → `runImportWith` の identity wrapper を削除（`cmd/somniloq/main.go`、テスト含め他に呼び出し元なし）。`RepoResolver` 型の重複定義（`internal/ingest/claudecode/adapter.go` と `internal/ingest/codex/adapter.go` に同一定義）を `internal/ingest` に一本化。`core.ParsedMessage`（`internal/core/types.go`）のエイリアス名を `NormalizedMessage` に揃え、同一型に 2 つの名前がある状態を解消
+- [x] cmd / ingest 層の小掃除: `runImport` → `runImportWith` の identity wrapper を削除（`cmd/somniloq/main.go`、テスト含め他に呼び出し元なし）。`RepoResolver` 型の重複定義（`internal/ingest/claudecode/adapter.go` と `internal/ingest/codex/adapter.go` に同一定義）を `internal/ingest` に一本化。`core.ParsedMessage`（`internal/core/types.go`）のエイリアス名を `NormalizedMessage` に揃え、同一型に 2 つの名前がある状態を解消
 - [ ] cmd のサブコマンド実装形式を `backfillCmd` 型に統一する: `runImport` / `runSessions` / `runShow` / `runProjects` は `fmt.Fprintf(os.Stderr, ...)` + `os.Exit(1)` の直書きが散在しテスト不能。`backfillCmd`（exit code と error を返し `os.Exit` しない形式）に揃え、`os.Exit` は `main` に集約する。合わせて `main.go`（465 行、全サブコマンド同居）をサブコマンド毎のファイルに分割する
 - [ ] backfill の migration 呼び出し経路を一本化する: `BackfillResult.MigratedSessions` 等は CLI 経由だと常に 0 になる「直接呼び出し時のみ有効」な罠フィールド（`internal/core/backfill.go` 冒頭コメント参照）。`MigrateToV04IfNeeded` を `Backfill` 内部から外し、呼び出し側で常に preflight する形（`CountOrphanSessions` と同じ precondition 方式）に統一して、罠フィールドと補足コメント群を削除する
 - [ ] `internal/core/db.go` の session row SELECT / Scan の重複を集約する: 同じ列リスト + Scan が `ListSessions` / `GetSession` / `LookupSessionsByID` の 3 箇所にあり、sessions へのカラム追加時に 3 箇所の同期変更が要る。`scanMessages` と同様の helper に寄せる。`Since` / `Until` 条件の組み立ても `ListSessions` / `ListProjects` で重複しているので同時に集約する

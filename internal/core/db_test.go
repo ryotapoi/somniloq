@@ -440,7 +440,7 @@ func TestInsertMessage(t *testing.T) {
 	}
 
 	parent := "p1"
-	msg := ParsedMessage{
+	msg := NormalizedMessage{
 		Source:      SourceClaudeCode,
 		UUID:        "m1",
 		ParentUUID:  &parent,
@@ -570,12 +570,12 @@ func TestListSessions_OrderAndCount(t *testing.T) {
 
 	// Older session with 1 message
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
 	// Newer session with 2 messages
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s2", StartedAt: "2026-03-28T14:00:00Z", EndedAt: "2026-03-28T14:30:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s2", Role: "user", Content: "hi", Timestamp: "2026-03-28T14:00:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s2", Role: "assistant", Content: "hey", Timestamp: "2026-03-28T14:01:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s2", Role: "user", Content: "hi", Timestamp: "2026-03-28T14:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s2", Role: "assistant", Content: "hey", Timestamp: "2026-03-28T14:01:00Z"}))
 
 	rows, err := db.ListSessions(SessionFilter{})
 	if err != nil {
@@ -992,8 +992,8 @@ func TestGetMessages_OrderByTimestamp(t *testing.T) {
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	// Insert in reverse order
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "world", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "world", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
 
 	msgs, err := db.GetMessages(SourceClaudeCode, "s1")
 	if err != nil {
@@ -1036,7 +1036,7 @@ func TestGetSession_Found(t *testing.T) {
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpdateSessionTitle(SourceClaudeCode, "s1", "my session", "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
 	got, err := db.GetSession(SourceClaudeCode, "s1")
 	if err != nil {
@@ -1111,7 +1111,7 @@ func TestLookupSessionsByID_CrossSource(t *testing.T) {
 	for _, source := range []Source{SourceClaudeCode, SourceCodex} {
 		must(t, db.UpsertSession(SessionMeta{Source: source, SessionID: "same-id", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	}
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceCodex, UUID: "codex-m1", SessionID: "same-id", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "codex-m1", SessionID: "same-id", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
 	got, err := db.LookupSessionsByID("same-id")
 	if err != nil {
@@ -1438,9 +1438,9 @@ func TestGetSummaryMessages_ReturnsFirstUserMessage(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "fix the bug", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "done", Timestamp: "2026-03-28T10:01:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s1", Role: "user", Content: "thanks", Timestamp: "2026-03-28T10:02:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "fix the bug", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "done", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s1", Role: "user", Content: "thanks", Timestamp: "2026-03-28T10:02:00Z"}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
 	if err != nil {
@@ -1470,8 +1470,8 @@ func TestGetSummaryMessages_SkipsSidechain(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "sidechain msg", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "real msg", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "sidechain msg", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "real msg", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
 	if err != nil {
@@ -1489,7 +1489,7 @@ func TestGetSummaryMessages_NoUserMessages(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "assistant", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "assistant", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
 	if err != nil {
@@ -1504,12 +1504,12 @@ func TestGetSummaryMessages_LimitN(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "u1", SessionID: "s1", Role: "user", Content: "one", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "u2", SessionID: "s1", Role: "user", Content: "two", Timestamp: "2026-03-28T10:01:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "a1", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: "2026-03-28T10:02:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "u3", SessionID: "s1", Role: "user", Content: "three", Timestamp: "2026-03-28T10:03:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "u4", SessionID: "s1", Role: "user", Content: "four", Timestamp: "2026-03-28T10:04:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "u5", SessionID: "s1", Role: "user", Content: "five", Timestamp: "2026-03-28T10:05:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "u1", SessionID: "s1", Role: "user", Content: "one", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "u2", SessionID: "s1", Role: "user", Content: "two", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "a1", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: "2026-03-28T10:02:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "u3", SessionID: "s1", Role: "user", Content: "three", Timestamp: "2026-03-28T10:03:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "u4", SessionID: "s1", Role: "user", Content: "four", Timestamp: "2026-03-28T10:04:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "u5", SessionID: "s1", Role: "user", Content: "five", Timestamp: "2026-03-28T10:05:00Z"}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 3, false)
 	if err != nil {
@@ -1530,8 +1530,8 @@ func TestGetSummaryMessages_SkipsClearPrefix(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>\n<command-message>clear</command-message>", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>\n<command-message>clear</command-message>", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
 	if err != nil {
@@ -1549,8 +1549,8 @@ func TestGetSummaryMessages_SkipsCaveatPrefix(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "<local-command-caveat>Caveat: ...</local-command-caveat>", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "<local-command-caveat>Caveat: ...</local-command-caveat>", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
 	if err != nil {
@@ -1568,11 +1568,11 @@ func TestGetSummaryMessages_IncludeClear(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m_clear", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>\nmore", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m_caveat", SessionID: "s1", Role: "user", Content: "<local-command-caveat>note</local-command-caveat>", Timestamp: "2026-03-28T10:01:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m_assistant", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: "2026-03-28T10:02:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m_sidechain", SessionID: "s1", Role: "user", Content: "sidechain", Timestamp: "2026-03-28T10:03:00Z", IsSidechain: true}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m_real", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:04:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m_clear", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>\nmore", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m_caveat", SessionID: "s1", Role: "user", Content: "<local-command-caveat>note</local-command-caveat>", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m_assistant", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: "2026-03-28T10:02:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m_sidechain", SessionID: "s1", Role: "user", Content: "sidechain", Timestamp: "2026-03-28T10:03:00Z", IsSidechain: true}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m_real", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:04:00Z"}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 3, true)
 	if err != nil {
@@ -1599,8 +1599,8 @@ func TestGetSummaryMessages_AllSkipped(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "<local-command-caveat>x</local-command-caveat>", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "<local-command-caveat>x</local-command-caveat>", Timestamp: "2026-03-28T10:01:00Z"}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
 	if err != nil {
@@ -1615,8 +1615,8 @@ func TestGetSummaryMessages_LimitExceedsAvailable(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "one", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "two", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "one", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "two", Timestamp: "2026-03-28T10:01:00Z"}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 5, false)
 	if err != nil {
@@ -1642,8 +1642,8 @@ func TestGetSummaryMessages_MillisecondTimestamp(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00.000Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m_late", SessionID: "s1", Role: "user", Content: "later", Timestamp: "2026-03-28T10:00:00.200Z"}))
-	must(t, db.InsertMessage(ParsedMessage{Source: SourceClaudeCode, UUID: "m_early", SessionID: "s1", Role: "user", Content: "earlier", Timestamp: "2026-03-28T10:00:00.100Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m_late", SessionID: "s1", Role: "user", Content: "later", Timestamp: "2026-03-28T10:00:00.200Z"}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m_early", SessionID: "s1", Role: "user", Content: "earlier", Timestamp: "2026-03-28T10:00:00.100Z"}))
 
 	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
 	if err != nil {

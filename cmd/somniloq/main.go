@@ -88,10 +88,6 @@ func openDB(dbPath string) *core.DB {
 }
 
 func runImport(dbPath, projectsDir, codexSessionsDir string, args []string) {
-	runImportWith(dbPath, projectsDir, codexSessionsDir, args)
-}
-
-func runImportWith(dbPath, projectsDir, codexSessionsDir string, args []string) {
 	fs := flag.NewFlagSet("import", flag.ExitOnError)
 	full := fs.Bool("full", false, "full re-import (delete all and re-import)")
 	yes := fs.Bool("yes", false, "skip confirmation prompt")

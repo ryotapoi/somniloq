@@ -15,13 +15,11 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
-type RepoResolver func(cwd string) string
-
 type Adapter struct {
-	resolveRepoPath RepoResolver
+	resolveRepoPath ingest.RepoResolver
 }
 
-func NewAdapter(resolveRepoPath RepoResolver) Adapter {
+func NewAdapter(resolveRepoPath ingest.RepoResolver) Adapter {
 	return Adapter{resolveRepoPath: resolveRepoPath}
 }
 

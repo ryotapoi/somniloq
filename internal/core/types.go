@@ -10,5 +10,5 @@ const (
 )
 
 type ImportState = ingest.ImportState
-type ParsedMessage = ingest.NormalizedMessage
+type NormalizedMessage = ingest.NormalizedMessage
 type SessionMeta = ingest.SessionMeta

@@ -35,7 +35,7 @@ func insertSessionWithMessage(t *testing.T, db *core.DB, sessionID, cwd, uuid st
 	}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession(%s): %v", sessionID, err)
 	}
-	if err := db.InsertMessage(core.ParsedMessage{
+	if err := db.InsertMessage(core.NormalizedMessage{
 		UUID:      uuid,
 		Source:    core.SourceClaudeCode,
 		SessionID: sessionID,

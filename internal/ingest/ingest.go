@@ -72,6 +72,12 @@ type Store interface {
 	BeginImport() (ImportTransaction, error)
 }
 
+// RepoResolver resolves a session's working directory to its repository root.
+// Contract: an empty cwd resolves to ""; a cwd whose root cannot be determined
+// resolves to the cwd itself, never "" — persistence treats "" as missing
+// (NULL), which would silently break per-project grouping.
+type RepoResolver func(cwd string) string
+
 // Adapter scans and imports one source's JSONL format into normalized records.
 type Adapter interface {
 	Source() Source

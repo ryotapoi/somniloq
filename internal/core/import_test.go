@@ -447,7 +447,7 @@ func TestImport_AllSources(t *testing.T) {
 func TestImport_InvalidSourceDoesNotDelete(t *testing.T) {
 	db := testDB(t)
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "kept"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(ParsedMessage{
+	must(t, db.InsertMessage(NormalizedMessage{
 		Source:    SourceClaudeCode,
 		UUID:      "kept-message",
 		SessionID: "kept",
