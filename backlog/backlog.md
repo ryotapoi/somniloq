@@ -4,7 +4,7 @@
 
 2026-06-11 Knowledge 側の運用（/jot /retro /rem、LLM Wiki 連携の見据え）からの機能追加。順序は上から。
 
-- [ ] セッションのアウトライン表示を追加する: ユーザーメッセージだけを「ターン番号・時刻・先頭 1 行」で時系列に並べ、長いセッションの構造を全文 show する前に掴めるようにする（`somniloq outline <session-id>` か `show --toc` かは実装時に判断）。sidechain 除外は show と同じ扱い。Knowledge の /jot が「長セッションは全文をファイルに出して haiku subagent に時系列地図を作らせる」手順で代替している箇所の置き換え先
+- [x] セッションのアウトライン表示を追加する: ユーザーメッセージだけを「ターン番号・時刻・先頭 1 行」で時系列に並べ、長いセッションの構造を全文 show する前に掴めるようにする（`somniloq outline <session-id>` を採用）。sidechain 除外は show と同じ扱い。Knowledge の /jot が「長セッションは全文をファイルに出して haiku subagent に時系列地図を作らせる」手順で代替している箇所の置き換え先
 - [ ] show の部分読みを追加する: `show <session-id> --turn 40..60` / `--tail <N>` のようにターン範囲を指定して読めるようにする。アウトラインで見つけた範囲だけ読む用途。ターン番号はアウトライン表示と同一の採番を共有すること
 - [ ] sessions 一覧にサイズ列を追加する: セッションの本文合計サイズ（文字数 or バイト数）を列に出し、show する前に「大きいセッションか」を判定できるようにする。MessageCount だけでは 1 メッセージが巨大なセッションを見分けられない
 - [ ] `--format json` を追加する: sessions / show / projects（アウトラインも）で JSON 出力を選べるようにする。Knowledge の list-sessions.sh が show の Markdown を awk でパースしている脆さの解消先

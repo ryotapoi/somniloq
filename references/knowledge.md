@@ -8,6 +8,12 @@ Claude Code の JSONL タイムスタンプはミリ秒付き RFC3339（例: `20
 
 対処: `"2006-01-02T15:04:05.000Z"` フォーマットを使い、常に3桁のミリ秒を出力する。
 
+## `ORDER BY timestamp` 単独では同値行の順序が不定
+
+旧形式の Codex rollout は per-record timestamp を持たず、全レコードが `session_meta` の timestamp を継承するため、1 セッション内のメッセージが timestamp で全件タイになる。SQLite は同値キーのソート順を保証しないので、`ORDER BY timestamp ASC` 単独だと実行ごとに行順（＝ターン採番）が揺れうる。
+
+対処: `ORDER BY timestamp ASC, rowid ASC` で挿入順をタイブレーカーにする。`messages` は `INSERT OR IGNORE` のみで REPLACE しないため、rowid は JSONL の行順を安定して保持する。
+
 ## modernc.org/sqlite の `:memory:` は接続ごとに別 DB
 
 `:memory:` DSN は `database/sql` の接続プールの各物理接続ごとに独立したインメモリ DB を作る。同じ `*sql.DB` でもクエリごとに別の接続に割り振られると、先の PRAGMA で見ていたテーブルが次の ALTER では存在しない、といった事故になる。

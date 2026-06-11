@@ -34,6 +34,7 @@ Commands:
   backfill  Correct legacy session data
   sessions  List sessions
   show      Show session content in Markdown
+  outline   List a session's user messages as turn, time, and first line
   projects  List projects
 
 Flags:
@@ -69,6 +70,8 @@ Flags:
 		code, cmdErr = sessionsCmd(args[1:], open, os.Stdout, os.Stderr)
 	case "show":
 		code, cmdErr = showCmd(args[1:], open, os.Stdout, os.Stderr)
+	case "outline":
+		code, cmdErr = outlineCmd(args[1:], open, os.Stdout, os.Stderr)
 	case "projects":
 		code, cmdErr = projectsCmd(args[1:], open, os.Stdout, os.Stderr)
 	default:

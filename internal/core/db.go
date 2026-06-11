@@ -450,13 +450,18 @@ func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
 // GetMessages returns the session's messages in chronological order.
 // Sidechain rows are excluded: they are subagent transcripts, not part of the
 // user-facing conversation.
+//
+// rowid breaks timestamp ties: Codex records without per-record timestamps
+// all inherit the session_meta timestamp, and rowid preserves insertion
+// (JSONL line) order because messages are INSERT OR IGNORE, never replaced.
+// Turn numbering is derived from this order, so it must stay deterministic.
 func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) {
 	rows, err := d.db.Query(`
 		SELECT uuid, role, content, timestamp
 		FROM messages
 		WHERE source = ? AND session_id = ?
 		  AND is_sidechain = 0
-		ORDER BY timestamp ASC`,
+		ORDER BY timestamp ASC, rowid ASC`,
 		string(source), sessionID,
 	)
 	if err != nil {
@@ -504,7 +509,7 @@ func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, incl
 		args = append(args, clearCommandPrefix+"%", localCommandCaveatPrefix+"%")
 	}
 	query += `
-		ORDER BY timestamp ASC
+		ORDER BY timestamp ASC, rowid ASC
 		LIMIT ?`
 	args = append(args, limit)
 

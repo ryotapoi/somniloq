@@ -75,18 +75,10 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 	}
 
 	if sessionID != "" {
-		sessions, err := db.LookupSessionsByID(sessionID)
-		if err != nil {
-			return 1, err
+		session, code, err := resolveSessionByID(db, sessionID, errOut)
+		if code != 0 {
+			return code, err
 		}
-		if len(sessions) == 0 {
-			return 1, fmt.Errorf("session not found: %s", sessionID)
-		}
-		if len(sessions) > 1 {
-			writeAmbiguousSessionError(errOut, sessionID, sessions)
-			return 1, nil
-		}
-		session := sessions[0]
 		proj := resolveDisplayName(session.RepoPath, *short)
 		messages, err := getMessages(session.Source, session.SessionID)
 		if err != nil {
@@ -119,6 +111,25 @@ func showCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writ
 		return 1, err
 	}
 	return 0, nil
+}
+
+// resolveSessionByID looks up sessionID across sources and reduces the result
+// to a single session. On failure it returns exit code 1, reporting an
+// ambiguous match to errOut directly and a lookup failure via the returned
+// error (matching how main prints command errors).
+func resolveSessionByID(db *core.DB, sessionID string, errOut io.Writer) (core.SessionRow, int, error) {
+	sessions, err := db.LookupSessionsByID(sessionID)
+	if err != nil {
+		return core.SessionRow{}, 1, err
+	}
+	if len(sessions) == 0 {
+		return core.SessionRow{}, 1, fmt.Errorf("session not found: %s", sessionID)
+	}
+	if len(sessions) > 1 {
+		writeAmbiguousSessionError(errOut, sessionID, sessions)
+		return core.SessionRow{}, 1, nil
+	}
+	return sessions[0], 0, nil
 }
 
 func writeAmbiguousSessionError(w io.Writer, sessionID string, sessions []core.SessionRow) {

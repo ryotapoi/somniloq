@@ -474,6 +474,54 @@ func TestGetMessages_OrderByTimestamp(t *testing.T) {
 	}
 }
 
+func TestGetMessages_EqualTimestampsKeepInsertionOrder(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{Source: SourceCodex, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	// Old-format Codex rollouts inherit the session_meta timestamp for every
+	// record, so all rows tie on timestamp. Insertion (JSONL line) order must
+	// win deterministically: turn numbering is derived from this order.
+	const ts = "2026-03-28T10:00:00Z"
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m1", SessionID: "s1", Role: "user", Content: "first", Timestamp: ts}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: ts}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m3", SessionID: "s1", Role: "user", Content: "second", Timestamp: ts}))
+
+	msgs, err := db.GetMessages(SourceCodex, "s1")
+	if err != nil {
+		t.Fatalf("GetMessages failed: %v", err)
+	}
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(msgs))
+	}
+	for i, want := range []string{"m1", "m2", "m3"} {
+		if msgs[i].UUID != want {
+			t.Errorf("message[%d] UUID: got %s, want %s", i, msgs[i].UUID, want)
+		}
+	}
+}
+
+func TestGetSummaryMessages_EqualTimestampsKeepInsertionOrder(t *testing.T) {
+	db := testDB(t)
+
+	must(t, db.UpsertSession(SessionMeta{Source: SourceCodex, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	const ts = "2026-03-28T10:00:00Z"
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m1", SessionID: "s1", Role: "user", Content: "first", Timestamp: ts}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m2", SessionID: "s1", Role: "user", Content: "second", Timestamp: ts}))
+
+	msgs, err := db.GetSummaryMessages(SourceCodex, "s1", 1, false)
+	if err != nil {
+		t.Fatalf("GetSummaryMessages failed: %v", err)
+	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].UUID != "m1" {
+		t.Errorf("message UUID: got %s, want m1", msgs[0].UUID)
+	}
+}
+
 func TestGetMessages_ExcludesSidechain(t *testing.T) {
 	db := testDB(t)
 

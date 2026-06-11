@@ -47,6 +47,7 @@ somniloq show --since 7d
 | `sessions` | List sessions |
 | `projects` | List projects with session counts |
 | `show` | Show session content in Markdown |
+| `outline` | List a session's user messages as turn number, time, and first line |
 
 ### import
 
@@ -115,6 +116,14 @@ somniloq show --summary 1 --since 24h                   # first user message per
 somniloq show --summary 3 --since 24h                   # first 3 user messages per session
 somniloq show --short --since 24h                       # basename of repo_path
 ```
+
+### outline
+
+```bash
+somniloq outline <session-id>   # user messages as turn number, time, and first line
+```
+
+Grasp the structure of a long session before `show`ing it in full. Output is TSV: `turn`, `time`, `first_line`. Turn numbers start at 1 and increment on each user message (sidechain rows are excluded).
 
 ## Common Options
 
