@@ -50,7 +50,7 @@ Claude Code 由来の `.claude/` は参考資料として扱ってよいが、Co
 - 後から制約になる判断は `decisions/` に残す。
 - workflow は 1 つの commit 単位で回す。Goal が複数 commit に分かれる場合は `goal-workflow` skill に従って commit 単位へ分けて繰り返す。
 - 単発依頼はコミットまで終えたら止まる（次のタスクはユーザー指示待ち）。Goal は完了したら止まる。
-- `.claude/`・`CLAUDE.md`（Claude 側）と `.agents/`・`AGENTS.md`（Codex 側）は、方針・ルールの内容を一致させる。形式は各側の流儀（`.agents/` は ICAR）に合わせてよいが、`skills/somniloq-risk-check/SKILL.md` は同一内容を保つ。片方を変更したら、同じコミットで他方にも反映する。
+- `.claude/`・`CLAUDE.md`（Claude 側）と `.agents/`・`AGENTS.md`（Codex 側）は、目的・制約・判断基準の方向性を揃える。subagent、review delegation、tool 呼び出し、skill / workflow の実行手順は各エージェントの仕組みに合わせてよい。`skills/somniloq-risk-check/SKILL.md` は同じリスク観点を保つ。片方で方針や制約を変更したら、同じコミットで他方にも必要な範囲を反映する。
 
 ## Skills
 
