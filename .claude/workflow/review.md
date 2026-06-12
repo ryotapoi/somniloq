@@ -7,14 +7,18 @@
 ## Review Depth
 
 - **L0 self-check**: Small 変更（`default.md` の Intake 分類）。main で `git diff` を読み、要求と検証結果を照合する。skill は呼ばない。
-- **Standard**: Small 以外の実装差分。`/code-review xhigh` をローカル実行し、結果を見て直す（`--fix` は付けず指摘を受け取り、採否判断して反映）。
+- **Standard**: Small 以外の実装差分。難易度を見て effort（`high` / `xhigh`）を選び、`/code-review` を **main で直接実行せずレビュー監督 subagent に隔離する**（How To Run 参照）。監督が返した採用候補 / 却下リストを main が最終採否し、修正・テスト・コミットはすべて main で行う。**迷ったら `high`**。下記 xhigh ゾーンに触れる時だけ `xhigh` に上げる。
 - **Targeted supplement**: 領域固有リスクがある変更。Standard に加えて該当観点の skill を使う。
 - **External supplement**: 大きい、曖昧、High-risk、または設計判断が重い変更。Standard に加えて別系統レビュー（`codex-review`）を入れる。
 
 ## Decision Criteria
 
 - L0 で十分なケース: typo、docs、テスト追加だけ、1 ファイルの明確なバグ修正。
-- **Small 以外の実装差分は原則 `/code-review xhigh` を通す**（Standard）。避ける余地を減らす。`/code-review` は current diff / current branch を対象にする。`ultra` はクラウド・billed・ユーザー手動起動なので自動進行では使わない。
+- **Small 以外の実装差分は `/code-review` を通す**（Standard）。避ける余地を減らす。強度は難易度で出し分ける（既定 `high`、下記 xhigh ゾーンのみ `xhigh`）。`/code-review` は current diff / current branch を対象にするが、main では直接叩かずレビュー監督 subagent 内で実行する（How To Run 参照）。`ultra` はクラウド・billed・ユーザー手動起動なので自動進行では使わない。
+- **high / xhigh の振り分け**（`high` 寄りが既定。迷ったら `high`）:
+  - **xhigh に上げる**: 下記いずれかに触れる差分 — SQLite スキーマ・マイグレーション・SQL、`backfill` 等の破壊的処理（DELETE）、`cmd/somniloq → internal/core` の依存方向、CLI 破壊的変更、JSONL 取り込みの境界、永続化 / 削除 / 外部連携 / 並行性 / 公開 API。これは Targeted supplement の領域固有リスク（下記）と同じゾーン。
+  - **high で足りる**: 上記に触れない実装差分 — 新規コマンド・出力 format 追加、振る舞い不変の refactor、局所のロジック追加など。
+  - docs / test 追加だけ / typo / 1 ファイルの明確な bug 修正は Standard に上げず L0 self-check で済ませる。
 - 構造劣化リスク（巨大化、分岐増加、責務境界の濁り、薄い抽象化、型境界の曖昧さ）があれば `thermo-nuclear-code-quality-review` を**必須**で使う。
 - 領域固有 supplement の対象:
   - SQLite スキーマ・マイグレーション、SQL（プレースホルダ・`GROUP BY`・集約関数・集計キーと表示キーの整合）、`cmd/somniloq → internal/core` の依存方向、CLI 破壊的変更、JSONL 取り込みの境界ケース、`backfill` の破壊的処理（DELETE を含む） → `somniloq-risk-check`
@@ -27,7 +31,15 @@
 ## How To Run
 
 - L0: main で `git diff` を読み、acceptance と照合する。
-- Standard: `/code-review xhigh` を実行し、戻ってきた指摘を採否判断して反映する。
+- Standard（`/code-review` の隔離実行）: `/code-review`（high/xhigh）は main で直接実行せず、レビュー監督 subagent に隔離する。
+  1. main は `Agent` ツールで Opus subagent（レビュー監督）を 1 体起動する。`model` は `opus` を明示する。prompt には次を渡す: 対象 commit range または diff ファイルのパス、レビュー effort（`high` / `xhigh`、既定 `high`、xhigh ゾーンのみ `xhigh`）、直前の実装意図メモ（3 行以内、あれば）。worktree 作業中なら CLAUDE.md の定型（作業ディレクトリのフルパス明記）も渡す。
+     - <!-- レビュー監督に Fable ではなく Opus を使うのは、main の context 隔離が目的で最終採否は main に残るため。判断主体を main から動かさないので親モデル継承（高コスト）も避ける。 -->
+  2. 監督は subagent 内で `/code-review`（指定 effort）の手順を自分で実行する。finder を起動する際は `model` を必ず明示する（基本 `sonnet`。判断の重い観点のみ `opus` 可）。
+  3. 監督は修正を一切行わない。返すのは次の 2 つだけ:
+     - 採用候補リスト（`file:line`、問題、failure scenario、推奨対応一行）
+     - 却下リスト（指摘と却下理由）
+  4. main が最終採否を行い、修正・テスト・コミットはすべて main で行う。
+  5. 再レビューは監督をもう一周 `Agent` 起動する（最大 3 周ルールは維持。下記 Decision Criteria 参照）。
 - Targeted / External supplement: 該当 skill（`somniloq-risk-check`, `thermo-nuclear-code-quality-review`, `codex-review`）を呼ぶ。複数該当するものは 1 メッセージで並列起動してよい。
 - 戻りを全部受け取ってから main で統合し、採用分をまとめて反映する。実行中に 1 件ずつ反映しない。
 

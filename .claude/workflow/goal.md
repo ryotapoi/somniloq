@@ -70,14 +70,17 @@
 
 各 commit 内の `review.md` とは別に、Goal の commit range（`main..HEAD`）を対象に以下を Goal 完了条件として実施する。
 
-実行順序は `/code-review xhigh` → 指摘対応 → Codex レビュー。Codex は最後に置き、Claude 系レビューが見つけられなかったものを別視点で拾う役にする（指摘対応後の最終 diff を見せる）。
+実行順序は `/code-review` → 指摘対応 → Codex レビュー。Codex は最後に置き、Claude 系レビューが見つけられなかったものを別視点で拾う役にする（指摘対応後の最終 diff を見せる）。
 
-- **`/code-review`（必須・先に実行）**: `/code-review xhigh` をローカル実行する。effort は `xhigh`（最深ローカル。`ultra` はクラウド・billed・ユーザー手動起動なので Goal 自動進行では使わない）。`--fix` は付けず結果を受け取り、採否判断して直す。
+- **`/code-review`（必須・先に実行）**: main で直接実行せず、`review.md` の How To Run の手順どおりレビュー監督 subagent（Opus、`model` 明示）に隔離する。対象は Goal の commit range、effort は下記「effort の使い分け」で選ぶ（`ultra` はクラウド・billed・ユーザー手動起動なので Goal 自動進行では使わない）。監督は採用候補 / 却下リストを返すだけで修正しない。最終採否・修正・テスト・コミットは main で行う。
+- **effort の使い分け**:
+  - **xhigh**: 永続化 / 同期 / 選択モデル / keyboard / 広い UI 挙動に触れる、または差分が大きい Goal。
+  - **high**: docs 中心、または上記に触れない小さな差分の Goal。
 - **Codex レビュー（必須・最後に実行）**: `codex-review` skill を commit range 対象で実行する。別系統モデル（Codex）に Goal 差分全体を見せる。`/code-review` の指摘対応 commit がある場合はそれを含む range を渡す。
-- **二重実行の省略**: Goal が 1 commit で完結し、その commit の `review.md` で既に `/code-review xhigh` を Goal 差分全体に対して通している場合、Goal Review の `/code-review` は省略してよい（Codex レビューは別系統なので省略しない）。複数 commit の Goal では各 commit の review.md は局所差分、Goal Review は commit range 全体を対象とするため両方実施する。
+- **二重実行の省略**: Goal が 1 commit で完結し、その commit の `review.md` で既に同 effort の `/code-review` を Goal 差分全体に対して（同じく監督 subagent 経由で）通している場合、Goal Review の `/code-review` は省略してよい（Codex レビューは別系統なので省略しない）。複数 commit の Goal では各 commit の review.md は局所差分、Goal Review は commit range 全体を対象とするため両方実施する。
 - 1 commit ごとではなく、関連する数 commit をまとめてレビューする。
 - 差分が大きい、または SQLite スキーマ / マイグレーション / `backfill` の破壊的処理（DELETE を含む）/ CLI 破壊的変更 / JSONL 取り込みのデータ取り扱い境界に触れる場合は、数 commit を待たずにその時点までの commit range で早めにレビューする。
-- 指摘対応は別 commit として作成し、対応 commit を含む range で再レビューする。
+- 指摘対応は別 commit として作成し、対応 commit を含む range で再レビューする。再レビューはレビュー監督 subagent をもう一周 `Agent` 起動して行う。
 - 各レビュー単位につき再レビュー実行（`/code-review`・Codex とも）は最大 3 回。3 回で収束しなければそれ以上回さず打ち切り、残った指摘と実行回数を記録して Goal 完了報告の `レビュー上限超過` で通知する。
 
 ## Design Decisions
