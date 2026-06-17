@@ -258,8 +258,8 @@ func Backfill(db *DB) (BackfillResult, error) {
 	if err != nil {
 		return result, fmt.Errorf("delete orphan sessions: %w", err)
 	}
-	// modernc.org/sqlite always returns nil here (see references/knowledge.md);
-	// the check is defensive against a future driver swap.
+	// modernc.org/sqlite returns nil here; the check is defensive against a
+	// future driver swap.
 	rowsAffected, err := res.RowsAffected()
 	if err != nil {
 		return result, fmt.Errorf("count deleted rows: %w", err)
