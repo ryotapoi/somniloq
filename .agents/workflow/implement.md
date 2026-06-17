@@ -39,6 +39,9 @@
 - **Constraints**:
   - 完了した backlog 項目があれば `backlog/backlog.md` を更新する。
   - 特定ソースを編集するときだけ必要な罠は、そのソースのコメントに残す。横断的な挙動・設計理解は `llm-wiki/` に残す。
+  - 今回の変更で `llm-wiki/` が古くなっていないか見て、同じ差分の中で追従する。追従更新は commit 待ちにせず、review で差分の一部として見る。
+  - `llm-wiki/` の追従では、`docs/rules/information-management.md` の `regen` 区分に従う。索引・地図（例: `llm-wiki/command-map.md`, `regen: full`）は frontmatter の `sources:` を読み直し、古くなった節をソースから再生成する。概念・ガイド（例: `llm-wiki/import-pipeline.md`, `regen: compiled`）は読む順序・経路・注意点を再編纂する。外部知見（例: `llm-wiki/sqlite-driver-notes.md`, `regen: none`）は横断的なものだけ手で育て、特定ソースに紐づく罠はコードコメントへ寄せる。
+  - `llm-wiki/` に単一の集約知見ファイルを作らない。仕様や判断を拘束し始めた情報は docs へ昇格する。
   - JSONL 形式の参照情報は `docs/specs/jsonl-schema.md` に残す。
   - 後から制約になる判断は `docs/decisions/` に残す。
 - **Acceptance**: 実装差分と情報源が矛盾していない。

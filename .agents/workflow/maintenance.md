@@ -27,6 +27,12 @@
 - 久々に広い領域を触った
 - review で同種の指摘が繰り返された
 
+## Tools
+
+- 棚卸し・健康診断: `maintenance-audit` スキル（軽い整合性・負債・backlog 鮮度の light pass から、テスト・カバレッジ・行数・依存方向・凝集度・分割の deep pass まで、scope で深さを指定）
+- module / 配置 / 依存方向の境界判断: `module-boundary` スキル
+- llm-wiki 健全性点検: `wiki-lint` スキル（孤立・リンク切れ・sources 切れの機械検証に加え、「速い / docs レベルでない / 嘘がない / 拾える」の不変条件を照合する）
+
 ## Stop Conditions
 
 - 改善が大きすぎて複数タスクに分割すべき。
