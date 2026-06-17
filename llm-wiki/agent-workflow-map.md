@@ -1,0 +1,39 @@
+---
+regen: compiled
+sources:
+  - AGENTS.md
+  - CLAUDE.md
+  - .agents/workflow/goal.md
+  - .agents/workflow/default.md
+  - .agents/workflow/implement.md
+  - .agents/workflow/review.md
+  - .agents/skills/somniloq-risk-check/SKILL.md
+  - .claude/workflow/goal.md
+  - .claude/workflow/default.md
+  - .claude/workflow/review.md
+  - .claude/skills/somniloq-risk-check/SKILL.md
+  - .claude/rules/docs.md
+  - docs/rules/information-management.md
+---
+
+# Agent workflow map
+
+Agent 向けファイルを触るときの同期地図。正本は `AGENTS.md` / `CLAUDE.md` / `.agents/` / `.claude/` の各 workflow で、このページは読む順序だけをまとめる。
+
+## 入口
+
+- Codex: `AGENTS.md` -> `.agents/workflow/default.md` -> phase workflow。
+- Claude Code: `CLAUDE.md` -> `.claude/workflow/default.md` -> phase workflow。
+- Goal: Codex は global `goal-workflow` skill から `.agents/workflow/goal.md`、Claude は `.claude/workflow/goal.md`。
+
+## 同期が必要な変更
+
+- 情報配置を変える: `docs/rules/information-management.md` -> `AGENTS.md` / `CLAUDE.md` -> `.agents/workflow/*` / `.claude/workflow/*` -> commit skill。
+- somniloq 固有リスクを変える: `.agents/skills/somniloq-risk-check/SKILL.md` と `.claude/skills/somniloq-risk-check/SKILL.md` を同じ観点にする。Claude 側は fork 実行構造を持つが、checkpoint の意味は揃える。
+- review depth を変える: `.agents/workflow/review.md`, `.claude/workflow/review.md`, 関連 review skill。
+- docs / llm-wiki 運用を変える: `.claude/rules/docs.md` と `AGENTS.md` の対応箇所を見る。Codex 側には path-scoped rule ファイルの仕組みがないため、方向性の parity を確認する。
+
+## 変更時の注意
+
+- `.claude/` と `.agents/` は逐語一致ではなく、各エージェントの tool / subagent 仕組みに合わせる。
+- ただし目的・制約・判断基準は揃える。片側だけ旧パスや旧知見方針を残さない。
