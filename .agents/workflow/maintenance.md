@@ -16,8 +16,8 @@
   - 最近の git history
   - `backlog/backlog.md`
   - 変更が多かったモジュール
-  - `rules/architecture.md`
-  - `references/knowledge.md`
+  - `docs/rules/architecture.md`
+  - `llm-wiki/`
 
 ## Use When
 

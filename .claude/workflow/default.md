@@ -10,7 +10,7 @@ Goal を使う作業全体の入口は `goal-workflow` skill とし、この wor
 ## Inputs
 
 - ユーザー依頼
-- 関連する `rules/`, `specs/`（あれば）, `backlog/backlog.md`, `decisions/`, `references/knowledge.md`
+- 関連する `docs/rules/`, `docs/specs/`（あれば）, `backlog/backlog.md`, `docs/decisions/`, `llm-wiki/`
 - 既存コードと git history
 
 ## Intake 分類
@@ -22,7 +22,7 @@ Goal を使う作業全体の入口は `goal-workflow` skill とし、この wor
 - **High-risk**: 以下のいずれかに触れる変更
   - SQLite スキーマ変更、マイグレーション、`backfill` の挙動変更（DELETE などの破壊的処理を含むもの）
   - SQL の意味的変更（プレースホルダの扱い、`GROUP BY`、`MAX`/`MIN` 等の集約関数、集計キーと表示キーの整合）
-  - `modernc.org/sqlite` 固有の罠を踏みうる変更（`LastInsertId` の罠、`:memory:` 接続、`PRAGMA table_info` ベースの migration など。詳細は `references/knowledge.md`）
+  - `modernc.org/sqlite` 固有の罠を踏みうる変更（`LastInsertId` の罠、`:memory:` 接続、`PRAGMA table_info` ベースの migration など。詳細は `llm-wiki/`）
   - CLI 仕様の破壊的変更（`--project` フィルタの解釈変更など）
   - JSONL 取り込みのデータ取り扱い境界（`messages` 0 件のセッション、`custom-title` のみのメタセッションなど）
   - 公開 API の削除、外部連携、並行性
@@ -52,9 +52,9 @@ Goal を使う作業全体の入口は `goal-workflow` skill とし、この wor
 複数情報源が矛盾した場合、新しい順で照合する。古い方を直す。
 
 1. 現在のユーザー依頼
-2. `rules/`
-3. `decisions/`
-4. `specs/`（somniloq では現状未配置だが将来用に位置付ける）
+2. `docs/rules/`
+3. `docs/decisions/`
+4. `docs/specs/`（somniloq では現状未配置だが将来用に位置付ける）
 5. tests
 
 仕様・CLI 挙動に関わる判断は実装で決めず、ユーザー確認に回す。
@@ -62,7 +62,7 @@ Goal を使う作業全体の入口は `goal-workflow` skill とし、この wor
 ## Acceptance
 
 - ユーザーの要求が満たされている
-- 必要な情報源が同期されている（`backlog/backlog.md`, `decisions/`, `references/knowledge.md`、必要なら `specs/`）
+- 必要な情報源が同期されている（`backlog/backlog.md`, `docs/decisions/`, `llm-wiki/`、必要なら `docs/specs/`）
 - 選んだ検証とレビューの深さを説明できる
 - コミット済み、またはユーザーが明示的にコミット不要とした状態
 - コミット後の進み方は `finish.md` に従う（Goal 実行中は次の 1 commit workflow へ、Goal 外の単発依頼はユーザー指示待ち）
@@ -70,7 +70,7 @@ Goal を使う作業全体の入口は `goal-workflow` skill とし、この wor
 ## Stop Conditions
 
 - 仕様・CLI 挙動・データ保持・削除方針に複数の妥当な選択肢がある（即停止して確認。ただし `design-decision` で結論が出る範囲なら止まらず採否を決める）
-- 要求と `rules/` / `specs/` / `decisions/` が矛盾している
+- 要求と `docs/rules/` / `docs/specs/` / `docs/decisions/` が矛盾している
 - High-risk 変更で検証手段が確保できない
 - ユーザーが停止・相談・計画のみを指示している
 

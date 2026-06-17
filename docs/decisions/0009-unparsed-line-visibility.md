@@ -11,7 +11,7 @@ Accepted
 ## Considered Options
 
 - **A: 解釈失敗行をカウントして import 出力に表示する**: `FileHandler.HandleLine` の戻り値を `LineOutcome`（Ignored / WroteBody / Unparsed）にし、`ProcessJSONL` が Unparsed をカウント、`ImportResult.UnparsedLines` 経由で CLI のサマリ行に出す。
-- **B: 黙殺を仕様として `rules/scope.md` に明文化する**: コードは変えずドキュメントだけ置く。
+- **B: 黙殺を仕様として `docs/rules/scope.md` に明文化する**: コードは変えずドキュメントだけ置く。
 
 ## Decision
 

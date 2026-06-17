@@ -25,4 +25,4 @@ We will expose turn-based session structure as a dedicated `outline` subcommand,
 - `show --turn` や JSON 出力などの後続機能は `assignTurns`（cmd/somniloq/turn.go）を同じ入力（GetMessages の全列）に適用するだけで採番が一致する
 - 採番をフィルタ済み列（GetSummaryMessages 等）に適用すると契約が壊れるため、turn 系の新機能は必ず全列を入力にする必要がある
 - 合成 user メッセージがアウトラインの行として並ぶ。ノイズになる場合は「採番には含めて表示だけ抜く」拡張（表示フィルタ）で対応でき、採番は変わらない
-- rowid タイブレーカーにより `messages` は INSERT OR IGNORE（置換なし）を維持する前提が生まれる（references/knowledge.md に記録）
+- rowid タイブレーカーにより `messages` は INSERT OR IGNORE（置換なし）を維持する前提が生まれる（llm-wiki/ に記録）

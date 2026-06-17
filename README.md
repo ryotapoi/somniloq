@@ -230,9 +230,9 @@ v0.4 adds Codex support and changes the session key to include `source`. Existin
 
 ## Documentation
 
-- [Mission and non-goals](rules/mission.md)
-- [Features, CLI, and schema](rules/scope.md)
-- [Module structure and dependencies](rules/architecture.md)
+- [Mission and non-goals](docs/rules/mission.md)
+- [Features, CLI, and schema](docs/rules/scope.md)
+- [Module structure and dependencies](docs/rules/architecture.md)
 
 ## License
 

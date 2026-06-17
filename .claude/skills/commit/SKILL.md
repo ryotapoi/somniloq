@@ -15,9 +15,9 @@ disable-model-invocation: false
   - `.env` や credentials を含むファイルはコミット対象から除外する
   - `--no-verify` で hooks をスキップしない
 - **Acceptance**:
-  - 該当があれば ADR 作成・`references/knowledge.md` 追記・`backlog/backlog.md` の `[x]` 更新が済んでいる
+  - 該当があれば ADR 作成・ソースコメントまたは `llm-wiki/` への知見反映・`backlog/backlog.md` の `[x]` 更新が済んでいる
   - コミットが作成され、`git status` でクリーンな状態を確認済み
-- **Relevant**: 下記「コミットメッセージ形式」「Type 一覧」「ADR テンプレート」, `references/knowledge.md`, `backlog/backlog.md`
+- **Relevant**: 下記「コミットメッセージ形式」「Type 一覧」「ADR テンプレート」, `llm-wiki/`, `backlog/backlog.md`
 
 ## コミットメッセージ形式
 
@@ -48,7 +48,7 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 ## 手順
 
 1. 判断記録（ADR）が必要か判断する（下記「ADR 判断基準」参照。不要ならスキップ）
-2. 実装中にハマった点・注意事項があれば `references/knowledge.md` に追記する（該当なければスキップ）
+2. 実装中にハマった点・注意事項があれば、特定ソースの罠はソースコメントへ、横断的な挙動・設計理解は `llm-wiki/` へ反映する（該当なければスキップ）
 3. `git status` と `git diff`（staged + unstaged）で変更内容を把握する
 4. `git log --oneline -5` で直近のコミットスタイルを確認する
 5. `backlog/backlog.md` に今回のコミットで完了した項目があれば `[x]` に更新する
@@ -64,14 +64,14 @@ Co-Authored-By: Claude <noreply@anthropic.com>
 - 複数の選択肢から意図的に一つを選んだ判断
 - 将来の実装に制約を与える判断
 
-該当あり → `decisions/` に ADR を作成（下記「ADR テンプレート」参照）
+該当あり → `docs/decisions/` に ADR を作成（下記「ADR テンプレート」参照）
 該当なし → スキップ
 
 ## ADR テンプレート
 
-`decisions/` の既存ファイルを確認し、次の連番を決定する。
+`docs/decisions/` の既存ファイルを確認し、次の連番を決定する。
 判断ごとに1つの ADR を作成（1つの ADR に複数の判断を混ぜない）。
-ファイル名: `decisions/NNNN-タイトル.md`（NNNN は0埋め4桁、タイトルはケバブケース）。
+ファイル名: `docs/decisions/NNNN-タイトル.md`（NNNN は0埋め4桁、タイトルはケバブケース）。
 連番は再利用しない（Superseded でも番号は残す）。1〜2ページに収める。
 
 ```markdown

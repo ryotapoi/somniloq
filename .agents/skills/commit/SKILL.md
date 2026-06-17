@@ -21,13 +21,13 @@ description: Use when the current repository changes are ready to be committed. 
   - 検証結果
   - review 結果
   - `backlog/backlog.md`
-  - `decisions/`
-  - `references/knowledge.md`
+  - `docs/decisions/`
+  - `llm-wiki/`
 
 ## Checks
 
-- 技術選定、データモデル、アーキテクチャ、将来制約になる判断は `decisions/` を検討する。
-- 技術的なハマりどころは `references/knowledge.md` に残す。
+- 技術選定、データモデル、アーキテクチャ、将来制約になる判断は `docs/decisions/` を検討する。
+- 特定ソースを編集するときだけ必要な罠は、そのソースのコメントに残す。横断的な挙動・設計理解は `llm-wiki/` に残す。
 - 完了した backlog 項目があれば `backlog/backlog.md` を更新する。
 - `git status` と `git diff`（staged + unstaged）で変更内容を把握する。
 - `git log --oneline -5` で直近のコミットスタイルを確認する。

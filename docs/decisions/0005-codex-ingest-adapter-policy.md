@@ -53,11 +53,11 @@ v0.4 で Codex の rollout JSONL を取り込む。スキーマと migration 方
 - CLI では `import` と `import-codex` が分かれるため、source ごとのデフォルトパスが明確になる
   - 注記: この consequence は ADR 0006 の時点で無効。現在は `import` が統合入口で、`--source` が対象を選ぶ
 - function call / reasoning / event は保存されない。somniloq の現行スコープは「会話 text の検索・閲覧」であり、tool 実行履歴の完全保存は非目標として扱う
-- rollout ファイルの途中に過去行が挿入されるような形式変更が起きると、line number ベース ID は変わりうる。現行 rollout は追記型ログとして扱い、形式が変わったら `references/jsonl-schema.md` と adapter を見直す
+- rollout ファイルの途中に過去行が挿入されるような形式変更が起きると、line number ベース ID は変わりうる。現行 rollout は追記型ログとして扱い、形式が変わったら `docs/specs/jsonl-schema.md` と adapter を見直す
 
 ## References
 
-- `rules/scope.md`
-- `references/jsonl-schema.md`
-- `decisions/0004-codex-schema-and-migration.md`
+- `docs/rules/scope.md`
+- `docs/specs/jsonl-schema.md`
+- `docs/decisions/0004-codex-schema-and-migration.md`
 - `internal/ingest/codex/`

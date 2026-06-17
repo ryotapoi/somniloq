@@ -6,17 +6,17 @@
 - **Constraints**:
   - 既存の局所パターンに従う。変える場合は理由を説明できるようにする。
   - 型定義・API・依存方向は実物で確認する。
-  - 振る舞い変更があるなら、必要に応じて `specs/`、`rules/scope.md`、README、テストを同期する。
+  - 振る舞い変更があるなら、必要に応じて `docs/specs/`、`docs/rules/scope.md`、README、テストを同期する。
   - 振る舞い変更や bug fix では、同じ commit に unit test / regression test を追加または更新する。テストできない場合は理由を明記する。
   - 実装中に見つかった別タスクは、今やる理由がなければ `backlog/backlog.md` に逃がす。
   - ループ内で時刻を扱う場合は各反復で取得する（ループ外で 1 回だけ取得しない）。
 - **Acceptance**:
   - 要求された振る舞いが実装されている。
-  - 必要な `specs/` / tests / `backlog/backlog.md` / README の同期が済んでいる。
+  - 必要な `docs/specs/` / tests / `backlog/backlog.md` / README の同期が済んでいる。
   - 余計なスコープ拡張がない。
 - **Relevant**:
   - 承認済み plan、または Small 変更の明確な要求
-  - 関連する `rules/`, `specs/`, `references/knowledge.md`, `references/jsonl-schema.md`
+  - 関連する `docs/rules/`, `docs/specs/`, `llm-wiki/`, `docs/specs/jsonl-schema.md`
   - 変更対象と周辺コード
 
 ## Flow ICAR
@@ -38,11 +38,11 @@
 - **Intent**: 実装で変わった仕様・知見・未着手作業を正しい情報源に反映する。
 - **Constraints**:
   - 完了した backlog 項目があれば `backlog/backlog.md` を更新する。
-  - 技術的知見は `references/knowledge.md` に残す。
-  - JSONL 形式の参照情報は `references/jsonl-schema.md` に残す。
-  - 後から制約になる判断は `decisions/` に残す。
+  - 特定ソースを編集するときだけ必要な罠は、そのソースのコメントに残す。横断的な挙動・設計理解は `llm-wiki/` に残す。
+  - JSONL 形式の参照情報は `docs/specs/jsonl-schema.md` に残す。
+  - 後から制約になる判断は `docs/decisions/` に残す。
 - **Acceptance**: 実装差分と情報源が矛盾していない。
-- **Relevant**: `specs/`, `rules/`, `backlog/backlog.md`, `decisions/`, `references/knowledge.md`。
+- **Relevant**: `docs/specs/`, `docs/rules/`, `backlog/backlog.md`, `docs/decisions/`, `llm-wiki/`。
 
 ## Go Tooling
 

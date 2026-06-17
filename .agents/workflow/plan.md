@@ -10,13 +10,13 @@
   - 検証方針（自動 / CLI 実行 / ユーザー確認）を plan に明記する。
 - **Acceptance**:
   - 実装対象、非対象、検証方針が明確。
-  - 必要な `specs/`, `backlog/backlog.md`, `decisions/`, `references/knowledge.md` の更新方針が明確。
+  - 必要な `docs/specs/`, `backlog/backlog.md`, `docs/decisions/`, `llm-wiki/` の更新方針が明確。
   - レビュー指摘への対応が済んでいる、または対応しない理由が plan に書かれている。
   - 未解決の不明点がない。ある場合はユーザー確認待ちとして止まっている。
 - **Relevant**:
   - ユーザー依頼
   - `backlog/backlog.md`
-  - 関連する `rules/`, `specs/`, `decisions/`, `references/knowledge.md`, `references/jsonl-schema.md`
+  - 関連する `docs/rules/`, `docs/specs/`, `docs/decisions/`, `llm-wiki/`, `docs/specs/jsonl-schema.md`
   - 関連コードと既存パターン
 
 ## Use When
@@ -38,7 +38,7 @@ Small（`default.md` の Intake 分類）— typo、docs、テスト追加だけ
   - CLI 出力に関わる変更なら、入力 JSONL または DB 状態、実行コマンド、期待 stdout/stderr、exit code、DB 変化を書く。
   - 内部ロジックのみの変更なら「N/A — CLI 出力変更なし」と明記してスキップする。
 - **Acceptance**: ユーザー確認が必要な CLI 挙動が plan 上で明確になっている。
-- **Relevant**: `rules/scope.md`, usage/help、対象コマンド、関連テスト。
+- **Relevant**: `docs/rules/scope.md`, usage/help、対象コマンド、関連テスト。
 
 ### Design
 
@@ -49,14 +49,14 @@ Small（`default.md` の Intake 分類）— typo、docs、テスト追加だけ
   - `cmd/somniloq → internal/core` の依存方向と責務境界を守る。
   - 共通化は「片方だけ変更したくなったとき、もう片方に影響なく変更できるか？」で判断する。
 - **Acceptance**: 採用案・却下案・理由・残リスクが plan に残っている。
-- **Relevant**: `rules/architecture.md`, `rules/constraints.md`, `references/knowledge.md`, 関連コード。
+- **Relevant**: `docs/rules/architecture.md`, `docs/rules/constraints.md`, `llm-wiki/`, 関連コード。
 
 ### Refactor Scope
 
 - **Intent**: 理想状態は全体が綺麗であること。ただし 1 plan = 1 commit の粒度では、毎回全体を見直さず、今回の変更範囲で必要な構造改善を判断する。
 - **Constraints**:
   - 今の構造を維持すること自体を目的にしない。
-  - 調査範囲は、変更対象・直接の呼び出し元/呼び出し先・関連 specs / rules / knowledge に絞る。
+  - 調査範囲は、変更対象・直接の呼び出し元/呼び出し先・関連 docs / llm-wiki に絞る。
   - その範囲で実装が歪む、重複が増える、責務境界が曖昧になるなら、先に局所リファクタするか今回の plan に含める。
   - 1 commit に収まらない広い構造改善は、今回に混ぜず `backlog/backlog.md` または `maintenance.md` の対象に切り出す。
   - `backlog/backlog.md` に計画済みのリファクタ指摘は既知として扱う。

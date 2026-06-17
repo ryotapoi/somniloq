@@ -16,7 +16,7 @@
 - **Relevant**:
   - ユーザー依頼
   - `backlog/backlog.md` の該当項目
-  - 関連する `rules/`, `specs/`, `decisions/`, `references/knowledge.md`, `references/jsonl-schema.md`
+  - 関連する `docs/rules/`, `docs/specs/`, `docs/decisions/`, `llm-wiki/`, `docs/specs/jsonl-schema.md`
   - 既存コード、ログ、再現手順
 
 ## Use When
@@ -29,10 +29,10 @@
 
 ## Recording
 
-- 調査結果が将来も効くなら `references/knowledge.md` に残す。
-- JSONL の形式やスキーマ差異の参照情報なら `references/jsonl-schema.md` に残す。
+- 調査結果が将来も効くなら、特定ソースの罠はソースコメントへ、横断的な挙動・設計理解は `llm-wiki/` に残す。
+- JSONL の形式やスキーマ差異の参照情報なら `docs/specs/jsonl-schema.md` に残す。
 - 要求や粒度が変わるなら `backlog/backlog.md` に残す。
-- 後から理由を問われる判断なら `decisions/` に残す。
+- 後から理由を問われる判断なら `docs/decisions/` に残す。
 
 ## Stop Conditions
 
