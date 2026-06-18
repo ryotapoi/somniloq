@@ -21,8 +21,8 @@
   - docs / test 追加だけ / typo / 1 ファイルの明確な bug 修正は Standard に上げず L0 self-check で済ませる。
 - 構造劣化リスク（巨大化、分岐増加、責務境界の濁り、薄い抽象化、型境界の曖昧さ）があれば `thermo-nuclear-code-quality-review` を**必須**で使う。
 - 領域固有 supplement の対象:
-  - SQLite スキーマ・マイグレーション、SQL（プレースホルダ・`GROUP BY`・集約関数・集計キーと表示キーの整合）、`cmd/somniloq → internal/core` の依存方向、CLI 破壊的変更、JSONL 取り込みの境界ケース、`backfill` の破壊的処理（DELETE を含む） → `somniloq-risk-check`
-  - 永続化 / マイグレーション / 削除 / 外部連携 / 並行性 / 公開 API → `somniloq-risk-check` に加え、必要なら `codex-review`
+  - SQLite スキーマ・マイグレーション、SQL（プレースホルダ・`GROUP BY`・集約関数・集計キーと表示キーの整合）、`cmd/somniloq → internal/core` の依存方向、CLI 破壊的変更、JSONL 取り込みの境界ケース、`backfill` の破壊的処理（DELETE を含む） → `project-risk-check`
+  - 永続化 / マイグレーション / 削除 / 外部連携 / 並行性 / 公開 API → `project-risk-check` に加え、必要なら `codex-review`
 - **テスト可能な振る舞い変更や bug fix に unit / regression test がない場合は、原則 blocker として扱う**（理由がある例外のみ許容）。
 - review は粗探しではなく、実害・仕様逸脱・テスト不足・設計劣化を探す。
 - 指摘に対応しない場合は、理由を plan / commit body / 該当ドキュメントに記録する。
@@ -40,7 +40,7 @@
      - 却下リスト（指摘と却下理由）
   4. main が最終採否を行い、修正・テスト・コミットはすべて main で行う。
   5. 再レビューは監督をもう一周 `Agent` 起動する（最大 3 周ルールは維持。下記 Decision Criteria 参照）。
-- Targeted / External supplement: 該当 skill（`somniloq-risk-check`, `thermo-nuclear-code-quality-review`, `codex-review`）を呼ぶ。複数該当するものは 1 メッセージで並列起動してよい。
+- Targeted / External supplement: 該当 skill（`project-risk-check`, `thermo-nuclear-code-quality-review`, `codex-review`）を呼ぶ。複数該当するものは 1 メッセージで並列起動してよい。
 - 戻りを全部受け取ってから main で統合し、採用分をまとめて反映する。実行中に 1 件ずつ反映しない。
 
 Goal 全体の commit range に対する `codex-review` と `/code-review` は、各 commit のここでの review とは別に Goal 完了条件として `goal.md` の Goal Review で実施する。

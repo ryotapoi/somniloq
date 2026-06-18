@@ -1,9 +1,9 @@
 ---
-name: somniloq-risk-check
+name: project-risk-check
 description: somniloq 固有の plan / 実装チェック。SQLite スキーマ・マイグレーション、backfill・DELETE を伴う処理、SQL の意味的変更、JSONL 取り込みの境界、CLI 出力仕様、cmd/internal のモジュール境界に触れる変更で使う。汎用レビューではなく somniloq 固有の実害に絞って確認する。
 ---
 
-# somniloq Risk Check
+# Project Risk Check
 
 ## Intent
 
