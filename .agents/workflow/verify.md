@@ -5,34 +5,38 @@
 - **Intent**: 変更が要求を満たし、既存挙動を壊していないことを、適切な証拠で確認する。
 - **Constraints**:
   - 自動検証を優先する。ビルド・テスト・静的チェックで確認できるものは先に通す。
-  - CLI 出力、exit code、DB 変化を自分で確認できる場合は実際に確認する。
-  - ユーザー確認は、ユーザー環境の実データや期待出力の判断が必要な場合に限る。
+  - テスト可能な振る舞い変更や bug fix に unit test / regression test がない場合、検証未完了として扱う。例外は理由を明記する。
+  - 自分で確認できる UI / 操作 / Preview / 実行環境の挙動は先に確認する。
+  - 複雑な GUI、見た目の好み、実機依存、ユーザー観察が必要な挙動はユーザー確認に回す。
   - 検証不能な High-risk 変更は完了扱いにしない。
 - **Acceptance**:
   - 実行した検証と結果を説明できる。
+  - 追加・更新した unit test / regression test、または追加しなかった理由を説明できる。
   - 検証しなかった項目がある場合、その理由が説明できる。
   - ユーザー確認が必要なものだけ依頼し、不要なものは理由を説明できる。
 - **Relevant**:
   - 変更差分（`git diff`, `git diff --cached`）
   - plan または要求
-  - 関連テスト、ビルド設定、CLI コマンド、SQLite DB 状態
+  - 関連テスト、ビルド設定、Preview / GUI 確認手段
 
-## somniloq Verification
+## Verification
 
+<!-- slot: ビルド・テスト・実行・実画面確認の具体手段を書く（例: build_macos / test_macos、go build ./... / go test ./...、./gradlew verifyAll / verifyAllConnected、CLI なら bin/<tool> <args>、Preview 確認手段）。テスト構成上の注意（SPM dependent package など）や API 仕様の一次情報確認手段も書く（外部 API が無ければ「N/A — 外部 API 参照なし」と明記する）。 -->
 - 通常: `go test ./...`
 - CLI ビルド確認: `go build -o bin/somniloq ./cmd/somniloq`
 - 静的チェックが有効な変更: `go vet ./...`
-- CLI 挙動変更: `bin/somniloq <command>` を一時 DB / testdata / 小さい JSONL で実行し、stdout/stderr/exit code を確認する。
-- SQLite schema / migration / `backfill`: 旧形式 DB、空 DB、再実行性、DELETE 対象あり/なしを確認する。
-- JSONL import: Claude Code と Codex の形式差、差分取り込み、メタのみセッション、空 text、未知フィールドを確認する。
+- CLI 挙動変更: `bin/somniloq <command>` を一時 DB / testdata / 小さい JSONL で実行し、stdout / stderr / 終了コードを確認する
+- SQLite schema / migration / `backfill`: 旧形式 DB、空 DB、再実行性、DELETE 対象あり/なしを確認する
+- API 仕様: N/A — 外部 API 参照なし
+<!-- /slot -->
 
 ## User Check
 
-- docs / テストのみ / 内部ロジックのみの変更では不要。
-- 実ユーザーのローカルログ、巨大 DB、期待出力の好み、実機依存の観察が必要な場合だけ依頼する。
+- docs / テストのみ / ロジックのみの変更では不要。
+- UI 変更は、複雑な操作フロー・視覚判断・実機依存・自動検証不能な挙動がある場合に依頼する。
 
 ## Stop Conditions
 
 - 必須の検証が環境要因で実行できない。
-- ユーザー確認が必要だが未完了。
+- UI / 挙動確認が必要だがユーザー確認が未完了。
 - 検証結果が要求または仕様と矛盾する。
