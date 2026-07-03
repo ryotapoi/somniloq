@@ -1,5 +1,16 @@
 # Backlog
 
+## v0.7.0
+
+2026-07-03 Knowledge 側のスキル改修（/jot /retro /rem 等）との検討で決めた機能追加。順序は上から。
+
+- [ ] project alias の表示正規化: sessions 一覧・show ヘッダ・projects 集計・search 結果で、旧 project 名を config の projectAliases の canonical 名で表示する。フィルタ側の展開（cmd/somniloq/config.go の expandProject、filter.go 経由）は v0.6.0 で実装済みで、出力側は生の名前のまま。まず表示に project 名が出る箇所を洗い出し、canonical 表示に統一する。元の名前を残すか（JSON フィールド追加等）は設計時に判断。Knowledge の daily-guide にある旧名対応表（knowledgebase→knowledge 等）を完全に消すための残り半分
+- [ ] sessions にスキップ判定用の列を追加する: 「非コマンド user turn 数」と「最初の非コマンド入力の先頭 1 行」を列に出す。コマンド判定は組み込みの slash command 検出（`/` 始まり、Claude Code 用）に加え、config に `commandPatterns`（正規表現リスト）を持たせてマッチする user turn もコマンド扱いにする（Codex には slash command がなく「日報生成」のような定型起動文で叩くため、それを除外するための口）。目的は、/jot が一覧だけで定型セッション（/chk, /briefing 等のみ）を show せずに捨てられるようにすること。スキップの最終判断は CLI ではなく一覧を読む側が行う
+- [ ] 論理日境界（day boundary）を追加する: config に `dayBoundary`（例 "04:00"）を持ち、`--day-boundary` フラグで上書きできるようにする。変換はクエリ時計算とし、import 時に焼き込まない（境界変更で再 import が要らないように。timestamp は生のまま）。効果は 2 点: (a) sessions / search の `--since` / `--until` の日付解釈が境界起点になる（`--since 6/28` = 6/28 04:00 から）、(b) sessions に論理日の列（または `--group-by day`）を追加する。振り分けはセッション単位で ended_at（なければ started_at）を使い、セッションを途中で割らない。Knowledge の jot / daily-guide に散っている「04:00〜翌 04:00 を 1 日とする」ルールの移設先
+- [ ] outline に turn ごとのサイズ列を追加する: 各 turn の本文合計サイズ（バイト）を出す。sessions の BodySize と同じ方式でクエリ時に SUM(LENGTH(content)) を計算する（スキーマ変更・import 変更なし）。長いセッションで「どの turn が重いか＝どこで何かが起きたか」の地図精度を上げ、show --turn の範囲選びを良くする
+- [ ] search 結果に turn 番号を含める: outline / show --turn と同一の採番で turn 番号を返し、検索ヒットからそのまま `show --turn <N..M>` に繋げられるようにする
+- [ ] ヘルプ充実と examples スキルの薄型化を行う: 各サブコマンドの `--help` に「フラグの意味・出力列の定義・実例 2〜3 個」を載せ、LLM が `--help` だけで使い方を把握できる水準にする。トップレベルの `--help` は現在の短さを維持する（全部盛りにしない）。コマンド横断のイディオム（outline → show --turn で必要範囲だけ読む等）も help 側に置く。あわせて `examples/skills/somniloq/SKILL.md` を「存在の告知・いつ使うか・--help への誘導」中心に薄くし、CLI 構文の重複記述を減らす（スキルと実装のドリフト防止）
+
 ## Maintenance（2026-07 監査）
 
 2026-07-03 maintenance audit（deep pass、thermo-nuclear 基準）の指摘対応。順序は上から（優先度順）。
