@@ -48,6 +48,40 @@ func TestCodexScanFiles_Recursive(t *testing.T) {
 	}
 }
 
+func TestCodexScanFiles_MissingRootIsUnusedSource(t *testing.T) {
+	root := filepath.Join(t.TempDir(), "missing")
+
+	files, errs := codex.NewAdapter(ResolveRepoPath).ScanFiles(root)
+	if len(errs) != 0 {
+		t.Fatalf("ScanFiles failed: %v", errs)
+	}
+	if len(files) != 0 {
+		t.Fatalf("got %d files, want 0: %+v", len(files), files)
+	}
+}
+
+func TestCodexScanFiles_UnreadableRootIsReported(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("permission checks do not apply to root")
+	}
+	root := t.TempDir()
+	if err := os.Chmod(root, 0o000); err != nil {
+		t.Fatalf("Chmod failed: %v", err)
+	}
+	t.Cleanup(func() { os.Chmod(root, 0o755) })
+
+	files, errs := codex.NewAdapter(ResolveRepoPath).ScanFiles(root)
+	if len(errs) != 1 {
+		t.Fatalf("got %d scan errors, want 1: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0].Error(), root) {
+		t.Errorf("scan error should name the unreadable root: %v", errs[0])
+	}
+	if len(files) != 0 {
+		t.Fatalf("got %d files, want 0: %+v", len(files), files)
+	}
+}
+
 func TestCodexScanFiles_UnreadableSubdirIsNonFatal(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("permission checks do not apply to root")

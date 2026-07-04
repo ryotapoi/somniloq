@@ -30,8 +30,7 @@ func (a Adapter) ScanFiles(rootDir string) ([]ingest.File, []error) {
 	var errs []error
 	walkErr := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
-			// A missing rootDir means the source is unused.
-			if path == rootDir && errors.Is(err, os.ErrNotExist) {
+			if path == rootDir {
 				return err
 			}
 			errs = append(errs, fmt.Errorf("scan %s: %w", path, err))
@@ -51,8 +50,15 @@ func (a Adapter) ScanFiles(rootDir string) ([]ingest.File, []error) {
 		return nil
 	})
 	if walkErr != nil {
-		// The callback propagates an error only for a missing rootDir
-		// (source unused); every other failure is recorded in errs above.
+		// A missing rootDir means the source is unused.
+		if errors.Is(walkErr, os.ErrNotExist) {
+			return nil, nil
+		}
+		// Root scan failures are fatal for that source, matching the Claude
+		// Code adapter. Descendant failures stay non-fatal via errs above.
+		return nil, []error{fmt.Errorf("scan %s: %w", rootDir, walkErr)}
+	}
+	if len(files) == 0 && len(errs) == 0 {
 		return nil, nil
 	}
 	return files, errs
