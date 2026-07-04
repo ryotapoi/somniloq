@@ -16,6 +16,7 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	fs := flag.NewFlagSet("sessions", flag.ContinueOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
+	dayBoundaryFlag := fs.String("day-boundary", "", "logical day boundary for date filters and display (HH:MM, overrides config dayBoundary)")
 	project := fs.String("project", "", "filter by repo path (substring match)")
 	short := fs.Bool("short", false, "shorten unaliased projects to repo basename")
 	format := fs.String("format", "tsv", "output format (tsv, json)")
@@ -31,8 +32,12 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	if err != nil {
 		return 1, err
 	}
+	boundary, err := resolveDayBoundary(*dayBoundaryFlag, cfg)
+	if err != nil {
+		return 1, err
+	}
 
-	filter, err := buildSessionFilter(*since, *until, *project, cfg)
+	filter, err := buildSessionFilter(*since, *until, *project, cfg, boundary)
 	if err != nil {
 		return 1, err
 	}
@@ -55,7 +60,7 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	if *format == "json" {
 		entries := make([]sessionJSON, len(rows))
 		for i, r := range rows {
-			entries[i] = newSessionJSON(r, resolveProjectDisplayName(r.RepoPath, *short, cfg), derived[i])
+			entries[i] = newSessionJSON(r, resolveProjectDisplayName(r.RepoPath, *short, cfg), sessionLogicalDay(r, boundary, time.Local), derived[i])
 		}
 		if err := writeJSON(out, entries); err != nil {
 			return 1, err
@@ -66,8 +71,8 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	for i, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
 		proj := resolveProjectDisplayName(r.RepoPath, *short, cfg)
-		fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
-			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), proj, title, r.MessageCount, r.BodySize,
+		fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
+			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
 			derived[i].NonCommandUserTurnCount, sanitizeTSV(derived[i].FirstNonCommandUserLine))
 	}
 	return 0, nil

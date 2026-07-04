@@ -11,7 +11,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const searchUsageLine = "somniloq search [--since <time>] [--until <time>] [--project <name>] <query>"
+const searchUsageLine = "somniloq search [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] <query>"
 
 // snippetContext is the number of runes kept on each side of the match.
 const snippetContext = 40
@@ -22,6 +22,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	since := fs.String("since", "", "filter by message time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter messages before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
+	dayBoundaryFlag := fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)")
 	project := fs.String("project", "", "filter by repo path (substring match)")
 	setUsage(fs, "Search message content across sessions", searchUsageLine)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
@@ -41,7 +42,11 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 		return 1, nil
 	}
 
-	filter, err := buildSessionFilter(*since, *until, *project, cfg)
+	boundary, err := resolveDayBoundary(*dayBoundaryFlag, cfg)
+	if err != nil {
+		return 1, err
+	}
+	filter, err := buildSessionFilter(*since, *until, *project, cfg, boundary)
 	if err != nil {
 		return 1, err
 	}

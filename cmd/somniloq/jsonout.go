@@ -31,6 +31,7 @@ type sessionJSON struct {
 	Title                   string `json:"title"`
 	StartedAt               string `json:"startedAt"`
 	EndedAt                 string `json:"endedAt"`
+	LogicalDay              string `json:"logicalDay"`
 	MessageCount            int    `json:"messageCount"`
 	BodySize                int    `json:"bodySize"`
 	NonCommandUserTurnCount int    `json:"nonCommandUserTurnCount"`
@@ -64,7 +65,7 @@ type showSessionJSON struct {
 	Messages  []messageJSON `json:"messages"`
 }
 
-func newSessionJSON(r core.SessionRow, project string, userTurns sessionUserTurnSummary) sessionJSON {
+func newSessionJSON(r core.SessionRow, project, logicalDay string, userTurns sessionUserTurnSummary) sessionJSON {
 	return sessionJSON{
 		Source:                  string(r.Source),
 		SessionID:               r.SessionID,
@@ -72,6 +73,7 @@ func newSessionJSON(r core.SessionRow, project string, userTurns sessionUserTurn
 		Title:                   r.CustomTitle,
 		StartedAt:               r.StartedAt,
 		EndedAt:                 r.EndedAt,
+		LogicalDay:              logicalDay,
 		MessageCount:            r.MessageCount,
 		BodySize:                r.BodySize,
 		NonCommandUserTurnCount: userTurns.NonCommandUserTurnCount,

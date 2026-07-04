@@ -141,7 +141,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	}
 
 	// --since/--until mode
-	filter, err := buildSessionFilter(*since, *until, *project, cfg)
+	filter, err := buildSessionFilter(*since, *until, *project, cfg, dayBoundary{})
 	if err != nil {
 		return 1, err
 	}

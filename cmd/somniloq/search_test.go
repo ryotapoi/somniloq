@@ -45,6 +45,63 @@ func TestSearchCmd_ExcludesSidechain(t *testing.T) {
 	}
 }
 
+func TestSearchCmd_DayBoundaryFiltersDateOnlySince(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("JST", 9*60*60)
+	defer func() { time.Local = oldLocal }()
+
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	if err := db.UpsertSession(core.SessionMeta{
+		Source:    core.SourceClaudeCode,
+		SessionID: "s1",
+		RepoPath:  "/Users/test/proj",
+		StartedAt: "2026-03-28T18:00:00Z",
+	}, "2026-03-29T00:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
+	}
+	messages := []struct {
+		uuid      string
+		timestamp string
+		content   string
+	}{
+		{"before", "2026-03-28T18:59:00Z", "needle before boundary"},
+		{"after", "2026-03-28T19:00:00Z", "needle after boundary"},
+	}
+	for _, msg := range messages {
+		if err := db.InsertMessage(core.NormalizedMessage{
+			Source:    core.SourceClaudeCode,
+			UUID:      msg.uuid,
+			SessionID: "s1",
+			Role:      "user",
+			Content:   msg.content,
+			Timestamp: msg.timestamp,
+		}); err != nil {
+			t.Fatalf("InsertMessage(%s): %v", msg.uuid, err)
+		}
+	}
+
+	var out, errOut bytes.Buffer
+	code, err := searchCmd([]string{"--since", "2026-03-29", "--day-boundary", "04:00", "needle"}, staticDB(db), config{}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("searchCmd: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+	}
+	got := out.String()
+	if strings.Contains(got, "before boundary") {
+		t.Fatalf("date-only --since should exclude the pre-boundary message:\n%s", got)
+	}
+	if !strings.Contains(got, "after boundary") {
+		t.Fatalf("date-only --since should include the boundary message:\n%s", got)
+	}
+}
+
 func TestSearchCmd_MissingQueryPrintsUsage(t *testing.T) {
 	db := newOutlineTestDB(t)
 

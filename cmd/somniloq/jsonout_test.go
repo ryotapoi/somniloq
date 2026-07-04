@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
@@ -52,6 +53,7 @@ func TestSessionsCmd_FormatJSON(t *testing.T) {
 		"title":        "",
 		"startedAt":    "2026-03-28T15:00:00Z",
 		"endedAt":      rows[0].EndedAt,
+		"logicalDay":   sessionLogicalDay(rows[0], dayBoundary{}, time.Local),
 		"messageCount": float64(rows[0].MessageCount),
 		"bodySize":     float64(rows[0].BodySize),
 		"nonCommandUserTurnCount": float64(2),

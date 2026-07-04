@@ -19,6 +19,9 @@ func TestLoadConfig_MissingFileIsEmptyConfig(t *testing.T) {
 	if cfg.ProjectAliases != nil {
 		t.Errorf("ProjectAliases = %v, want nil", cfg.ProjectAliases)
 	}
+	if cfg.DayBoundary != "" {
+		t.Errorf("DayBoundary = %q, want empty", cfg.DayBoundary)
+	}
 }
 
 func TestLoadConfig_InvalidJSONIsError(t *testing.T) {
@@ -54,6 +57,24 @@ func TestLoadConfig_InvalidCommandPatternIsError(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_InvalidDayBoundaryIsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"dayBoundary": "24:00"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadConfig(path)
+	if err == nil {
+		t.Fatal("expected error for invalid dayBoundary, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid dayBoundary") {
+		t.Errorf("err = %v, want invalid dayBoundary", err)
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Errorf("err = %v, want the config path in the message", err)
+	}
+}
+
 func TestLoadConfig_ParsesProjectAliases(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	body := `{"projectAliases": {"somniloq": ["Brimday", "old-somniloq"]}}`
@@ -68,6 +89,32 @@ func TestLoadConfig_ParsesProjectAliases(t *testing.T) {
 	want := map[string][]string{"somniloq": {"Brimday", "old-somniloq"}}
 	if !reflect.DeepEqual(cfg.ProjectAliases, want) {
 		t.Errorf("ProjectAliases = %v, want %v", cfg.ProjectAliases, want)
+	}
+}
+
+func TestLoadConfig_ParsesDayBoundary(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	body := `{"dayBoundary": "04:00"}`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	if cfg.DayBoundary != "04:00" {
+		t.Errorf("DayBoundary = %q, want 04:00", cfg.DayBoundary)
+	}
+}
+
+func TestResolveDayBoundary_FlagOverridesConfig(t *testing.T) {
+	got, err := resolveDayBoundary("05:30", config{DayBoundary: "04:00"})
+	if err != nil {
+		t.Fatalf("resolveDayBoundary: %v", err)
+	}
+	if got.offset.String() != "5h30m0s" {
+		t.Errorf("offset = %v, want 5h30m0s", got.offset)
 	}
 }
 

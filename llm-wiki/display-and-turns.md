@@ -31,8 +31,9 @@ sources:
 - Summary show: `show.go` が `GetSummaryMessages` に差し替える。`/clear` / `<local-command-caveat>` skip は core query 側。
 - Outline: `outline.go` が `GetMessages` と `assignTurns` を使い、user message だけ出す。
 - Sessions skip hints: `sessions.go` が `ListSessions` 後に各 session の `GetMessages` を読み、`userTurnMessages` と `config.go` の `commandMatcher` で非コマンド user turn 数と最初の非コマンド行を出す。DB schema / core の session 集約 SQL には持ち込まない。
+- Sessions logical day: `sessions.go` が `sessionLogicalDay` で表示時に計算する。`ended_at` 優先、無ければ `started_at`。`dayBoundary` は config または `--day-boundary` で決まり、DB schema / import には持ち込まない。
 - Search: `search.go` が `SearchMessages` の結果に `searchSnippet` をかける。検索の time filter は message timestamp 基準。
-- JSON: `cmd/somniloq/jsonout.go`。単一 show も配列で返す。判断は `docs/decisions/0012-json-output-schema.md`。
+- JSON: `cmd/somniloq/jsonout.go`。単一 show も配列で返す。`sessions` JSON には `logicalDay` があるが、show JSON にはない。判断は `docs/decisions/0012-json-output-schema.md`。
 
 ## 変更時のテスト入口
 

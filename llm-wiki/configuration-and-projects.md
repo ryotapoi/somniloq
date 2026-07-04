@@ -16,7 +16,7 @@ sources:
 
 # Configuration and projects
 
-`repo_path` / `--project` / config 周りを変えるときの地図。表示名、filter、集約キー、sessions skip hint 用の command pattern が混ざりやすいので、入口を分けて見る。
+`repo_path` / `--project` / config 周りを変えるときの地図。表示名、filter、集約キー、sessions skip hint 用の command pattern、論理日境界が混ざりやすいので、入口を分けて見る。
 
 ## repo_path
 
@@ -28,7 +28,7 @@ sources:
 
 - config 読み込みは `cmd/somniloq/config.go`。missing file は空 config、invalid JSON は error。
 - alias 展開は `config.expandProject`。完全一致したときだけ canonical + old names に展開する。
-- `cmd/somniloq/filter.go` の `buildSessionFilter` が time flag と project alias をまとめて `core.SessionFilter` にする。
+- `cmd/somniloq/filter.go` の `buildSessionFilter` が time flag と project alias をまとめて `core.SessionFilter` にする。`sessions` / `search` は date-only filter に `dayBoundary` を渡し、`show` / `projects` は従来どおり 00:00 境界で呼ぶ。
 - SQL 条件は `internal/core/db.go` の `projectsCondition`。repo_path substring LIKE を OR でつなぐ。
 
 ## commandPatterns
@@ -36,6 +36,13 @@ sources:
 - `commandPatterns` は `cmd/somniloq/config.go` で読み、invalid regexp は config error にする。壊れた JSON / typo を黙って無効化しない方針に揃える。
 - 評価は `commandMatcher`。trim 済み user message 本文が `/` 始まり、または regexp に一致したら command 扱い。
 - 利用箇所は `cmd/somniloq/sessions.go` の skip hint 列だけ。セッション自体は CLI では除外しない。
+
+## dayBoundary
+
+- `dayBoundary` は `cmd/somniloq/config.go` の任意設定。形式は `HH:MM`、未指定は `00:00`。invalid value は config error にする。
+- `--day-boundary` は `sessions` / `search` だけにあり、config の `dayBoundary` を上書きする。
+- `cmd/somniloq/filter.go` の `resolveTimeFlag` は date-only (`YYYY-MM-DD`) のときだけ境界を足す。相対 duration と `YYYY-MM-DDThh:mm` は影響を受けない。
+- `sessions` の `logical_day` / `logicalDay` は `sessionLogicalDay` で `ended_at` 優先、無ければ `started_at` を使い、ローカル時刻から境界分を引いた `YYYY-MM-DD`。DB には保存しない。
 
 ## 集約と表示
 

@@ -97,13 +97,16 @@ somniloq sessions --since 24h            # last 24 hours
 somniloq sessions --since 7d             # last 7 days
 somniloq sessions --since 2026-03-28     # after a date (local time)
 somniloq sessions --until 2026-03-28     # before a date (local time)
+somniloq sessions --since 2026-03-28 --day-boundary 04:00  # after the logical day boundary
 somniloq sessions --since 7d --until 2h  # 7 days ago to 2 hours ago
 somniloq sessions --project myapp        # substring match against repo_path
 somniloq sessions --short                # basename of repo_path for unaliased projects
 somniloq sessions --format json          # JSON array instead of TSV
 ```
 
-Output is TSV: `session_id`, `started_at ~ ended_at`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`
+Output is TSV: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`
+
+`logical_day` is derived at query time from `ended_at` (or `started_at` when `ended_at` is empty), using the local `dayBoundary`. Sessions are not split across days.
 
 When `projectAliases` matches a repo path or basename, project output uses only the canonical name.
 
@@ -111,7 +114,7 @@ When `projectAliases` matches a repo path or basename, project output uses only 
 
 `non_command_user_turn_count` and `first_non_command_user_line` are skip hints for consumers: they use the same sidechain-excluded user-turn population as `outline`, then ignore user turns whose trimmed content starts with `/` or matches a configured `commandPatterns` regex. The CLI only reports these values; it does not skip sessions.
 
-`--format json` emits a JSON array with `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messageCount`, `bodySize`, `nonCommandUserTurnCount`, `firstNonCommandUserLine`. JSON timestamps are the stored RFC3339 UTC values (see "JSON output" below).
+`--format json` emits a JSON array with `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `logicalDay`, `messageCount`, `bodySize`, `nonCommandUserTurnCount`, `firstNonCommandUserLine`. JSON timestamps are the stored RFC3339 UTC values (see "JSON output" below).
 
 ### projects
 
@@ -157,10 +160,11 @@ Grasp the structure of a long session before `show`ing it in full. Output is TSV
 ```bash
 somniloq search "auth bug"                          # search all message bodies
 somniloq search --since 7d "auth"                   # messages written in the last 7 days
+somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # messages since 04:00 on that local day
 somniloq search --since 7d --project myapp "auth"   # narrowed by project
 ```
 
-Output is TSV: `session_id`, `time`, `project`, `snippet` (the text around the first match), newest first. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Sidechain messages are excluded.
+Output is TSV: `session_id`, `time`, `project`, `snippet` (the text around the first match), newest first. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
 
 ### JSON output
 
@@ -180,13 +184,16 @@ Optional config file at `~/.somniloq/config.json` (override with the global `--c
   "projectAliases": {
     "newname": ["oldname"]
   },
-  "commandPatterns": ["^Daily report"]
+  "commandPatterns": ["^Daily report"],
+  "dayBoundary": "04:00"
 }
 ```
 
 `projectAliases` groups project names that refer to the same project over time (e.g. a renamed repository): current name → old names. When a `--project` value exactly matches any name in a group, the filter expands to the whole group, so sessions recorded under either name are found. Non-matching values behave as before. Filtering applies to `sessions`, `show`, and `search`. Project display in `sessions`, `show`, `projects`, and `search` uses only the canonical name when the stored `repo_path` or basename matches an alias group; `projects` also aggregates those rows under the canonical name.
 
 `commandPatterns` is a list of Go regular expressions used only by `sessions` skip-hint columns. Each pattern matches against the trimmed full user message. Invalid regular expressions make config loading fail, the same as broken JSON, so typos do not silently disable the setting.
+
+`dayBoundary` sets the logical day start time as `HH:MM` local time. It defaults to `00:00` and can be overridden per command with `--day-boundary` on `sessions` and `search`. It only changes date-only `--since`/`--until` values and the `sessions` logical-day column; stored timestamps stay raw, so changing the boundary does not require re-import.
 
 ## Common Options
 
@@ -205,7 +212,7 @@ Optional config file at `~/.somniloq/config.json` (override with the global `--c
 | Format | Example | Meaning |
 |--------|---------|---------|
 | Relative | `30m`, `24h`, `7d` | That amount of time ago |
-| Date | `2026-03-28` | 00:00 local time on that day |
+| Date | `2026-03-28` | The configured local `dayBoundary` on that day for `sessions`/`search`; otherwise 00:00 local time |
 | Datetime | `2026-03-28T15:00` | Exact local time |
 
 ## Upgrading to v0.4
