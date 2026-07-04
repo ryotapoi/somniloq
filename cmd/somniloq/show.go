@@ -20,7 +20,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	project := fs.String("project", "", "filter by repo path (substring match)")
-	short := fs.Bool("short", false, "shorten project to repo basename")
+	short := fs.Bool("short", false, "shorten unaliased project to repo basename")
 	summary := fs.Int("summary", 0, "show first N user messages skipping /clear and local-command-caveat (0 disables)")
 	includeClear := fs.Bool("include-clear", false, "keep /clear and local-command-caveat messages in --summary output (requires --summary >= 1)")
 	turnRange := fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)")
@@ -123,7 +123,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 		if code != 0 {
 			return code, err
 		}
-		proj := resolveDisplayName(session.RepoPath, *short)
+		proj := resolveProjectDisplayName(session.RepoPath, *short, cfg)
 		messages, err := getMessages(session.Source, session.SessionID)
 		if err != nil {
 			return 1, err
@@ -157,7 +157,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 			if err != nil {
 				return 1, err
 			}
-			entries[i] = newShowSessionJSON(session, resolveDisplayName(session.RepoPath, *short), messages)
+			entries[i] = newShowSessionJSON(session, resolveProjectDisplayName(session.RepoPath, *short, cfg), messages)
 		}
 		if err := writeJSON(out, entries); err != nil {
 			return 1, err
@@ -170,7 +170,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 	displayNames := make([]string, len(sessions))
 	for i := range sessions {
-		displayNames[i] = resolveDisplayName(sessions[i].RepoPath, *short)
+		displayNames[i] = resolveProjectDisplayName(sessions[i].RepoPath, *short, cfg)
 	}
 
 	if err := formatSessions(out, sessions, displayNames, getMessages, time.Local); err != nil {

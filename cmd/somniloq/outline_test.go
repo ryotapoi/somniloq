@@ -37,6 +37,7 @@ func newOutlineTestDB(t *testing.T) *core.DB {
 		Source:    core.SourceClaudeCode,
 		SessionID: "sess-1",
 		CWD:       "/Users/test/proj",
+		RepoPath:  "/Users/test/proj",
 		StartedAt: "2026-03-28T15:00:00Z",
 	}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession: %v", err)

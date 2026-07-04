@@ -69,7 +69,7 @@ func TestProjectsCmd_FormatJSON(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := projectsCmd([]string{"--format", "json"}, staticDB(db), &out, &errOut)
+	code, err := projectsCmd([]string{"--format", "json"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("projectsCmd: %v", err)
 	}
@@ -209,7 +209,7 @@ func TestFormatFlag_Unknown(t *testing.T) {
 		}},
 		{"projects", func() (int, error) {
 			var out, errOut bytes.Buffer
-			return projectsCmd([]string{"--format", "xml"}, openDB, &out, &errOut)
+			return projectsCmd([]string{"--format", "xml"}, openDB, config{}, &out, &errOut)
 		}},
 		{"outline", func() (int, error) {
 			var out, errOut bytes.Buffer

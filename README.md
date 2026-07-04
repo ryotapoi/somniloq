@@ -99,11 +99,13 @@ somniloq sessions --since 2026-03-28     # after a date (local time)
 somniloq sessions --until 2026-03-28     # before a date (local time)
 somniloq sessions --since 7d --until 2h  # 7 days ago to 2 hours ago
 somniloq sessions --project myapp        # substring match against repo_path
-somniloq sessions --short                # basename of repo_path
+somniloq sessions --short                # basename of repo_path for unaliased projects
 somniloq sessions --format json          # JSON array instead of TSV
 ```
 
-Output is TSV: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title`, `message_count`, `body_size`
+Output is TSV: `session_id`, `started_at ~ ended_at`, `project`, `custom_title`, `message_count`, `body_size`
+
+When `projectAliases` matches a repo path or basename, project output uses only the canonical name.
 
 `body_size` is the total body size in bytes (sidechain excluded), so you can tell whether a session is large before `show`ing it.
 
@@ -114,11 +116,11 @@ Output is TSV: `session_id`, `started_at ~ ended_at`, `repo_path`, `custom_title
 ```bash
 somniloq projects             # all projects
 somniloq projects --since 7d  # projects active in the last 7 days
-somniloq projects --short     # basename of repo_path
+somniloq projects --short     # basename of repo_path for unaliased projects
 somniloq projects --format json
 ```
 
-Output is TSV: `repo_path`, `session_count`. With `--format json`: `project`, `sessionCount`.
+Output is TSV: `project`, `session_count`. With `--format json`: `project`, `sessionCount`. Alias groups are displayed and counted under the canonical project name.
 
 ### show
 
@@ -129,7 +131,7 @@ somniloq show --since 2026-03-28 --until 2026-03-29     # date range
 somniloq show --since 7d --project myapp                # filter by project
 somniloq show --summary 1 --since 24h                   # first user message per session
 somniloq show --summary 3 --since 24h                   # first 3 user messages per session
-somniloq show --short --since 24h                       # basename of repo_path
+somniloq show --short --since 24h                       # basename of repo_path for unaliased projects
 somniloq show --turn 40..60 <session-id>                # only turns 40-60
 somniloq show --tail 3 <session-id>                     # only the last 3 turns
 somniloq show --format json <session-id>                # JSON instead of Markdown
@@ -156,7 +158,7 @@ somniloq search --since 7d "auth"                   # messages written in the la
 somniloq search --since 7d --project myapp "auth"   # narrowed by project
 ```
 
-Output is TSV: `session_id`, `time`, `snippet` (the text around the first match), newest first. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Sidechain messages are excluded.
+Output is TSV: `session_id`, `time`, `project`, `snippet` (the text around the first match), newest first. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Sidechain messages are excluded.
 
 ### JSON output
 
@@ -165,7 +167,7 @@ Output is TSV: `session_id`, `time`, `snippet` (the text around the first match)
 - Always a JSON array; empty results print `[]`.
 - Timestamps are the stored RFC3339 UTC values, not the local-time display format.
 - Strings are raw values (no tab/newline sanitizing; JSON escaping covers it). `title` is the raw custom title with no session-id fallback.
-- `project` honors `--short`; without it you get the raw `repo_path`.
+- `project` uses the canonical project alias when configured; otherwise it honors `--short`, and without `--short` you get the raw `repo_path`.
 
 ## Configuration
 
@@ -179,7 +181,7 @@ Optional config file at `~/.somniloq/config.json` (override with the global `--c
 }
 ```
 
-`projectAliases` groups project names that refer to the same project over time (e.g. a renamed repository): current name → old names. When a `--project` value exactly matches any name in a group, the filter expands to the whole group, so sessions recorded under either name are found. Non-matching values behave as before. Applies to `sessions`, `show`, and `search`; the `projects` listing still shows each `repo_path` as its own row.
+`projectAliases` groups project names that refer to the same project over time (e.g. a renamed repository): current name → old names. When a `--project` value exactly matches any name in a group, the filter expands to the whole group, so sessions recorded under either name are found. Non-matching values behave as before. Filtering applies to `sessions`, `show`, and `search`. Project display in `sessions`, `show`, `projects`, and `search` uses only the canonical name when the stored `repo_path` or basename matches an alias group; `projects` also aggregates those rows under the canonical name.
 
 ## Common Options
 
@@ -224,8 +226,8 @@ v0.4 adds Codex support and changes the session key to include `source`. Existin
 ### CLI behavior changes
 
 - `--project` now matches `repo_path` only. The previous fallback to a `project_dir` column is gone, so older sessions whose `repo_path` is still `NULL` will not match `--project` until you run `somniloq backfill`.
-- `sessions` / `projects` TSV output shows `repo_path` directly (no `project_dir` fallback column).
-- `--short` always shows `filepath.Base(repo_path)`.
+- `sessions` / `projects` TSV output shows `project` from `repo_path` (no `project_dir` fallback column). Configured project aliases display as the canonical name.
+- `--short` shows `filepath.Base(repo_path)` for unaliased projects.
 - `import` now imports both Claude Code and Codex logs by default. Use `--source claude-code` or `--source codex` to import only one source.
 
 ## Documentation

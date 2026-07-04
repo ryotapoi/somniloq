@@ -58,8 +58,11 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	}
 
 	for _, r := range rows {
-		fmt.Fprintf(out, "%s\t%s\t%s\n",
-			r.SessionID, sanitizeTSV(formatLocalTime(r.Timestamp, time.Local)), sanitizeTSV(searchSnippet(r.Content, query)))
+		fmt.Fprintf(out, "%s\t%s\t%s\t%s\n",
+			r.SessionID,
+			sanitizeTSV(formatLocalTime(r.Timestamp, time.Local)),
+			sanitizeTSV(resolveProjectDisplayName(r.RepoPath, false, cfg)),
+			sanitizeTSV(searchSnippet(r.Content, query)))
 	}
 	return 0, nil
 }

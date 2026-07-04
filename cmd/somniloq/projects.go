@@ -10,11 +10,11 @@ import (
 
 // projectsCmd runs the projects subcommand without calling os.Exit, so it can
 // be tested directly.
-func projectsCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writer) (int, error) {
+func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs := flag.NewFlagSet("projects", flag.ContinueOnError)
 	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	short := fs.Bool("short", false, "shorten project names to repo basename")
+	short := fs.Bool("short", false, "shorten unaliased projects to repo basename")
 	format := fs.String("format", "tsv", "output format (tsv, json)")
 	setUsage(fs, "List projects", "somniloq projects [flags]")
 	if code, ok := parseFlags(fs, errOut, args); !ok {
@@ -46,11 +46,12 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), out, errOut io.
 	if err != nil {
 		return 1, err
 	}
+	displayRows := projectDisplayRows(rows, *short, cfg)
 
 	if *format == "json" {
-		entries := make([]projectJSON, len(rows))
-		for i, r := range rows {
-			entries[i] = projectJSON{Project: resolveDisplayName(r.RepoPath, *short), SessionCount: r.SessionCount}
+		entries := make([]projectJSON, len(displayRows))
+		for i, r := range displayRows {
+			entries[i] = projectJSON{Project: r.Project, SessionCount: r.SessionCount}
 		}
 		if err := writeJSON(out, entries); err != nil {
 			return 1, err
@@ -58,9 +59,33 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), out, errOut io.
 		return 0, nil
 	}
 
-	for _, r := range rows {
-		name := resolveDisplayName(r.RepoPath, *short)
-		fmt.Fprintf(out, "%s\t%d\n", name, r.SessionCount)
+	for _, r := range displayRows {
+		fmt.Fprintf(out, "%s\t%d\n", r.Project, r.SessionCount)
 	}
 	return 0, nil
+}
+
+type projectDisplayRow struct {
+	Project      string
+	SessionCount int
+}
+
+func projectDisplayRows(rows []core.ProjectRow, short bool, cfg config) []projectDisplayRow {
+	result := []projectDisplayRow{}
+	indexByKey := map[string]int{}
+	for _, row := range rows {
+		project := resolveDisplayName(row.RepoPath, short)
+		key := "raw:" + row.RepoPath
+		if canonical, ok := cfg.canonicalProjectName(row.RepoPath); ok {
+			project = canonical
+			key = "alias:" + canonical
+		}
+		if idx, ok := indexByKey[key]; ok {
+			result[idx].SessionCount += row.SessionCount
+			continue
+		}
+		indexByKey[key] = len(result)
+		result = append(result, projectDisplayRow{Project: project, SessionCount: row.SessionCount})
+	}
+	return result
 }

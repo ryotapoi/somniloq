@@ -34,7 +34,7 @@ func TestSearchMessages_MatchesNewestFirstExcludingSidechain(t *testing.T) {
 			t.Errorf("rows[%d].Content = %q, want %q", i, rows[i].Content, want)
 		}
 	}
-	if rows[0].Source != SourceCodex || rows[0].SessionID != "s2" || rows[0].Timestamp != "2026-03-29T10:00:00Z" {
+	if rows[0].Source != SourceCodex || rows[0].SessionID != "s2" || rows[0].RepoPath != "/Users/test/somniloq" || rows[0].Timestamp != "2026-03-29T10:00:00Z" {
 		t.Errorf("rows[0] = %+v", rows[0])
 	}
 }

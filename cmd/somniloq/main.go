@@ -84,7 +84,7 @@ Flags:
 	case "search":
 		code, cmdErr = searchCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	case "projects":
-		code, cmdErr = projectsCmd(args[1:], open, os.Stdout, os.Stderr)
+		code, cmdErr = projectsCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", args[0])
 		os.Exit(1)

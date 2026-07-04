@@ -6,6 +6,8 @@ sources:
   - cmd/somniloq/config.go
   - cmd/somniloq/filter.go
   - cmd/somniloq/shorten.go
+  - cmd/somniloq/projects.go
+  - cmd/somniloq/search.go
   - internal/core/import.go
   - internal/core/backfill.go
   - internal/core/repo_path.go
@@ -32,8 +34,11 @@ sources:
 ## 集約と表示
 
 - `sessions`, `show`, `search` は `--project` filter の対象。
-- `projects` は alias を集約に使わず、`repo_path` ごとに行を出す。判断は `docs/decisions/0014-project-alias-config.md`。
-- `--short` は `cmd/somniloq/shorten.go` の `resolveDisplayName`。basename 以外の例外を作らない。
+- `internal/core.DB.ListProjects` は raw `repo_path` ごとの行を返す。`--project` filter は受けず、DB の保存事実は書き換えない。
+- 表示名は `cmd/somniloq/shorten.go` の `resolveProjectDisplayName`。alias の canonical / old names が `repo_path` 全体または basename に一致したら canonical 名のみを出す。
+- alias 非一致時だけ、`--short` は従来どおり `resolveDisplayName` で basename にする。
+- `projects` は `cmd/somniloq/projects.go` で表示名ごとに session count を合算する。alias で同じ canonical 名になる raw `repo_path` 行を重複表示しない。
+- `search` は `internal/core.SearchRow.RepoPath` を `cmd/somniloq/search.go` で表示名に変換し、TSV の `project` 列に出す。
 
 ## 変更時のテスト入口
 

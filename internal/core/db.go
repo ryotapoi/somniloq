@@ -404,8 +404,9 @@ type ProjectRow struct {
 	SessionCount int
 }
 
-// ListProjects deliberately ignores filter.Projects: the listing shows each
-// repo_path as its own row, without project-alias aggregation (ADR 0014).
+// ListProjects deliberately ignores filter.Projects and returns raw repo_path
+// groups. The CLI applies project-alias display normalization and merges rows
+// that collapse to the same canonical display name.
 func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	query := `SELECT COALESCE(MIN(s.repo_path), ''), COUNT(*)
 	FROM sessions s`
@@ -553,6 +554,7 @@ func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, incl
 type SearchRow struct {
 	Source    Source
 	SessionID string
+	RepoPath  string
 	Timestamp string
 	Content   string
 }
@@ -566,7 +568,7 @@ type SearchRow struct {
 // the DESC order.
 func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, error) {
 	q := `
-		SELECT m.source, m.session_id, m.timestamp, m.content
+		SELECT m.source, m.session_id, COALESCE(s.repo_path, ''), m.timestamp, m.content
 		FROM messages m
 		JOIN sessions s ON m.source = s.source AND m.session_id = s.session_id
 		WHERE m.is_sidechain = 0
@@ -596,7 +598,7 @@ func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, er
 	for rows.Next() {
 		var r SearchRow
 		var src string
-		if err := rows.Scan(&src, &r.SessionID, &r.Timestamp, &r.Content); err != nil {
+		if err := rows.Scan(&src, &r.SessionID, &r.RepoPath, &r.Timestamp, &r.Content); err != nil {
 			return nil, err
 		}
 		r.Source = Source(src)

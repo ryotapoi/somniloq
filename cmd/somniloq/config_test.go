@@ -84,6 +84,220 @@ func TestExpandProject_EmptyConfigPassesThrough(t *testing.T) {
 	}
 }
 
+func TestResolveProjectDisplayName_ProjectAlias(t *testing.T) {
+	cfg := config{ProjectAliases: map[string][]string{
+		"somniloq": {"Brimday", "/archive/old-somniloq"},
+	}}
+
+	tests := []struct {
+		name     string
+		repoPath string
+		short    bool
+		want     string
+	}{
+		{"old basename displays canonical", "/Users/test/Brimday", false, "somniloq"},
+		{"canonical basename displays canonical", "/Users/test/somniloq", false, "somniloq"},
+		{"full alias path displays canonical", "/archive/old-somniloq", false, "somniloq"},
+		{"unaliased raw path keeps existing default", "/Users/test/other", false, "/Users/test/other"},
+		{"unaliased short path keeps basename", "/Users/test/other", true, "other"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := resolveProjectDisplayName(tt.repoPath, tt.short, cfg); got != tt.want {
+				t.Errorf("resolveProjectDisplayName(%q, %v) = %q, want %q", tt.repoPath, tt.short, got, tt.want)
+			}
+		})
+	}
+}
+
+func newProjectAliasDisplayDB(t *testing.T) *core.DB {
+	t.Helper()
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	sessions := []core.SessionMeta{
+		{Source: core.SourceClaudeCode, SessionID: "new-1", RepoPath: "/Users/test/somniloq", StartedAt: "2026-03-29T10:00:00Z"},
+		{Source: core.SourceClaudeCode, SessionID: "old-1", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"},
+		{Source: core.SourceClaudeCode, SessionID: "other-1", RepoPath: "/Users/test/other", StartedAt: "2026-03-27T10:00:00Z"},
+	}
+	for _, meta := range sessions {
+		if err := db.UpsertSession(meta, "2026-03-29T15:00:00Z"); err != nil {
+			t.Fatalf("UpsertSession(%s): %v", meta.SessionID, err)
+		}
+		if err := db.InsertMessage(core.NormalizedMessage{
+			Source:    meta.Source,
+			UUID:      meta.SessionID + "-m1",
+			SessionID: meta.SessionID,
+			Role:      "user",
+			Content:   "alias-hit from " + meta.SessionID,
+			Timestamp: meta.StartedAt,
+		}); err != nil {
+			t.Fatalf("InsertMessage(%s): %v", meta.SessionID, err)
+		}
+	}
+	return db
+}
+
+func TestSessionsCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
+	db := newProjectAliasDisplayDB(t)
+	cfg := config{ProjectAliases: map[string][]string{
+		"somniloq": {"Brimday"},
+	}}
+
+	var out, errOut bytes.Buffer
+	code, err := sessionsCmd(nil, staticDB(db), cfg, &out, &errOut)
+	if err != nil {
+		t.Fatalf("sessionsCmd: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "new-1") || !strings.Contains(got, "old-1") {
+		t.Fatalf("output missing alias sessions:\n%s", got)
+	}
+	if strings.Contains(got, "Brimday") || strings.Contains(got, "/Users/test/somniloq") {
+		t.Errorf("alias project output should use only the canonical name:\n%s", got)
+	}
+	if count := strings.Count(got, "\tsomniloq\t"); count != 2 {
+		t.Errorf("canonical project column count = %d, want 2:\n%s", count, got)
+	}
+}
+
+func TestShowCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
+	db := newProjectAliasDisplayDB(t)
+	cfg := config{ProjectAliases: map[string][]string{
+		"somniloq": {"Brimday"},
+	}}
+
+	var out, errOut bytes.Buffer
+	code, err := showCmd([]string{"old-1"}, staticDB(db), cfg, &out, &errOut)
+	if err != nil {
+		t.Fatalf("showCmd: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "- **Project**: `somniloq`") {
+		t.Errorf("show header should use canonical project name:\n%s", got)
+	}
+	if strings.Contains(got, "Brimday") {
+		t.Errorf("show output should not leak old project name:\n%s", got)
+	}
+}
+
+func TestProjectsCmd_ProjectAliasDisplayAggregatesCanonical(t *testing.T) {
+	db := newProjectAliasDisplayDB(t)
+	cfg := config{ProjectAliases: map[string][]string{
+		"somniloq": {"Brimday"},
+	}}
+
+	var out, errOut bytes.Buffer
+	code, err := projectsCmd(nil, staticDB(db), cfg, &out, &errOut)
+	if err != nil {
+		t.Fatalf("projectsCmd: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "somniloq\t2\n") {
+		t.Errorf("projects output should aggregate alias rows under canonical name:\n%s", got)
+	}
+	if strings.Contains(got, "Brimday") || strings.Count(got, "somniloq\t") != 1 {
+		t.Errorf("projects output should not duplicate or leak alias rows:\n%s", got)
+	}
+}
+
+func TestProjectsCmd_FormatJSON_ProjectAliasDisplayAggregatesCanonical(t *testing.T) {
+	db := newProjectAliasDisplayDB(t)
+	cfg := config{ProjectAliases: map[string][]string{
+		"somniloq": {"Brimday"},
+	}}
+
+	var out, errOut bytes.Buffer
+	code, err := projectsCmd([]string{"--format", "json"}, staticDB(db), cfg, &out, &errOut)
+	if err != nil {
+		t.Fatalf("projectsCmd: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+	}
+
+	got := decodeJSONArray(t, out.Bytes())
+	if len(got) != 2 {
+		t.Fatalf("entries = %d, want 2: %v", len(got), got)
+	}
+	if got[0]["project"] != "somniloq" || got[0]["sessionCount"] != float64(2) {
+		t.Errorf("first entry = %v, want canonical aggregate", got[0])
+	}
+}
+
+func TestProjectsCmd_ShortDoesNotAggregateUnaliasedBasenameCollisions(t *testing.T) {
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	for _, meta := range []core.SessionMeta{
+		{Source: core.SourceClaudeCode, SessionID: "app-a", RepoPath: "/Users/a/app", StartedAt: "2026-03-29T10:00:00Z"},
+		{Source: core.SourceClaudeCode, SessionID: "app-b", RepoPath: "/Users/b/app", StartedAt: "2026-03-28T10:00:00Z"},
+	} {
+		if err := db.UpsertSession(meta, "2026-03-29T15:00:00Z"); err != nil {
+			t.Fatalf("UpsertSession(%s): %v", meta.SessionID, err)
+		}
+	}
+
+	var out, errOut bytes.Buffer
+	code, err := projectsCmd([]string{"--short"}, staticDB(db), config{}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("projectsCmd: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+	}
+
+	if got := strings.Count(out.String(), "app\t1\n"); got != 2 {
+		t.Errorf("short output should preserve unaliased basename-collision rows, got count %d:\n%s", got, out.String())
+	}
+	if strings.Contains(out.String(), "app\t2\n") {
+		t.Errorf("short output should not aggregate unaliased basename collisions:\n%s", out.String())
+	}
+}
+
+func TestSearchCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
+	db := newProjectAliasDisplayDB(t)
+	cfg := config{ProjectAliases: map[string][]string{
+		"somniloq": {"Brimday"},
+	}}
+
+	var out, errOut bytes.Buffer
+	code, err := searchCmd([]string{"--project", "Brimday", "alias-hit"}, staticDB(db), cfg, &out, &errOut)
+	if err != nil {
+		t.Fatalf("searchCmd: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+	}
+
+	got := out.String()
+	if !strings.Contains(got, "new-1") || !strings.Contains(got, "old-1") {
+		t.Fatalf("search output missing alias sessions:\n%s", got)
+	}
+	if strings.Contains(got, "Brimday") || strings.Contains(got, "/Users/test/somniloq") {
+		t.Errorf("search output should use only the canonical project name:\n%s", got)
+	}
+	if count := strings.Count(got, "\tsomniloq\t"); count != 2 {
+		t.Errorf("canonical project column count = %d, want 2:\n%s", count, got)
+	}
+}
+
 // End-to-end: --project with an old name must list sessions stored under both
 // the old and the new repo path.
 func TestSessionsCmd_ProjectAliasExpansion(t *testing.T) {
