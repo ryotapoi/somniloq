@@ -29,7 +29,7 @@ sources:
 
 - Markdown show: `cmd/somniloq/show.go` -> `cmd/somniloq/format.go` -> `internal/core/db.go` の session/message query。
 - Summary show: `show.go` が `GetSummaryMessages` に差し替える。`/clear` / `<local-command-caveat>` skip は core query 側。
-- Outline: `outline.go` が `GetMessages` と `assignTurns` を使い、user message だけ出す。
+- Outline: `outline.go` が `GetMessages` と `assignTurns` を使い、user message だけ出す。`body_size` / `bodySize` は各 turn に属する非 sidechain message content の UTF-8 byte 合計で、`show --turn` の読み取り量の目安になる。
 - Sessions skip hints: `sessions.go` が `ListSessions` 後に各 session の `GetMessages` を読み、`userTurnMessages` と `config.go` の `commandMatcher` で非コマンド user turn 数と最初の非コマンド行を出す。DB schema / core の session 集約 SQL には持ち込まない。
 - Sessions logical day: `sessions.go` が `sessionLogicalDay` で表示時に計算する。`ended_at` 優先、無ければ `started_at`。`dayBoundary` は config または `--day-boundary` で決まり、DB schema / import には持ち込まない。
 - Search: `search.go` が `SearchMessages` の結果に `searchSnippet` をかける。検索の time filter は message timestamp 基準。

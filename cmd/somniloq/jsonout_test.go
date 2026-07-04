@@ -109,7 +109,7 @@ func TestOutlineCmd_FormatJSON(t *testing.T) {
 	if len(got) != 2 {
 		t.Fatalf("entries = %d, want 2: %v", len(got), got)
 	}
-	if got[0]["turn"] != float64(1) || got[0]["firstLine"] != "first question" {
+	if got[0]["turn"] != float64(1) || got[0]["bodySize"] != float64(36) || got[0]["firstLine"] != "first question" {
 		t.Errorf("entry 0 = %v", got[0])
 	}
 	// Raw timestamp, not the local display format.
@@ -119,6 +119,9 @@ func TestOutlineCmd_FormatJSON(t *testing.T) {
 	// Tabs survive: JSON escapes natively, no TSV sanitizing.
 	if got[1]["firstLine"] != "second\tquestion after blank lines" {
 		t.Errorf("entry 1 firstLine = %#v", got[1]["firstLine"])
+	}
+	if len(got[0]) != 4 {
+		t.Errorf("fields = %d, want 4: %v", len(got[0]), got[0])
 	}
 }
 

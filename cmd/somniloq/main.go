@@ -36,7 +36,7 @@ Commands:
   backfill  Correct legacy session data
   sessions  List sessions
   show      Show session content in Markdown
-  outline   List a session's user messages as turn, time, and first line
+  outline   List a session's user messages as turn, time, body size, and first line
   search    Search message content across sessions
   projects  List projects
 

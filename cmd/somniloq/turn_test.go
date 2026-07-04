@@ -53,6 +53,23 @@ func TestAssignTurns_Empty(t *testing.T) {
 	}
 }
 
+func TestTurnBodySizes_CountsUTF8BytesByAssignedTurn(t *testing.T) {
+	messages := []core.MessageRow{
+		{UUID: "a0", Role: "assistant", Content: "pre"},
+		{UUID: "u1", Role: "user", Content: "héllo"},
+		{UUID: "a1", Role: "assistant", Content: "abcd"},
+		{UUID: "u2", Role: "user", Content: "次"},
+	}
+
+	got := turnBodySizes(messages)
+	if got[1] != 13 {
+		t.Errorf("turn 1 body size = %d, want 13 (3 + 6 + 4 bytes)", got[1])
+	}
+	if got[2] != 3 {
+		t.Errorf("turn 2 body size = %d, want 3 UTF-8 bytes", got[2])
+	}
+}
+
 func TestParseTurnRange(t *testing.T) {
 	tests := []struct {
 		in      string

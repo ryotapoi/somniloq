@@ -55,7 +55,7 @@ somniloq show --since 7d
 | `sessions` | List sessions |
 | `projects` | List projects with session counts |
 | `show` | Show session content in Markdown |
-| `outline` | List a session's user messages as turn number, time, and first line |
+| `outline` | List a session's user messages as turn number, time, body size, and first line |
 | `search` | Search message content across sessions |
 
 ### import
@@ -149,11 +149,11 @@ somniloq show --format json <session-id>                # JSON instead of Markdo
 ### outline
 
 ```bash
-somniloq outline <session-id>                 # user messages as turn number, time, and first line
+somniloq outline <session-id>                 # user messages as turn number, time, body size, and first line
 somniloq outline --format json <session-id>  # JSON instead of TSV
 ```
 
-Grasp the structure of a long session before `show`ing it in full. Output is TSV: `turn`, `time`, `first_line`. Turn numbers start at 1 and increment on each user message (sidechain rows are excluded). With `--format json`: `turn`, `timestamp`, `firstLine`.
+Grasp the structure of a long session before `show`ing it in full. Output is TSV: `turn`, `time`, `body_size`, `first_line`. Turn numbers start at 1 and increment on each user message (sidechain rows are excluded). `body_size` is the total UTF-8 byte size of all non-sidechain message bodies in that turn, including replies. With `--format json`: `turn`, `timestamp`, `bodySize`, `firstLine`.
 
 ### search
 

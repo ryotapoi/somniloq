@@ -46,6 +46,7 @@ type projectJSON struct {
 type outlineEntryJSON struct {
 	Turn      int    `json:"turn"`
 	Timestamp string `json:"timestamp"`
+	BodySize  int    `json:"bodySize"`
 	FirstLine string `json:"firstLine"`
 }
 

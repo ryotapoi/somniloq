@@ -17,7 +17,7 @@ const outlineUsageLine = "somniloq outline [--format <fmt>] <session-id>"
 func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writer) (int, error) {
 	fs := flag.NewFlagSet("outline", flag.ContinueOnError)
 	format := fs.String("format", "tsv", "output format (tsv, json)")
-	setUsage(fs, "List a session's user messages as turn number, time, and first line", outlineUsageLine)
+	setUsage(fs, "List a session's user messages as turn number, time, body size, and first line", outlineUsageLine)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
@@ -57,10 +57,12 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 
 	if *format == "json" {
 		entries := []outlineEntryJSON{}
+		bodySizes := turnBodySizes(messages)
 		for _, tm := range userTurnMessages(messages) {
 			entries = append(entries, outlineEntryJSON{
 				Turn:      tm.Turn,
 				Timestamp: tm.Msg.Timestamp,
+				BodySize:  bodySizes[tm.Turn],
 				FirstLine: firstLine(tm.Msg.Content),
 			})
 		}
@@ -70,9 +72,10 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 		return 0, nil
 	}
 
+	bodySizes := turnBodySizes(messages)
 	for _, tm := range userTurnMessages(messages) {
-		fmt.Fprintf(out, "%d\t%s\t%s\n",
-			tm.Turn, sanitizeTSV(formatLocalTime(tm.Msg.Timestamp, time.Local)), sanitizeTSV(firstLine(tm.Msg.Content)))
+		fmt.Fprintf(out, "%d\t%s\t%d\t%s\n",
+			tm.Turn, sanitizeTSV(formatLocalTime(tm.Msg.Timestamp, time.Local)), bodySizes[tm.Turn], sanitizeTSV(firstLine(tm.Msg.Content)))
 	}
 	return 0, nil
 }

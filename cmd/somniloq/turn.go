@@ -48,6 +48,15 @@ func userTurnMessages(messages []core.MessageRow) []turnMessage {
 	return result
 }
 
+// turnBodySizes returns each turn's total content size in bytes.
+func turnBodySizes(messages []core.MessageRow) map[int]int {
+	result := make(map[int]int)
+	for _, tm := range assignTurns(messages) {
+		result[tm.Turn] += len(tm.Msg.Content)
+	}
+	return result
+}
+
 // parseTurnRange parses a --turn value: either a single turn number ("40") or
 // an inclusive range ("40..60").
 func parseTurnRange(s string) (lo, hi int, err error) {
