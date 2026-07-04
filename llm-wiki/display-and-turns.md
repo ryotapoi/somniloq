@@ -11,7 +11,7 @@ sources:
   - cmd/somniloq/turn.go
   - cmd/somniloq/search.go
   - cmd/somniloq/jsonout.go
-  - internal/core/db.go
+  - internal/core/db_query.go
 ---
 
 # Display and turns
@@ -22,12 +22,12 @@ sources:
 
 - 採番の実装は `cmd/somniloq/turn.go` の `assignTurns`。sidechain を除いた `GetMessages` 全体を渡す前提。
 - `show --turn`, `show --tail`, `outline`, `search` の `turn` 列、`sessions` の非コマンド user turn skip hint は同じ `assignTurns` / `userTurnMessages` 契約に乗る。片方だけの採番・user turn 母集団変更は避ける。
-- `internal/core/db.go` の `GetMessages` は `timestamp ASC, rowid ASC`。旧 Codex record の timestamp tie を壊すと turn number が揺れる。
+- `internal/core/db_query.go` の `GetMessages` は `timestamp ASC, rowid ASC`。旧 Codex record の timestamp tie を壊すと turn number が揺れる。
 - 設計判断は `docs/decisions/0011-outline-subcommand-turn-numbering.md`。
 
 ## 表示 path
 
-- Markdown show: `cmd/somniloq/show.go` -> `cmd/somniloq/format.go` -> `internal/core/db.go` の session/message query。
+- Markdown show: `cmd/somniloq/show.go` -> `cmd/somniloq/format.go` -> `internal/core/db_query.go` の session/message query。
 - Summary show: `show.go` が `GetSummaryMessages` に差し替える。`/clear` / `<local-command-caveat>` skip は core query 側。
 - Outline: `outline.go` が `GetMessages` と `assignTurns` を使い、user message だけ出す。`body_size` / `bodySize` は各 turn に属する非 sidechain message content の UTF-8 byte 合計で、`show --turn` の読み取り量の目安になる。
 - Sessions skip hints: `sessions.go` が `ListSessions` 後に各 session の `GetMessages` を読み、`userTurnMessages` と `config.go` の `commandMatcher` で非コマンド user turn 数と最初の非コマンド行を出す。DB schema / core の session 集約 SQL には持ち込まない。

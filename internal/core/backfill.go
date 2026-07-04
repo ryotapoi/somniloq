@@ -36,7 +36,7 @@ func MigrateToV04IfNeeded(db *DB) (sessions, messages, importStates int, err err
 // migration always rebuilds the three tables together inside one transaction
 // (so a partial state never persists).
 func needsV04Migration(db *DB) (bool, error) {
-	present, err := tableColumnPresent(db.db, "sessions", "source")
+	present, err := tableColumnPresent(db.execer(), "sessions", "source")
 	if err != nil {
 		return false, fmt.Errorf("inspect sessions for v0.4 migration: %w", err)
 	}
@@ -56,10 +56,10 @@ func needsV04Migration(db *DB) (bool, error) {
 // failure when the body itself succeeded.
 func migrateToV04(db *DB) (sessionsN, messagesN, importStatesN int, err error) {
 	var prevFK int
-	if err = db.db.QueryRow("PRAGMA foreign_keys").Scan(&prevFK); err != nil {
+	if err = db.execer().QueryRow("PRAGMA foreign_keys").Scan(&prevFK); err != nil {
 		return 0, 0, 0, fmt.Errorf("read pragma foreign_keys: %w", err)
 	}
-	if _, err = db.db.Exec("PRAGMA foreign_keys = OFF"); err != nil {
+	if _, err = db.execer().Exec("PRAGMA foreign_keys = OFF"); err != nil {
 		return 0, 0, 0, fmt.Errorf("disable foreign_keys: %w", err)
 	}
 	defer func() {
@@ -67,7 +67,7 @@ func migrateToV04(db *DB) (sessionsN, messagesN, importStatesN int, err error) {
 		if prevFK == 1 {
 			restoreSQL = "PRAGMA foreign_keys = ON"
 		}
-		if _, restoreErr := db.db.Exec(restoreSQL); restoreErr != nil && err == nil {
+		if _, restoreErr := db.execer().Exec(restoreSQL); restoreErr != nil && err == nil {
 			err = fmt.Errorf("restore foreign_keys: %w", restoreErr)
 		}
 	}()
@@ -182,7 +182,7 @@ func migrateToV04(db *DB) (sessionsN, messagesN, importStatesN int, err error) {
 // them, so resolving repo_path on rows that are about to be deleted would
 // inflate the Resolved counter and waste a write.
 func selectBackfillTargets(db *DB) ([]backfillTarget, error) {
-	rows, err := db.db.Query(`SELECT source, session_id, cwd FROM sessions WHERE repo_path IS NULL AND cwd IS NOT NULL AND cwd != '' AND EXISTS (SELECT 1 FROM messages m WHERE m.source = sessions.source AND m.session_id = sessions.session_id)`)
+	rows, err := db.execer().Query(`SELECT source, session_id, cwd FROM sessions WHERE repo_path IS NULL AND cwd IS NOT NULL AND cwd != '' AND EXISTS (SELECT 1 FROM messages m WHERE m.source = sessions.source AND m.session_id = sessions.session_id)`)
 	if err != nil {
 		return nil, fmt.Errorf("select sessions for backfill: %w", err)
 	}
@@ -211,7 +211,7 @@ func selectBackfillTargets(db *DB) ([]backfillTarget, error) {
 // v0.3.
 func CountOrphanSessions(db *DB) (int, error) {
 	var count int
-	err := db.db.QueryRow(
+	err := db.execer().QueryRow(
 		`SELECT COUNT(*) FROM sessions WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.source = sessions.source AND m.session_id = sessions.session_id)`,
 	).Scan(&count)
 	if err != nil {

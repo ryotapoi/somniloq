@@ -11,7 +11,7 @@ sources:
   - internal/core/import.go
   - internal/core/backfill.go
   - internal/core/repo_path.go
-  - internal/core/db.go
+  - internal/core/db_query.go
 ---
 
 # Configuration and projects
@@ -29,7 +29,7 @@ sources:
 - config 読み込みは `cmd/somniloq/config.go`。missing file は空 config、invalid JSON は error。
 - alias 展開は `config.expandProject`。完全一致したときだけ canonical + old names に展開する。
 - `cmd/somniloq/filter.go` の `buildSessionFilter` が time flag と project alias をまとめて `core.SessionFilter` にする。`sessions` / `search` は date-only filter に `dayBoundary` を渡し、`show` / `projects` は従来どおり 00:00 境界で呼ぶ。
-- SQL 条件は `internal/core/db.go` の `projectsCondition`。repo_path substring LIKE を OR でつなぐ。
+- SQL 条件は `internal/core/db_query.go` の `projectsCondition`。repo_path substring LIKE を OR でつなぐ。
 
 ## commandPatterns
 

@@ -2,6 +2,8 @@
 regen: none
 sources:
   - internal/core/db.go
+  - internal/core/db_schema.go
+  - internal/core/db_query.go
   - internal/core/backfill.go
   - internal/core/backfill_test.go
 ---
@@ -17,5 +19,5 @@ modernc.org/sqlite と SQLite 固有の外部知見。設計判断や CLI 仕様
 
 ## SQLite
 
-- TEXT のバイト数は `OCTET_LENGTH(text)` で取る。`LENGTH(text)` は文字数を返す。`internal/core/db.go` の `sessionRowSelect` は `show` が出す本文量に合わせるため、sidechain を除外して `OCTET_LENGTH(m.content)` を集計する。
-- SQLite には `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` がない。migration は `PRAGMA table_info(<table>)` で列の有無を先に確認し、失敗時も再度 state を見て成功扱いにできるか判断する。`internal/core/db.go` の `ensureSessionsRepoPathColumn` / `ensureSessionsProjectDirColumnDropped` / `tableColumnPresent` がこの方針。
+- TEXT のバイト数は `OCTET_LENGTH(text)` で取る。`LENGTH(text)` は文字数を返す。`internal/core/db_query.go` の `sessionRowSelect` は `show` が出す本文量に合わせるため、sidechain を除外して `OCTET_LENGTH(m.content)` を集計する。
+- SQLite には `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` がない。migration は `PRAGMA table_info(<table>)` で列の有無を先に確認し、失敗時も再度 state を見て成功扱いにできるか判断する。`internal/core/db_schema.go` の `ensureSessionsRepoPathColumn` / `ensureSessionsProjectDirColumnDropped` / `tableColumnPresent` がこの方針。

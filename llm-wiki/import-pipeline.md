@@ -6,6 +6,7 @@ sources:
   - cmd/somniloq/import.go
   - internal/core/import.go
   - internal/core/db.go
+  - internal/core/db_write.go
   - internal/ingest/ingest.go
   - internal/ingest/process.go
   - internal/ingest/claudecode/adapter.go
@@ -25,7 +26,7 @@ JSONL 取り込みを変えるときの読む順序。仕様そのものは `doc
 3. `importWithAdapter` が `ScanFiles`、`import_state`、ファイルサイズ比較、offset 決定、`adapter.ProcessFile` を担当する。
 4. `internal/ingest/process.go` の `ProcessJSONL` が共通 skeleton。transaction、line iteration、`Flush`、`import_state` 更新はここ。
 5. source 固有の adapter が `FileHandler` として JSONL を解釈し、`ingest.NormalizedRecord` / `NormalizedMessage` / `SessionMeta` に落とす。
-6. SQLite 書き込みは `internal/core/db.go` の `importTx` が実装する `ingest.ImportTransaction` 越し。adapter から SQL を直接触らない。
+6. SQLite 書き込みは `internal/core/db_write.go` の `importTx` が実装する `ingest.ImportTransaction` 越し。adapter から SQL を直接触らない。
 
 ## source 別の注意
 
