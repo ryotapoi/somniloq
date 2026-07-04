@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mattn/go-isatty"
 	"github.com/ryotapoi/somniloq/internal/core"
@@ -64,10 +65,13 @@ func main() {
 		return openDB(*dbPath)
 	}
 
-	cfg, err := loadConfig(*configPath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "error: %v\n", err)
-		os.Exit(1)
+	loadCommandConfig := func(command string, commandArgs []string) config {
+		cfg, err := loadConfigForCommand(*configPath, command, commandArgs)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "error: %v\n", err)
+			os.Exit(1)
+		}
+		return cfg
 	}
 
 	var code int
@@ -78,14 +82,18 @@ func main() {
 	case "backfill":
 		code, cmdErr = backfillCmd(args[1:], open, os.Stdin, os.Stdout, os.Stderr, isTTY)
 	case "sessions":
+		cfg := loadCommandConfig(args[0], args[1:])
 		code, cmdErr = sessionsCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	case "show":
+		cfg := loadCommandConfig(args[0], args[1:])
 		code, cmdErr = showCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	case "outline":
 		code, cmdErr = outlineCmd(args[1:], open, os.Stdout, os.Stderr)
 	case "search":
+		cfg := loadCommandConfig(args[0], args[1:])
 		code, cmdErr = searchCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	case "projects":
+		cfg := loadCommandConfig(args[0], args[1:])
 		code, cmdErr = projectsCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	default:
 		fmt.Fprintf(os.Stderr, "unknown command: %s\n", args[0])
@@ -95,6 +103,84 @@ func main() {
 		fmt.Fprintf(os.Stderr, "error: %v\n", cmdErr)
 	}
 	os.Exit(code)
+}
+
+func loadConfigForCommand(configPath, command string, commandArgs []string) (config, error) {
+	if isHelpRequest(command, commandArgs) {
+		return config{}, nil
+	}
+	return loadConfig(configPath)
+}
+
+func isHelpRequest(command string, args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			return false
+		}
+		name, hasValue, ok := splitFlagArg(arg)
+		if !ok {
+			return false
+		}
+		if name == "h" || name == "help" {
+			return true
+		}
+		consumesValue, known := configCommandFlagConsumesValue(command, name)
+		if !known {
+			return false
+		}
+		if consumesValue && !hasValue {
+			i++
+		}
+	}
+	return false
+}
+
+func splitFlagArg(arg string) (name string, hasValue bool, ok bool) {
+	if strings.HasPrefix(arg, "--") {
+		name = strings.TrimPrefix(arg, "--")
+	} else if strings.HasPrefix(arg, "-") {
+		name = strings.TrimPrefix(arg, "-")
+	} else {
+		return "", false, false
+	}
+	if name == "" {
+		return "", false, false
+	}
+	name, _, hasValue = strings.Cut(name, "=")
+	return name, hasValue, true
+}
+
+func configCommandFlagConsumesValue(command, name string) (bool, bool) {
+	switch command {
+	case "sessions":
+		switch name {
+		case "since", "until", "day-boundary", "project", "format":
+			return true, true
+		case "short":
+			return false, true
+		}
+	case "show":
+		switch name {
+		case "since", "until", "project", "summary", "turn", "tail", "format":
+			return true, true
+		case "short", "include-clear":
+			return false, true
+		}
+	case "search":
+		switch name {
+		case "since", "until", "day-boundary", "project":
+			return true, true
+		}
+	case "projects":
+		switch name {
+		case "since", "until", "format":
+			return true, true
+		case "short":
+			return false, true
+		}
+	}
+	return false, false
 }
 
 func openDB(dbPath string) (*core.DB, error) {
