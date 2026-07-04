@@ -369,14 +369,19 @@ func TestImport_FileShrink(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+		t.Fatalf("first Import failed: %v", err)
+	}
 
 	// Shrink file (simulate truncate/recreate)
 	smallJsonl := `{"type":"user","uuid":"u3","sessionId":"s1","timestamp":"2026-03-28T15:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"new"}}
 `
 	os.WriteFile(path, []byte(smallJsonl), 0o644)
 
-	res, _ := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	if err != nil {
+		t.Fatalf("Import after shrink failed: %v", err)
+	}
 	if res.FilesImported != 1 {
 		t.Errorf("shrunk file should be re-imported, got imported=%d", res.FilesImported)
 	}
@@ -386,6 +391,17 @@ func TestImport_FileShrink(t *testing.T) {
 	db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count)
 	if count != 3 {
 		t.Errorf("expected 3 messages (orphans retained), got %d", count)
+	}
+
+	state, err := db.GetImportState(path)
+	if err != nil {
+		t.Fatalf("GetImportState: %v", err)
+	}
+	if state == nil {
+		t.Fatal("import_state missing after shrink import")
+	}
+	if state.FileSize != int64(len(smallJsonl)) || state.LastOffset != int64(len(smallJsonl)) {
+		t.Errorf("import_state = {FileSize:%d LastOffset:%d}, want both %d", state.FileSize, state.LastOffset, len(smallJsonl))
 	}
 }
 

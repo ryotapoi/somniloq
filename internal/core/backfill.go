@@ -55,6 +55,19 @@ func needsV04Migration(db *DB) (bool, error) {
 // Named return is required so the defer can override err with a restore
 // failure when the body itself succeeded.
 func migrateToV04(db *DB) (sessionsN, messagesN, importStatesN int, err error) {
+	return migrateToV04WithRestore(db, restoreForeignKeys)
+}
+
+func restoreForeignKeys(db execer, prevFK int) error {
+	restoreSQL := "PRAGMA foreign_keys = OFF"
+	if prevFK == 1 {
+		restoreSQL = "PRAGMA foreign_keys = ON"
+	}
+	_, err := db.Exec(restoreSQL)
+	return err
+}
+
+func migrateToV04WithRestore(db *DB, restore func(execer, int) error) (sessionsN, messagesN, importStatesN int, err error) {
 	var prevFK int
 	if err = db.execer().QueryRow("PRAGMA foreign_keys").Scan(&prevFK); err != nil {
 		return 0, 0, 0, fmt.Errorf("read pragma foreign_keys: %w", err)
@@ -63,11 +76,7 @@ func migrateToV04(db *DB) (sessionsN, messagesN, importStatesN int, err error) {
 		return 0, 0, 0, fmt.Errorf("disable foreign_keys: %w", err)
 	}
 	defer func() {
-		restoreSQL := "PRAGMA foreign_keys = OFF"
-		if prevFK == 1 {
-			restoreSQL = "PRAGMA foreign_keys = ON"
-		}
-		if _, restoreErr := db.execer().Exec(restoreSQL); restoreErr != nil && err == nil {
+		if restoreErr := restore(db.execer(), prevFK); restoreErr != nil && err == nil {
 			err = fmt.Errorf("restore foreign_keys: %w", restoreErr)
 		}
 	}()

@@ -2,8 +2,10 @@ package core
 
 import (
 	"database/sql"
+	"errors"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -421,6 +423,36 @@ func TestBackfill_DeletePlusResolveCombined(t *testing.T) {
 	}
 }
 
+func TestBackfill_CountsUnresolvedWhenRepoPathCannotBeResolved(t *testing.T) {
+	unsetAllGitEnv(t)
+
+	db, err := OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer db.Close()
+
+	cwd := "/.claude/worktrees/pathological"
+	insertLegacySession(t, db, "unresolved", &cwd)
+	insertLegacyMessage(t, db, "unresolved", "m1")
+
+	result, err := Backfill(db)
+	if err != nil {
+		t.Fatalf("Backfill: %v", err)
+	}
+	if result.Deleted != 0 || result.Resolved != 0 || result.Unresolved != 1 {
+		t.Errorf("result = %+v, want {Deleted:0 Resolved:0 Unresolved:1}", result)
+	}
+
+	got, err := queryRepoPath(t, db, "unresolved")
+	if err != nil {
+		t.Fatalf("queryRepoPath: %v", err)
+	}
+	if got.Valid {
+		t.Errorf("repo_path = %+v, want NULL after unresolved backfill", got)
+	}
+}
+
 func TestCountOrphanSessions(t *testing.T) {
 	unsetAllGitEnv(t)
 
@@ -624,6 +656,26 @@ func TestMigrateToV04IfNeeded_Idempotent(t *testing.T) {
 	}
 	if ms != 0 || mm != 0 || mi != 0 {
 		t.Errorf("second run migrated counts = {%d %d %d}, want all 0", ms, mm, mi)
+	}
+}
+
+func TestMigrateToV04_ReturnsRestoreForeignKeysError(t *testing.T) {
+	db := setupV03DB(t)
+	insertV03Session(t, db, "s1", "/proj", "/proj")
+	insertV03Message(t, db, "s1", "m1")
+
+	restoreErr := errors.New("injected restore failure")
+	ms, mm, mi, err := migrateToV04WithRestore(db, func(execer, int) error {
+		return restoreErr
+	})
+	if err == nil {
+		t.Fatal("migrateToV04WithRestore succeeded, want restore error")
+	}
+	if !strings.Contains(err.Error(), "restore foreign_keys") || !errors.Is(err, restoreErr) {
+		t.Fatalf("error = %v, want wrapped restore foreign_keys error", err)
+	}
+	if ms != 1 || mm != 1 || mi != 0 {
+		t.Errorf("migrated counts = {%d %d %d}, want 1/1/0 even when restore fails", ms, mm, mi)
 	}
 }
 

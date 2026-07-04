@@ -2,7 +2,10 @@ package core
 
 import (
 	"database/sql"
+	"errors"
 	"path/filepath"
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -30,6 +33,21 @@ func TestOpenDB_HasRepoPathColumn(t *testing.T) {
 	}
 	if !present {
 		t.Fatal("repo_path column missing from sessions table")
+	}
+}
+
+func TestOpenDB_ReturnsErrorForUnopenablePath(t *testing.T) {
+	dsn := filepath.Join(t.TempDir(), "missing", "somniloq.db")
+
+	db, err := OpenDB(dsn)
+	if err == nil {
+		if db != nil {
+			db.Close()
+		}
+		t.Fatal("OpenDB succeeded for a DB path whose parent directory does not exist")
+	}
+	if db != nil {
+		t.Fatalf("OpenDB returned db=%v with err=%v, want nil DB on error", db, err)
 	}
 }
 
@@ -93,6 +111,36 @@ func TestEnsureSessionsRepoPathColumn_Idempotent(t *testing.T) {
 	}
 }
 
+type alterRaceDB struct {
+	*sql.DB
+	match string
+	err   error
+}
+
+func (d alterRaceDB) Exec(query string, args ...any) (sql.Result, error) {
+	res, err := d.DB.Exec(query, args...)
+	if err != nil {
+		return res, err
+	}
+	if strings.Contains(query, d.match) {
+		return nil, d.err
+	}
+	return res, nil
+}
+
+func TestEnsureSessionsRepoPathColumn_RaceRecheckTreatsConcurrentAddAsSuccess(t *testing.T) {
+	db := openLegacyMemoryDB(t)
+
+	err := ensureSessionsRepoPathColumn(alterRaceDB{
+		DB:    db,
+		match: "ALTER TABLE sessions ADD COLUMN repo_path",
+		err:   errors.New("injected alter failure after concurrent add"),
+	})
+	if err != nil {
+		t.Fatalf("ensureSessionsRepoPathColumn should accept add race after re-check, got: %v", err)
+	}
+}
+
 func TestEnsureSessionsProjectDirColumnDropped_DropsColumn(t *testing.T) {
 	db := openLegacyMemoryDB(t)
 
@@ -106,6 +154,19 @@ func TestEnsureSessionsProjectDirColumnDropped_DropsColumn(t *testing.T) {
 	}
 	if present {
 		t.Fatal("project_dir column should have been dropped")
+	}
+}
+
+func TestEnsureSessionsProjectDirColumnDropped_RaceRecheckTreatsConcurrentDropAsSuccess(t *testing.T) {
+	db := openLegacyMemoryDB(t)
+
+	err := ensureSessionsProjectDirColumnDropped(alterRaceDB{
+		DB:    db,
+		match: "ALTER TABLE sessions DROP COLUMN project_dir",
+		err:   errors.New("injected alter failure after concurrent drop"),
+	})
+	if err != nil {
+		t.Fatalf("ensureSessionsProjectDirColumnDropped should accept drop race after re-check, got: %v", err)
 	}
 }
 
@@ -247,5 +308,68 @@ func TestOpenDB_MigratesLegacyFile(t *testing.T) {
 	}
 	if isNull != 1 {
 		t.Errorf("existing row should have repo_path IS NULL after migration")
+	}
+}
+
+type tableColumnDef struct {
+	Name    string
+	Type    string
+	NotNull int
+	Default sql.NullString
+	PK      int
+}
+
+func tableColumns(t *testing.T, db *sql.DB, table string) []tableColumnDef {
+	t.Helper()
+	rows, err := db.Query("PRAGMA table_info(" + table + ")")
+	if err != nil {
+		t.Fatalf("PRAGMA table_info(%s): %v", table, err)
+	}
+	defer rows.Close()
+
+	var columns []tableColumnDef
+	for rows.Next() {
+		var (
+			cid int
+			col tableColumnDef
+		)
+		if err := rows.Scan(&cid, &col.Name, &col.Type, &col.NotNull, &col.Default, &col.PK); err != nil {
+			t.Fatalf("scan PRAGMA table_info(%s): %v", table, err)
+		}
+		columns = append(columns, col)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate PRAGMA table_info(%s): %v", table, err)
+	}
+	return columns
+}
+
+func openSchemaConstantDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() { db.Close() })
+	if _, err := db.Exec(schema); err != nil {
+		t.Fatalf("schema exec: %v", err)
+	}
+	return db
+}
+
+func TestMigrateToV04_SchemaMatchesSchemaConstant(t *testing.T) {
+	migrated := setupV03DB(t)
+	if _, _, _, err := migrateToV04(migrated); err != nil {
+		t.Fatalf("migrateToV04: %v", err)
+	}
+	fresh := openSchemaConstantDB(t)
+
+	for _, table := range []string{"sessions", "messages", "import_state"} {
+		got := tableColumns(t, migrated.db, table)
+		want := tableColumns(t, fresh, table)
+		if !reflect.DeepEqual(got, want) {
+			t.Errorf("%s columns after migrateToV04 differ from schema constant\n got: %#v\nwant: %#v", table, got, want)
+		}
 	}
 }
