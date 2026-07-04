@@ -121,14 +121,8 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 		if perr != nil {
 			return ingest.LineUnparsed, nil
 		}
-		if uerr := tx.UpsertSession(normalized.Session, h.importedAt); uerr != nil {
-			return ingest.LineIgnored, fmt.Errorf("upsert session: %w", uerr)
-		}
-		if strings.TrimSpace(normalized.Message.Content) == "" {
-			return ingest.LineWroteBody, nil
-		}
-		if ierr := tx.InsertMessage(normalized.Message); ierr != nil {
-			return ingest.LineWroteBody, fmt.Errorf("insert message: %w", ierr)
+		if err := ingest.PersistMessage(tx, normalized, h.importedAt); err != nil {
+			return ingest.LineWroteBody, err
 		}
 		return ingest.LineWroteBody, nil
 	case "custom-title":
