@@ -17,6 +17,7 @@ cmd/somniloq → internal/core → internal/ingest/...
 - `internal/core` は `cmd/somniloq` に依存しない
 - `internal/ingest` は `cmd/somniloq` に依存しない
 - `internal/ingest` は `internal/core` に依存しない。SQLite 書き込みは `internal/core` が実装する interface 越しに呼ぶ
+- 例外として、`internal/core` は `claudecode.SessionMetaWriter` 実装のコンパイル時確認に限り `internal/ingest/claudecode` に依存する（ADR 0008）。source 固有 adapter 全般への自由な依存は認めない
 - `internal/core` は外部ライブラリとして `modernc.org/sqlite` のみ使用
 - `cmd/somniloq` は stdlib `flag` + `go-isatty` を使用（外部 CLI フレームワーク不使用）
 

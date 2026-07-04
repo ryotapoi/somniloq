@@ -8,7 +8,7 @@
 - [x] `backfill.go` の `db.db` 非公開フィールド直接アクセスを API 経由に寄せる: `db.go` が用意した `execer` 抽象を迂回して内部レイアウトに依存しており（backfill.go:59,62,70,185,214）、DB 構造体の変更が backfill.go 広範囲に波及する。db.go 分割と同時か直後に実施
 - [x] スキーマ定義の二重記述に守りのテストを足す: `db.go` の `schema` 定数と `backfill.go` の `migrateToV04` 内 CREATE TABLE が同一カラム構成を独立に手書きしており、カラム追加時に片方だけ更新すると新規 DB と v0.3 アップグレード経由 DB でスキーマが分岐する（コンパイルもテストも通るまま）。migration SQL は凍結された歴史なので共通化はせず、「migrateToV04 実行後の DB と schema 定数から作った DB の実スキーマが一致する」ことを assert するテストを 1 本追加する
 - [x] マイグレーション・インポート異常系のテストを追加する: 優先度高 = `OpenDB` 異常系と `ensureSessions*` のレースリチェック分岐（全コマンドの入口、壊れると静かな不整合）。中 = `migrateToV04` の PRAGMA 復元失敗パス（不可逆操作）、`Backfill` の Unresolved 分岐、`importWithAdapter` のファイル縮小分岐（壊れると二重インポートかデータ欠損）。監査時に低とされた `importCmd` の flag 組み合わせと `resolveSessionByID` の複数マッチ分岐は、壊れてもすぐ見える failure のため対象外（2026-07-03 判断）。adapter 群は統合テスト実測 75-100% のため追加不要
-- [ ] `docs/rules/architecture.md` に core → ingest/claudecode 依存の例外を明記する: 依存方向図が単純な線形のみで、`db.go` の `claudecode.SessionMetaWriter` 実装用 import（ADR 0008 で採用済み）を次の読み手が「違反」と誤認するか、逆に安易な source 直 import を正当化しかねない。依存方向節に例外 1 行 + ADR 0008 参照を足す
+- [x] `docs/rules/architecture.md` に core → ingest/claudecode 依存の例外を明記する: 依存方向図が単純な線形のみで、`db.go` の `claudecode.SessionMetaWriter` 実装用 import（ADR 0008 で採用済み）を次の読み手が「違反」と誤認するか、逆に安易な source 直 import を正当化しかねない。依存方向節に例外 1 行 + ADR 0008 参照を足す
 
 ## v0.7.2
 
