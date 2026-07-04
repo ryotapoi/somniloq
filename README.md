@@ -164,7 +164,7 @@ somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # messages since
 somniloq search --since 7d --project myapp "auth"   # narrowed by project
 ```
 
-Output is TSV: `session_id`, `time`, `project`, `snippet` (the text around the first match), newest first. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
+Output is TSV: `session_id`, `turn`, `time`, `project`, `snippet` (the text around the first match), newest first. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --turn <N> <session_id>` when the session ID is unambiguous. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
 
 ### JSON output
 

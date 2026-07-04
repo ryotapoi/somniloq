@@ -162,7 +162,7 @@ somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # その日の 0
 somniloq search --since 7d --project myapp "auth"    # プロジェクトで絞り込み
 ```
 
-出力は TSV 形式: `session_id`, `time`, `project`, `snippet`（最初のマッチ前後の本文）。新しい順。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。
+出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`（最初のマッチ前後の本文）。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、`session_id` が一意なら検索結果からそのまま `somniloq show --turn <N> <session_id>` に繋げられる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。
 
 ### JSON 出力
 

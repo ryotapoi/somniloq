@@ -553,6 +553,7 @@ func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, incl
 // SearchRow is one message that matched a search query.
 type SearchRow struct {
 	Source    Source
+	UUID      string
 	SessionID string
 	RepoPath  string
 	Timestamp string
@@ -568,7 +569,7 @@ type SearchRow struct {
 // the DESC order.
 func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, error) {
 	q := `
-		SELECT m.source, m.session_id, COALESCE(s.repo_path, ''), m.timestamp, m.content
+		SELECT m.source, m.uuid, m.session_id, COALESCE(s.repo_path, ''), m.timestamp, m.content
 		FROM messages m
 		JOIN sessions s ON m.source = s.source AND m.session_id = s.session_id
 		WHERE m.is_sidechain = 0
@@ -598,7 +599,7 @@ func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, er
 	for rows.Next() {
 		var r SearchRow
 		var src string
-		if err := rows.Scan(&src, &r.SessionID, &r.RepoPath, &r.Timestamp, &r.Content); err != nil {
+		if err := rows.Scan(&src, &r.UUID, &r.SessionID, &r.RepoPath, &r.Timestamp, &r.Content); err != nil {
 			return nil, err
 		}
 		r.Source = Source(src)

@@ -24,7 +24,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	until := fs.String("until", "", "filter messages before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	dayBoundaryFlag := fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)")
 	project := fs.String("project", "", "filter by repo path (substring match)")
-	setUsage(fs, "Search message content across sessions", searchUsageLine)
+	setUsage(fs, "Search message content across sessions and print TSV with session_id, turn, time, project, snippet", searchUsageLine)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
@@ -62,14 +62,46 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 		return 1, err
 	}
 
+	turnCache := map[searchSessionKey]map[string]int{}
 	for _, r := range rows {
-		fmt.Fprintf(out, "%s\t%s\t%s\t%s\n",
+		turns, err := searchTurnsByUUID(db, turnCache, r.Source, r.SessionID)
+		if err != nil {
+			return 1, err
+		}
+		turn, ok := turns[r.UUID]
+		if !ok {
+			return 1, fmt.Errorf("turn not found for search hit %s/%s/%s", r.Source, r.SessionID, r.UUID)
+		}
+		fmt.Fprintf(out, "%s\t%d\t%s\t%s\t%s\n",
 			r.SessionID,
+			turn,
 			sanitizeTSV(formatLocalTime(r.Timestamp, time.Local)),
 			sanitizeTSV(resolveProjectDisplayName(r.RepoPath, false, cfg)),
 			sanitizeTSV(searchSnippet(r.Content, query)))
 	}
 	return 0, nil
+}
+
+type searchSessionKey struct {
+	source    core.Source
+	sessionID string
+}
+
+func searchTurnsByUUID(db *core.DB, cache map[searchSessionKey]map[string]int, source core.Source, sessionID string) (map[string]int, error) {
+	key := searchSessionKey{source: source, sessionID: sessionID}
+	if turns, ok := cache[key]; ok {
+		return turns, nil
+	}
+	messages, err := db.GetMessages(source, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	turns := map[string]int{}
+	for _, tm := range assignTurns(messages) {
+		turns[tm.Msg.UUID] = tm.Turn
+	}
+	cache[key] = turns
+	return turns, nil
 }
 
 // searchSnippet extracts the text around the first match of query in content,

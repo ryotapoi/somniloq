@@ -21,7 +21,7 @@ sources:
 ## ターン採番
 
 - 採番の実装は `cmd/somniloq/turn.go` の `assignTurns`。sidechain を除いた `GetMessages` 全体を渡す前提。
-- `show --turn`, `show --tail`, `outline`, `sessions` の非コマンド user turn skip hint は同じ `assignTurns` / `userTurnMessages` 契約に乗る。片方だけの採番・user turn 母集団変更は避ける。
+- `show --turn`, `show --tail`, `outline`, `search` の `turn` 列、`sessions` の非コマンド user turn skip hint は同じ `assignTurns` / `userTurnMessages` 契約に乗る。片方だけの採番・user turn 母集団変更は避ける。
 - `internal/core/db.go` の `GetMessages` は `timestamp ASC, rowid ASC`。旧 Codex record の timestamp tie を壊すと turn number が揺れる。
 - 設計判断は `docs/decisions/0011-outline-subcommand-turn-numbering.md`。
 
@@ -32,7 +32,7 @@ sources:
 - Outline: `outline.go` が `GetMessages` と `assignTurns` を使い、user message だけ出す。`body_size` / `bodySize` は各 turn に属する非 sidechain message content の UTF-8 byte 合計で、`show --turn` の読み取り量の目安になる。
 - Sessions skip hints: `sessions.go` が `ListSessions` 後に各 session の `GetMessages` を読み、`userTurnMessages` と `config.go` の `commandMatcher` で非コマンド user turn 数と最初の非コマンド行を出す。DB schema / core の session 集約 SQL には持ち込まない。
 - Sessions logical day: `sessions.go` が `sessionLogicalDay` で表示時に計算する。`ended_at` 優先、無ければ `started_at`。`dayBoundary` は config または `--day-boundary` で決まり、DB schema / import には持ち込まない。
-- Search: `search.go` が `SearchMessages` の結果に `searchSnippet` をかける。検索の time filter は message timestamp 基準。
+- Search: `search.go` が `SearchMessages` の結果に `searchSnippet` をかけ、同じ session の `GetMessages` に `assignTurns` を適用して hit message UUID の `turn` 列を出す。検索結果から `show --turn` に繋げる導線は `session_id` が source 間で一意な場合に成立し、同じ `session_id` が複数 source にある場合は show の既存の曖昧エラーに従う。検索の time filter は message timestamp 基準。
 - JSON: `cmd/somniloq/jsonout.go`。単一 show も配列で返す。`sessions` JSON には `logicalDay` があるが、show JSON にはない。判断は `docs/decisions/0012-json-output-schema.md`。
 
 ## 変更時のテスト入口

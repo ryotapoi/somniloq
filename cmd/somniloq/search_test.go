@@ -22,8 +22,27 @@ func TestSearchCmd_OutputColumns(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
 	}
 
-	want := fmt.Sprintf("sess-1\t%s\t/Users/test/proj\tsecond question after blank lines\n",
+	want := fmt.Sprintf("sess-1\t2\t%s\t/Users/test/proj\tsecond question after blank lines\n",
 		formatLocalTime("2026-03-28T15:03:00Z", time.Local))
+	if out.String() != want {
+		t.Errorf("output = %q, want %q", out.String(), want)
+	}
+}
+
+func TestSearchCmd_AssistantHitUsesOwningTurn(t *testing.T) {
+	db := newOutlineTestDB(t)
+
+	var out, errOut bytes.Buffer
+	code, err := searchCmd([]string{"answer one"}, staticDB(db), config{}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("searchCmd: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+	}
+
+	want := fmt.Sprintf("sess-1\t1\t%s\t/Users/test/proj\tanswer one\n",
+		formatLocalTime("2026-03-28T15:01:00Z", time.Local))
 	if out.String() != want {
 		t.Errorf("output = %q, want %q", out.String(), want)
 	}
