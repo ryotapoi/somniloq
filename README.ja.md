@@ -54,7 +54,7 @@ somniloq show --since 7d
 | `projects` | プロジェクト一覧を表示（セッション数付き） |
 | `show` | セッション内容を Markdown 形式で出力 |
 | `outline` | セッションの user メッセージをターン番号・時刻・本文サイズ・先頭 1 行で一覧表示 |
-| `search` | 全メッセージ本文を横断検索 |
+| `search` | 全メッセージ本文をターン番号付きで横断検索 |
 
 ### import
 

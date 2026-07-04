@@ -56,7 +56,7 @@ somniloq show --since 7d
 | `projects` | List projects with session counts |
 | `show` | Show session content in Markdown |
 | `outline` | List a session's user messages as turn number, time, body size, and first line |
-| `search` | Search message content across sessions |
+| `search` | Search message content across sessions with turn numbers |
 
 ### import
 
