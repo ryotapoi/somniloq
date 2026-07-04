@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
@@ -130,11 +129,4 @@ func summarizeNonCommandUserTurns(messages []core.MessageRow, matcher commandMat
 		}
 	}
 	return summary
-}
-
-var tsvReplacer = strings.NewReplacer("\t", " ", "\n", " ", "\r", " ")
-
-// sanitizeTSV replaces tabs and newlines with spaces to keep TSV output intact.
-func sanitizeTSV(s string) string {
-	return tsvReplacer.Replace(s)
 }
