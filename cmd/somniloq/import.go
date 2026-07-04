@@ -9,6 +9,24 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
+const importHelpDetails = `Output:
+  Imported <imported> files (<scanned> scanned, <skipped> skipped, <failed> failed, <unparsed> unparsed lines)
+
+  scanned: JSONL files discovered for the selected source(s).
+  skipped: unchanged files skipped by differential import.
+  failed: files that were discovered but could not be imported.
+  unparsed lines: broken JSON or malformed payload lines. Deliberately ignored record types are not counted.
+
+Notes:
+  Default import is differential. Use --full to delete the whole somniloq DB and re-import from the selected source(s).
+  With --source codex --full, existing Claude Code rows are deleted too, then only Codex rows are imported.
+  Non-fatal scan/file errors are printed to stderr; import continues and exits 1 if any occurred.
+
+Examples:
+  somniloq import
+  somniloq import --source codex
+  somniloq import --full --yes`
+
 // importCmd runs the import subcommand without calling os.Exit, so it can be
 // tested directly. openDB is invoked only after argument parsing and
 // confirmation succeed.
@@ -17,7 +35,7 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 	full := fs.Bool("full", false, "full re-import (delete all and re-import)")
 	yes := fs.Bool("yes", false, "skip confirmation prompt")
 	sourceValue := fs.String("source", string(core.ImportSourceAll), "source to import: all, claude-code, codex")
-	setUsage(fs, "Import Claude Code and Codex session logs from JSONL files", "somniloq import [--source all|claude-code|codex] [flags]")
+	setUsage(fs, "Import Claude Code and Codex session logs from JSONL files", "somniloq import [--source all|claude-code|codex] [flags]", importHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}

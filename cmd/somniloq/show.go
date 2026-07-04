@@ -13,6 +13,27 @@ import (
 const showUsageLine = "somniloq show [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>] <session-id>\n" +
 	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>]"
 
+const showHelpDetails = `Output (markdown):
+  One or more sessions. Each session has a title, Session, Project, Started metadata, then message sections headed by role.
+  Multiple sessions in time-range mode are separated by ---.
+
+JSON fields:
+  source, sessionId, project, title, startedAt, endedAt, messages
+  messages fields: role, content, timestamp
+
+Notes:
+  Flags must come before <session-id>.
+  Use either <session-id> or --since/--until. --project only applies in time-range mode.
+  --summary N shows first N user messages per session, skipping /clear and local-command-caveat unless --include-clear is set.
+  --turn N or --turn N..M shows inclusive turn ranges; --tail N shows the last N turns.
+  --turn and --tail share outline numbering and cannot be combined with --summary.
+  If a session_id exists in multiple sources, show prints an ambiguity error with source/session candidates.
+
+Examples:
+  somniloq show --summary 1 --since 24h --short
+  somniloq show --turn 40..60 <session-id>
+  somniloq show --format json --tail 3 <session-id>`
+
 // showCmd runs the show subcommand without calling os.Exit, so it can be
 // tested directly.
 func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
@@ -26,7 +47,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	turnRange := fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)")
 	tail := fs.Int("tail", 0, "show only the last N turns (0 disables)")
 	format := fs.String("format", "markdown", "output format (markdown, json)")
-	setUsage(fs, "Show session content in Markdown", showUsageLine)
+	setUsage(fs, "Show session content in Markdown", showUsageLine, showHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}

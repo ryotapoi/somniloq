@@ -7,10 +7,16 @@ import (
 	"io"
 )
 
-func setUsage(fs *flag.FlagSet, description, usage string) {
+func setUsage(fs *flag.FlagSet, description, usage string, details ...string) {
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "%s\n\nUsage:\n  %s\n\nFlags:\n", description, usage)
 		fs.PrintDefaults()
+		for _, detail := range details {
+			if detail == "" {
+				continue
+			}
+			fmt.Fprintf(fs.Output(), "\n%s\n", detail)
+		}
 	}
 }
 

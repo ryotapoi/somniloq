@@ -8,6 +8,23 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
+const projectsHelpDetails = `Columns (TSV, in order):
+  project: canonical alias name when configured, otherwise repo_path or basename with --short.
+  session_count: number of sessions for that project.
+
+JSON fields:
+  project, sessionCount
+
+Notes:
+  Projects are grouped by repo_path in SQL, then alias-equivalent rows are merged for display.
+  --since/--until filter session start time. Date-only filters use local 00:00; dayBoundary does not apply to projects.
+  --short only affects projects that do not match projectAliases.
+
+Examples:
+  somniloq projects --since 30d --short
+  somniloq projects --format json
+  somniloq sessions --project somniloq --since 7d`
+
 // projectsCmd runs the projects subcommand without calling os.Exit, so it can
 // be tested directly.
 func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
@@ -16,7 +33,7 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	short := fs.Bool("short", false, "shorten unaliased projects to repo basename")
 	format := fs.String("format", "tsv", "output format (tsv, json)")
-	setUsage(fs, "List projects", "somniloq projects [flags]")
+	setUsage(fs, "List projects", "somniloq projects [flags]", projectsHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}

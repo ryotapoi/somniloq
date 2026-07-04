@@ -13,6 +13,25 @@ import (
 
 const searchUsageLine = "somniloq search [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] <query>"
 
+const searchHelpDetails = `Columns (TSV, in order):
+  session_id: source-local session identifier containing the matching message.
+  turn: outline/show turn number containing the hit.
+  time: local timestamp of the matching message.
+  project: canonical alias name when configured, otherwise repo_path.
+  snippet: first match with about 40 runes of context on each side; tabs/newlines flattened for TSV.
+
+Notes:
+  Search scans non-sidechain message bodies using SQLite LIKE.
+  LIKE is ASCII-case-insensitive; % and _ in the query are wildcard characters.
+  --since/--until filter message timestamps, not session start time.
+  Date-only --since/--until values use --day-boundary or config dayBoundary.
+  Typical flow: search -> outline <session-id> -> show --turn <turn-or-range> <session-id>.
+
+Examples:
+  somniloq search "auth bug"
+  somniloq search --since 7d --project somniloq "migration"
+  somniloq show --turn 42 <session-id>`
+
 // snippetContext is the number of runes kept on each side of the match.
 const snippetContext = 40
 
@@ -24,7 +43,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	until := fs.String("until", "", "filter messages before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
 	dayBoundaryFlag := fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)")
 	project := fs.String("project", "", "filter by repo path (substring match)")
-	setUsage(fs, "Search message content across sessions and print TSV with session_id, turn, time, project, snippet", searchUsageLine)
+	setUsage(fs, "Search message content across sessions and print TSV with session_id, turn, time, project, snippet", searchUsageLine, searchHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}

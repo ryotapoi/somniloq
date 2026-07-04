@@ -10,6 +10,29 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
+const sessionsHelpDetails = `Columns (TSV, in order):
+  session_id: source-local session identifier.
+  time_range: local started_at ~ ended_at; ended_at may be empty.
+  logical_day: local YYYY-MM-DD after applying --day-boundary to ended_at, or started_at when ended_at is empty.
+  project: canonical alias name when configured, otherwise repo_path or basename with --short.
+  custom_title: raw session title, empty when unavailable.
+  message_count: stored message rows, including sidechain rows.
+  body_size: UTF-8 byte size of non-sidechain message bodies; use this to choose outline/show ranges.
+  non_command_user_turn_count: user turns from outline numbering after excluding slash commands and config commandPatterns.
+  first_non_command_user_line: first line of the first non-command user turn.
+
+JSON fields:
+  source, sessionId, project, title, startedAt, endedAt, logicalDay, messageCount, bodySize, nonCommandUserTurnCount, firstNonCommandUserLine
+
+Notes:
+  Date-only --since/--until values use --day-boundary or config dayBoundary. Relative times and datetimes do not.
+  --project expands exact projectAliases matches, then filters repo_path by substring.
+
+Examples:
+  somniloq sessions --since 7d --short
+  somniloq sessions --since 2026-03-28 --day-boundary 04:00 --format json
+  somniloq sessions --project somniloq --since 30d`
+
 // sessionsCmd runs the sessions subcommand without calling os.Exit, so it can
 // be tested directly.
 func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
@@ -20,7 +43,7 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	project := fs.String("project", "", "filter by repo path (substring match)")
 	short := fs.Bool("short", false, "shorten unaliased projects to repo basename")
 	format := fs.String("format", "tsv", "output format (tsv, json)")
-	setUsage(fs, "List sessions", "somniloq sessions [flags]")
+	setUsage(fs, "List sessions", "somniloq sessions [flags]", sessionsHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}

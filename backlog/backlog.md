@@ -10,7 +10,7 @@
 - [x] 論理日境界（day boundary）を追加する: config に `dayBoundary`（例 "04:00"）を持ち、`--day-boundary` フラグで上書きできるようにする。変換はクエリ時計算とし、import 時に焼き込まない（境界変更で再 import が要らないように。timestamp は生のまま）。効果は 2 点: (a) sessions / search の `--since` / `--until` の日付解釈が境界起点になる（`--since 6/28` = 6/28 04:00 から）、(b) sessions に論理日の列を追加する（`--group-by day` は採らない。列なら既存の TSV / JSON 形式にそのまま乗り、グループ化は読む側でできる。2026-07-04 判断）。振り分けはセッション単位で ended_at（なければ started_at）を使い、セッションを途中で割らない。Knowledge の jot / daily-guide に散っている「04:00〜翌 04:00 を 1 日とする」ルールの移設先
 - [x] outline に turn ごとのサイズ列を追加する: 各 turn の本文合計サイズ（バイト）を出す。sessions の BodySize と同じ UTF-8 byte 方式で、既存の GetMessages 結果から len(content) を合算する（スキーマ変更・import 変更なし）。長いセッションで「どの turn が重いか＝どこで何かが起きたか」の地図精度を上げ、show --turn の範囲選びを良くする
 - [x] search 結果に turn 番号を含める: outline / show --turn と同一の採番で turn 番号を返し、検索ヒットからそのまま `show --turn <N..M>` に繋げられるようにする（source 間で同じ `session_id` がある場合は show の既存の曖昧エラーに従う）
-- [ ] ヘルプ充実と examples スキルの薄型化を行う: 各サブコマンドの `--help` に「フラグの意味・出力列の定義・実例 2〜3 個」を載せ、LLM が `--help` だけで使い方を把握できる水準にする。トップレベルの `--help` は現在の短さを維持する（全部盛りにしない）。コマンド横断のイディオム（outline → show --turn で必要範囲だけ読む等）も help 側に置く。あわせて `examples/skills/somniloq/SKILL.md` を「存在の告知・いつ使うか・--help への誘導」中心に薄くし、CLI 構文の重複記述を減らす（スキルと実装のドリフト防止）
+- [x] ヘルプ充実と examples スキルの薄型化を行う: 各サブコマンドの `--help` に「フラグの意味・出力列の定義・実例 2〜3 個」を載せ、LLM が `--help` だけで使い方を把握できる水準にする。トップレベルの `--help` は現在の短さを維持する（全部盛りにしない）。コマンド横断のイディオム（outline → show --turn で必要範囲だけ読む等）も help 側に置く。あわせて `examples/skills/somniloq/SKILL.md` を「存在の告知・いつ使うか・--help への誘導」中心に薄くし、CLI 構文の重複記述を減らす（スキルと実装のドリフト防止）
 
 ## v0.8.0
 

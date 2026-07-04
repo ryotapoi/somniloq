@@ -10,6 +10,23 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
+const topLevelUsage = `Session log viewer for Claude Code and Codex
+
+Usage:
+  somniloq [flags] <command>
+
+Commands:
+  import    Import Claude Code and Codex session logs from JSONL files
+  backfill  Correct legacy session data
+  sessions  List sessions
+  show      Show session content in Markdown
+  outline   List a session's user messages as turn, time, body size, and first line
+  search    Search message content across sessions with turn numbers
+  projects  List projects
+
+Flags:
+`
+
 func main() {
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
@@ -26,22 +43,7 @@ func main() {
 	configPath := flag.String("config", defaultConfig, "path to config file (JSON)")
 	showVersion := flag.Bool("version", false, "print version and exit")
 	flag.Usage = func() {
-		fmt.Fprint(os.Stderr, `Session log viewer for Claude Code and Codex
-
-Usage:
-  somniloq [flags] <command>
-
-Commands:
-  import    Import Claude Code and Codex session logs from JSONL files
-  backfill  Correct legacy session data
-  sessions  List sessions
-  show      Show session content in Markdown
-  outline   List a session's user messages as turn, time, body size, and first line
-  search    Search message content across sessions with turn numbers
-  projects  List projects
-
-Flags:
-`)
+		fmt.Fprint(os.Stderr, topLevelUsage)
 		flag.PrintDefaults()
 	}
 	flag.Parse()

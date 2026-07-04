@@ -9,6 +9,23 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
+const backfillHelpDetails = `Output:
+  Migrated to v0.4: sessions=<n> messages=<n> import_states=<n>
+  Backfilled: deleted=<n> resolved=<n> unresolved=<n>
+
+  migrated counts: rows copied during v0.3 -> v0.4 schema migration; omitted when no migration is needed.
+  deleted: sessions rows with no messages that were removed.
+  resolved: sessions whose repo_path was filled from cwd.
+  unresolved: sessions still missing repo_path after resolution.
+
+Notes:
+  Run after upgrading an old DB and before importing new data. It is safe to re-run.
+  If rows will be deleted, non-interactive runs must pass --yes.
+
+Examples:
+  somniloq backfill
+  somniloq backfill --yes`
+
 // backfillCmd runs the backfill subcommand without calling os.Exit, so it can
 // be tested directly. openDB is invoked only after argument parsing succeeds,
 // so `--help` and validation errors do not require a real DB. backfillCmd
@@ -27,7 +44,7 @@ import (
 func backfillCmd(args []string, openDB func() (*core.DB, error), in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
 	fs := flag.NewFlagSet("backfill", flag.ContinueOnError)
 	yes := fs.Bool("yes", false, "skip confirmation prompt")
-	setUsage(fs, "Correct legacy session data (migrate v0.3→v0.4 schema, delete orphan sessions, resolve repo_path)", "somniloq backfill")
+	setUsage(fs, "Correct legacy session data (migrate v0.3→v0.4 schema, delete orphan sessions, resolve repo_path)", "somniloq backfill", backfillHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
