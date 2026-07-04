@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
@@ -34,8 +35,8 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	full := fs.Bool("full", false, "full re-import (delete all and re-import)")
 	yes := fs.Bool("yes", false, "skip confirmation prompt")
-	sourceValue := fs.String("source", string(core.ImportSourceAll), "source to import: all, claude-code, codex")
-	setUsage(fs, "Import Claude Code and Codex session logs from JSONL files", "somniloq import [--source all|claude-code|codex] [flags]", importHelpDetails)
+	sourceValue := fs.String("source", string(core.ImportSourceAll), "source to import: "+importSourceCommaList())
+	setUsage(fs, "Import Claude Code and Codex session logs from JSONL files", "somniloq import [--source "+importSourcePipeList()+"] [flags]", importHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
@@ -87,7 +88,29 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 func parseImportSource(value string) (core.ImportSource, error) {
 	source := core.ImportSource(value)
 	if !source.Valid() {
-		return "", fmt.Errorf("invalid --source %q (want all, claude-code, or codex)", value)
+		return "", fmt.Errorf("invalid --source %q (want %s)", value, importSourceSentenceList())
 	}
 	return source, nil
+}
+
+func importSourcePipeList() string {
+	return strings.Join(core.ImportSourceChoices(), "|")
+}
+
+func importSourceCommaList() string {
+	return strings.Join(core.ImportSourceChoices(), ", ")
+}
+
+func importSourceSentenceList() string {
+	choices := core.ImportSourceChoices()
+	switch len(choices) {
+	case 0:
+		return ""
+	case 1:
+		return choices[0]
+	case 2:
+		return choices[0] + " or " + choices[1]
+	default:
+		return strings.Join(choices[:len(choices)-1], ", ") + ", or " + choices[len(choices)-1]
+	}
 }

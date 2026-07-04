@@ -40,8 +40,7 @@ const (
 // importSourceSpec ties a concrete ImportSource to its adapter constructor
 // and to the ImportOptions field that carries its scan root. Adding a new
 // source means adding a constant, a table entry, an ImportOptions field, and
-// the CLI side in cmd/somniloq (default directory wiring plus the hand-written
-// source lists in usage/help/error strings).
+// the CLI side in cmd/somniloq (default directory wiring).
 // ImportSourceAll is intentionally not listed: it means "every entry in this
 // table".
 type importSourceSpec struct {
@@ -89,6 +88,16 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 		result.add(r)
 	}
 	return result, nil
+}
+
+// ImportSourceChoices returns the valid --source values in CLI display order.
+func ImportSourceChoices() []string {
+	choices := make([]string, 0, len(importSourceSpecs)+1)
+	choices = append(choices, string(ImportSourceAll))
+	for _, spec := range importSourceSpecs {
+		choices = append(choices, string(spec.source))
+	}
+	return choices
 }
 
 // Valid reports whether s is ImportSourceAll or one of the sources listed in

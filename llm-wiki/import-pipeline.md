@@ -22,7 +22,7 @@ JSONL 取り込みを変えるときの読む順序。仕様そのものは `doc
 ## 経路
 
 1. `cmd/somniloq/import.go` が `--source`, `--full`, `--yes` を処理し、確認後に `core.Import` を呼ぶ。
-2. `internal/core/import.go` の `importSourceSpecs` が source と adapter と scan root を結びつける。source 追加時はここ、cmd の `parseImportSource`、usage/help、仕様を同時に見る。
+2. `internal/core/import.go` の `importSourceSpecs` が source と adapter と scan root を結びつける。source 追加時はここ、cmd の default directory wiring、仕様を同時に見る。CLI の source 表示文字列は `ImportSourceChoices()` から導出する。
 3. `importWithAdapter` が `ScanFiles`、`import_state`、ファイルサイズ比較、offset 決定、`adapter.ProcessFile` を担当する。
 4. `internal/ingest/process.go` の `ProcessJSONL` が共通 skeleton。transaction、line iteration、`Flush`、`import_state` 更新はここ。
 5. source 固有の adapter が `FileHandler` として JSONL を解釈し、`ingest.NormalizedRecord` / `NormalizedMessage` / `SessionMeta` に落とす。

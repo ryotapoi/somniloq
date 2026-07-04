@@ -521,6 +521,30 @@ func TestImport_InvalidSourceDoesNotDelete(t *testing.T) {
 	}
 }
 
+func TestImportSourceChoicesMatchValidSources(t *testing.T) {
+	choices := ImportSourceChoices()
+	if len(choices) != len(importSourceSpecs)+1 {
+		t.Fatalf("choices length: got %d (%v), want %d specs plus all", len(choices), choices, len(importSourceSpecs))
+	}
+	if choices[0] != string(ImportSourceAll) {
+		t.Fatalf("choices[0]: got %q, want %q", choices[0], ImportSourceAll)
+	}
+	seen := map[string]bool{choices[0]: true}
+	for i, spec := range importSourceSpecs {
+		choice := choices[i+1]
+		if choice != string(spec.source) {
+			t.Fatalf("choices[%d]: got %q, want %q", i+1, choice, spec.source)
+		}
+		if !ImportSource(choice).Valid() {
+			t.Fatalf("choice %q must be valid", choice)
+		}
+		if seen[choice] {
+			t.Fatalf("choice %q appears more than once", choice)
+		}
+		seen[choice] = true
+	}
+}
+
 func TestScanJSONLFiles_NonexistentDir(t *testing.T) {
 	files, errs := scanJSONLFiles("/nonexistent/path")
 	if len(errs) != 0 {
