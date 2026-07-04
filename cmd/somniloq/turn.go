@@ -35,6 +35,19 @@ func assignTurns(messages []core.MessageRow) []turnMessage {
 	return result
 }
 
+// userTurnMessages returns the user-message population used by outline and
+// other turn-derived views. The caller must pass the full GetMessages output,
+// preserving assignTurns' sidechain exclusion and ordering contract.
+func userTurnMessages(messages []core.MessageRow) []turnMessage {
+	var result []turnMessage
+	for _, tm := range assignTurns(messages) {
+		if tm.Msg.Role == "user" {
+			result = append(result, tm)
+		}
+	}
+	return result
+}
+
 // parseTurnRange parses a --turn value: either a single turn number ("40") or
 // an inclusive range ("40..60").
 func parseTurnRange(s string) (lo, hi int, err error) {

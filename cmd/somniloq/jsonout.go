@@ -25,14 +25,16 @@ func validateFormat(format string, supported ...string) error {
 // empty — so consumers get a stable schema.
 
 type sessionJSON struct {
-	Source       string `json:"source"`
-	SessionID    string `json:"sessionId"`
-	Project      string `json:"project"`
-	Title        string `json:"title"`
-	StartedAt    string `json:"startedAt"`
-	EndedAt      string `json:"endedAt"`
-	MessageCount int    `json:"messageCount"`
-	BodySize     int    `json:"bodySize"`
+	Source                  string `json:"source"`
+	SessionID               string `json:"sessionId"`
+	Project                 string `json:"project"`
+	Title                   string `json:"title"`
+	StartedAt               string `json:"startedAt"`
+	EndedAt                 string `json:"endedAt"`
+	MessageCount            int    `json:"messageCount"`
+	BodySize                int    `json:"bodySize"`
+	NonCommandUserTurnCount int    `json:"nonCommandUserTurnCount"`
+	FirstNonCommandUserLine string `json:"firstNonCommandUserLine"`
 }
 
 type projectJSON struct {
@@ -62,16 +64,18 @@ type showSessionJSON struct {
 	Messages  []messageJSON `json:"messages"`
 }
 
-func newSessionJSON(r core.SessionRow, project string) sessionJSON {
+func newSessionJSON(r core.SessionRow, project string, userTurns sessionUserTurnSummary) sessionJSON {
 	return sessionJSON{
-		Source:       string(r.Source),
-		SessionID:    r.SessionID,
-		Project:      project,
-		Title:        r.CustomTitle,
-		StartedAt:    r.StartedAt,
-		EndedAt:      r.EndedAt,
-		MessageCount: r.MessageCount,
-		BodySize:     r.BodySize,
+		Source:                  string(r.Source),
+		SessionID:               r.SessionID,
+		Project:                 project,
+		Title:                   r.CustomTitle,
+		StartedAt:               r.StartedAt,
+		EndedAt:                 r.EndedAt,
+		MessageCount:            r.MessageCount,
+		BodySize:                r.BodySize,
+		NonCommandUserTurnCount: userTurns.NonCommandUserTurnCount,
+		FirstNonCommandUserLine: userTurns.FirstNonCommandUserLine,
 	}
 }
 

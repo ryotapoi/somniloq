@@ -103,13 +103,15 @@ somniloq sessions --short                # basename of repo_path for unaliased p
 somniloq sessions --format json          # JSON array instead of TSV
 ```
 
-Output is TSV: `session_id`, `started_at ~ ended_at`, `project`, `custom_title`, `message_count`, `body_size`
+Output is TSV: `session_id`, `started_at ~ ended_at`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`
 
 When `projectAliases` matches a repo path or basename, project output uses only the canonical name.
 
 `body_size` is the total body size in bytes (sidechain excluded), so you can tell whether a session is large before `show`ing it.
 
-`--format json` emits a JSON array with `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messageCount`, `bodySize`. JSON timestamps are the stored RFC3339 UTC values (see "JSON output" below).
+`non_command_user_turn_count` and `first_non_command_user_line` are skip hints for consumers: they use the same sidechain-excluded user-turn population as `outline`, then ignore user turns whose trimmed content starts with `/` or matches a configured `commandPatterns` regex. The CLI only reports these values; it does not skip sessions.
+
+`--format json` emits a JSON array with `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messageCount`, `bodySize`, `nonCommandUserTurnCount`, `firstNonCommandUserLine`. JSON timestamps are the stored RFC3339 UTC values (see "JSON output" below).
 
 ### projects
 
@@ -177,11 +179,14 @@ Optional config file at `~/.somniloq/config.json` (override with the global `--c
 {
   "projectAliases": {
     "newname": ["oldname"]
-  }
+  },
+  "commandPatterns": ["^Daily report"]
 }
 ```
 
 `projectAliases` groups project names that refer to the same project over time (e.g. a renamed repository): current name → old names. When a `--project` value exactly matches any name in a group, the filter expands to the whole group, so sessions recorded under either name are found. Non-matching values behave as before. Filtering applies to `sessions`, `show`, and `search`. Project display in `sessions`, `show`, `projects`, and `search` uses only the canonical name when the stored `repo_path` or basename matches an alias group; `projects` also aggregates those rows under the canonical name.
+
+`commandPatterns` is a list of Go regular expressions used only by `sessions` skip-hint columns. Each pattern matches against the trimmed full user message. Invalid regular expressions make config loading fail, the same as broken JSON, so typos do not silently disable the setting.
 
 ## Common Options
 

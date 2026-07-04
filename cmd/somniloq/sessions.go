@@ -27,6 +27,10 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	if err := validateFormat(*format, "tsv", "json"); err != nil {
 		return 1, err
 	}
+	matcher, err := newCommandMatcher(cfg)
+	if err != nil {
+		return 1, err
+	}
 
 	filter, err := buildSessionFilter(*since, *until, *project, cfg)
 	if err != nil {
@@ -43,11 +47,15 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	if err != nil {
 		return 1, err
 	}
+	derived, err := deriveSessionUserTurnSummaries(db, rows, matcher)
+	if err != nil {
+		return 1, err
+	}
 
 	if *format == "json" {
 		entries := make([]sessionJSON, len(rows))
 		for i, r := range rows {
-			entries[i] = newSessionJSON(r, resolveProjectDisplayName(r.RepoPath, *short, cfg))
+			entries[i] = newSessionJSON(r, resolveProjectDisplayName(r.RepoPath, *short, cfg), derived[i])
 		}
 		if err := writeJSON(out, entries); err != nil {
 			return 1, err
@@ -55,13 +63,45 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 		return 0, nil
 	}
 
-	for _, r := range rows {
+	for i, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
 		proj := resolveProjectDisplayName(r.RepoPath, *short, cfg)
-		fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%d\t%d\n",
-			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), proj, title, r.MessageCount, r.BodySize)
+		fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
+			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), proj, title, r.MessageCount, r.BodySize,
+			derived[i].NonCommandUserTurnCount, sanitizeTSV(derived[i].FirstNonCommandUserLine))
 	}
 	return 0, nil
+}
+
+type sessionUserTurnSummary struct {
+	NonCommandUserTurnCount int
+	FirstNonCommandUserLine string
+}
+
+func deriveSessionUserTurnSummaries(db *core.DB, sessions []core.SessionRow, matcher commandMatcher) ([]sessionUserTurnSummary, error) {
+	summaries := make([]sessionUserTurnSummary, len(sessions))
+	for i, session := range sessions {
+		messages, err := db.GetMessages(session.Source, session.SessionID)
+		if err != nil {
+			return nil, err
+		}
+		summaries[i] = summarizeNonCommandUserTurns(messages, matcher)
+	}
+	return summaries, nil
+}
+
+func summarizeNonCommandUserTurns(messages []core.MessageRow, matcher commandMatcher) sessionUserTurnSummary {
+	var summary sessionUserTurnSummary
+	for _, tm := range userTurnMessages(messages) {
+		if matcher.isCommand(tm.Msg.Content) {
+			continue
+		}
+		summary.NonCommandUserTurnCount++
+		if summary.FirstNonCommandUserLine == "" {
+			summary.FirstNonCommandUserLine = firstLine(tm.Msg.Content)
+		}
+	}
+	return summary
 }
 
 var tsvReplacer = strings.NewReplacer("\t", " ", "\n", " ", "\r", " ")

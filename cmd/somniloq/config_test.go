@@ -36,6 +36,24 @@ func TestLoadConfig_InvalidJSONIsError(t *testing.T) {
 	}
 }
 
+func TestLoadConfig_InvalidCommandPatternIsError(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"commandPatterns": ["["]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	_, err := loadConfig(path)
+	if err == nil {
+		t.Fatal("expected error for invalid commandPatterns, got nil")
+	}
+	if !strings.Contains(err.Error(), "invalid commandPatterns pattern") {
+		t.Errorf("err = %v, want invalid commandPatterns pattern", err)
+	}
+	if !strings.Contains(err.Error(), path) {
+		t.Errorf("err = %v, want the config path in the message", err)
+	}
+}
+
 func TestLoadConfig_ParsesProjectAliases(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	body := `{"projectAliases": {"somniloq": ["Brimday", "old-somniloq"]}}`

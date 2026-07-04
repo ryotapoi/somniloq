@@ -16,7 +16,7 @@ sources:
 
 # Configuration and projects
 
-`repo_path` と `--project` 周りを変えるときの地図。表示名、filter、集約キーが混ざりやすいので、入口を分けて見る。
+`repo_path` / `--project` / config 周りを変えるときの地図。表示名、filter、集約キー、sessions skip hint 用の command pattern が混ざりやすいので、入口を分けて見る。
 
 ## repo_path
 
@@ -30,6 +30,12 @@ sources:
 - alias 展開は `config.expandProject`。完全一致したときだけ canonical + old names に展開する。
 - `cmd/somniloq/filter.go` の `buildSessionFilter` が time flag と project alias をまとめて `core.SessionFilter` にする。
 - SQL 条件は `internal/core/db.go` の `projectsCondition`。repo_path substring LIKE を OR でつなぐ。
+
+## commandPatterns
+
+- `commandPatterns` は `cmd/somniloq/config.go` で読み、invalid regexp は config error にする。壊れた JSON / typo を黙って無効化しない方針に揃える。
+- 評価は `commandMatcher`。trim 済み user message 本文が `/` 始まり、または regexp に一致したら command 扱い。
+- 利用箇所は `cmd/somniloq/sessions.go` の skip hint 列だけ。セッション自体は CLI では除外しない。
 
 ## 集約と表示
 

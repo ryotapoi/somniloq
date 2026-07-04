@@ -54,6 +54,8 @@ func TestSessionsCmd_FormatJSON(t *testing.T) {
 		"endedAt":      rows[0].EndedAt,
 		"messageCount": float64(rows[0].MessageCount),
 		"bodySize":     float64(rows[0].BodySize),
+		"nonCommandUserTurnCount": float64(2),
+		"firstNonCommandUserLine": "first question",
 	}
 	for k, v := range want {
 		if got[0][k] != v {
