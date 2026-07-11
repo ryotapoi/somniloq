@@ -4,6 +4,7 @@ sources:
   - internal/core/db.go
   - internal/core/db_schema.go
   - internal/core/db_query.go
+  - internal/core/migrate_v04.go
   - internal/core/backfill.go
   - internal/core/backfill_test.go
 ---

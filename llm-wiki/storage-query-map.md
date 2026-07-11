@@ -7,6 +7,7 @@ sources:
   - docs/decisions/0004-codex-schema-and-migration.md
   - internal/core/db.go
   - internal/core/db_schema.go
+  - internal/core/migrate_v04.go
   - internal/core/db_write.go
   - internal/core/db_query.go
   - internal/core/backfill.go
@@ -32,8 +33,9 @@ DB schema、migration、query helper を触るときの地図。SQL の意味や
   - `sessionRowSelect` / `scanSessionRow`: sessions 系表示の SELECT と scan shape。列を変えるなら両方を同時に変える。
   - `timeFilterConditions` / `projectsCondition`: sessions/projects/search が共有する filter 組み立て。
   - `GetMessages` / `GetSummaryMessages` / `SearchMessages`: sidechain 除外と rowid tie-break の中心。
-- `internal/core/backfill.go`
+- `internal/core/migrate_v04.go`
   - `MigrateToV04IfNeeded`: v0.3 DB を v0.4 composite source schema へ rebuild。
+- `internal/core/backfill.go`
   - `CountOrphanSessions`: destructive prompt の事前件数。
   - `Backfill`: orphan DELETE と `repo_path` 解決。
 
@@ -43,6 +45,7 @@ DB schema、migration、query helper を触るときの地図。SQL の意味や
 - import/write SQL を変える: `db_write.go` の `importTx` / upsert / insert / update 群 -> import tests。
 - sessions/projects の列や集計を変える: `db_query.go` の `sessionRowSelect` -> `scanSessionRow` -> `ListSessions` / `ListProjects` -> cmd formatter / JSON output。
 - message order を変える: `db_query.go` の `GetMessages`, `GetSummaryMessages`, `SearchMessages` -> `cmd/somniloq/turn.go` -> outline/show/search tests。
+- v0.4 migration を変える: `internal/core/migrate_v04.go` の PRAGMA / transaction / DDL order と migration tests を一緒に見る。
 - destructive backfill を変える: `cmd/somniloq/backfill.go` の prompt/TTY path と `internal/core/backfill.go` の DB path を一緒に見る。
 
 ## 罠へのポインタ
