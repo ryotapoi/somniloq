@@ -1,6 +1,7 @@
 package core
 
 import (
+	"database/sql"
 	"fmt"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
@@ -59,6 +60,15 @@ func restoreForeignKeys(db execer, prevFK int) error {
 }
 
 func migrateToV04WithRestore(db *DB, restore func(execer, int) error) (sessionsN, messagesN, importStatesN int, err error) {
+	return migrateToV04WithRestoreAfterDropSessions(db, restore, nil)
+}
+
+// afterDropSessionsHook is used by tests to inspect and fail after the most
+// destructive migration statement while its transaction is still open.
+// Production migration passes nil.
+type afterDropSessionsHook func(tx *sql.Tx) error
+
+func migrateToV04WithRestoreAfterDropSessions(db *DB, restore func(execer, int) error, afterDropSessions afterDropSessionsHook) (sessionsN, messagesN, importStatesN int, err error) {
 	var prevFK int
 	if err = db.execer().QueryRow("PRAGMA foreign_keys").Scan(&prevFK); err != nil {
 		return 0, 0, 0, fmt.Errorf("read pragma foreign_keys: %w", err)
@@ -154,6 +164,11 @@ func migrateToV04WithRestore(db *DB, restore func(execer, int) error) (sessionsN
 	}
 	if _, err = tx.Exec(`DROP TABLE sessions`); err != nil {
 		return 0, 0, 0, fmt.Errorf("drop sessions: %w", err)
+	}
+	if afterDropSessions != nil {
+		if err = afterDropSessions(tx); err != nil {
+			return 0, 0, 0, fmt.Errorf("drop sessions: %w", err)
+		}
 	}
 	if _, err = tx.Exec(`DROP TABLE import_state`); err != nil {
 		return 0, 0, 0, fmt.Errorf("drop import_state: %w", err)

@@ -344,32 +344,128 @@ func tableColumns(t *testing.T, db *sql.DB, table string) []tableColumnDef {
 	return columns
 }
 
-func openSchemaConstantDB(t *testing.T) *sql.DB {
-	t.Helper()
-	db, err := sql.Open("sqlite", ":memory:")
-	if err != nil {
-		t.Fatalf("sql.Open: %v", err)
+func normalizedTableDDL(table, sql string) string {
+	ddl := sql
+	if withoutIfNotExists := strings.TrimPrefix(sql, "CREATE TABLE IF NOT EXISTS "); withoutIfNotExists != sql {
+		ddl = "CREATE TABLE " + withoutIfNotExists
 	}
-	db.SetMaxOpenConns(1)
-	t.Cleanup(func() { db.Close() })
-	if _, err := db.Exec(schema); err != nil {
-		t.Fatalf("schema exec: %v", err)
+	quotedTable := `CREATE TABLE "` + table + `"`
+	if withoutQuotes := strings.TrimPrefix(ddl, quotedTable); withoutQuotes != ddl {
+		ddl = "CREATE TABLE " + table + withoutQuotes
 	}
-	return db
+	return normalizeSQLWhitespaceOutsideQuotes(ddl)
 }
 
-func TestMigrateToV04_SchemaMatchesSchemaConstant(t *testing.T) {
+func normalizeSQLWhitespaceOutsideQuotes(sql string) string {
+	var normalized strings.Builder
+	normalized.Grow(len(sql))
+	var quote byte
+	spacePending := false
+	for i := 0; i < len(sql); i++ {
+		ch := sql[i]
+		if quote != 0 {
+			normalized.WriteByte(ch)
+			if ch == quote {
+				if quote != '[' && i+1 < len(sql) && sql[i+1] == quote {
+					normalized.WriteByte(sql[i+1])
+					i++
+					continue
+				}
+				quote = 0
+			}
+			continue
+		}
+
+		if isSQLWhitespace(ch) {
+			spacePending = normalized.Len() > 0
+			continue
+		}
+		if spacePending {
+			normalized.WriteByte(' ')
+			spacePending = false
+		}
+		normalized.WriteByte(ch)
+		switch ch {
+		case '\'', '"', '`':
+			quote = ch
+		case '[':
+			quote = ']'
+		}
+	}
+	return normalized.String()
+}
+
+func isSQLWhitespace(ch byte) bool {
+	switch ch {
+	case ' ', '\t', '\n', '\r', '\f', '\v':
+		return true
+	default:
+		return false
+	}
+}
+
+func TestNormalizedTableDDL(t *testing.T) {
+	tests := []struct {
+		name string
+		in   string
+		want string
+	}{
+		{
+			name: "fresh table prefix and whitespace",
+			in:   "CREATE TABLE IF NOT EXISTS sessions (\n  id TEXT\n)",
+			want: "CREATE TABLE sessions ( id TEXT )",
+		},
+		{
+			name: "normalizes only SQLite renamed table quoting",
+			in:   "CREATE TABLE \"sessions\" (\"kind\" TEXT DEFAULT 'CamelCase')",
+			want: "CREATE TABLE sessions (\"kind\" TEXT DEFAULT 'CamelCase')",
+		},
+		{
+			name: "preserves repeated whitespace in quoted tokens",
+			in:   "CREATE TABLE sessions (kind TEXT DEFAULT 'a  b'  )",
+			want: "CREATE TABLE sessions (kind TEXT DEFAULT 'a  b' )",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := normalizedTableDDL("sessions", tt.in); got != tt.want {
+				t.Errorf("normalizedTableDDL(%q) = %q, want %q", tt.in, got, tt.want)
+			}
+		})
+	}
+	if one, two := normalizedTableDDL("sessions", "CREATE TABLE sessions (kind TEXT DEFAULT 'a b')"), normalizedTableDDL("sessions", "CREATE TABLE sessions (kind TEXT DEFAULT 'a  b')"); one == two {
+		t.Fatalf("quoted string whitespace was normalized: one=%q two=%q", one, two)
+	}
+}
+
+func tableDDL(t *testing.T, db *sql.DB, table string) string {
+	t.Helper()
+	var ddl string
+	err := db.QueryRow(`SELECT sql FROM sqlite_master WHERE type='table' AND name=?`, table).Scan(&ddl)
+	if err != nil {
+		t.Fatalf("sqlite_master %s: %v", table, err)
+	}
+	return normalizedTableDDL(table, ddl)
+}
+
+func TestMigrateToV04_SchemaMatchesFreshOpenDB(t *testing.T) {
 	migrated := setupV03DB(t)
 	if _, _, _, err := migrateToV04(migrated); err != nil {
 		t.Fatalf("migrateToV04: %v", err)
 	}
-	fresh := openSchemaConstantDB(t)
+	fresh := testDB(t)
 
 	for _, table := range []string{"sessions", "messages", "import_state"} {
+		gotDDL := tableDDL(t, migrated.db, table)
+		wantDDL := tableDDL(t, fresh.db, table)
+		if gotDDL != wantDDL {
+			t.Errorf("%s sqlite_master DDL after migrateToV04 differs from fresh OpenDB\n got: %s\nwant: %s", table, gotDDL, wantDDL)
+		}
+
 		got := tableColumns(t, migrated.db, table)
-		want := tableColumns(t, fresh, table)
+		want := tableColumns(t, fresh.db, table)
 		if !reflect.DeepEqual(got, want) {
-			t.Errorf("%s columns after migrateToV04 differ from schema constant\n got: %#v\nwant: %#v", table, got, want)
+			t.Errorf("%s PRAGMA table_info after migrateToV04 differs from fresh OpenDB\n got: %#v\nwant: %#v", table, got, want)
 		}
 	}
 }

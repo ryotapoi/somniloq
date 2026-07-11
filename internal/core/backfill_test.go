@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -766,6 +767,95 @@ func TestMigrateToV04_ReturnsRestoreForeignKeysError(t *testing.T) {
 	}
 	if ms != 1 || mm != 1 || mi != 0 {
 		t.Errorf("migrated counts = {%d %d %d}, want 1/1/0 even when restore fails", ms, mm, mi)
+	}
+}
+
+type v03TableSnapshot struct {
+	DDL     string
+	Columns []tableColumnDef
+	Rows    [][]any
+}
+
+type v03DatabaseSnapshot struct {
+	Tables      map[string]v03TableSnapshot
+	ForeignKeys int
+}
+
+func snapshotV03Database(t *testing.T, db *DB) v03DatabaseSnapshot {
+	t.Helper()
+	snapshot := v03DatabaseSnapshot{Tables: make(map[string]v03TableSnapshot)}
+	if err := db.db.QueryRow("PRAGMA foreign_keys").Scan(&snapshot.ForeignKeys); err != nil {
+		t.Fatalf("read PRAGMA foreign_keys: %v", err)
+	}
+	for _, table := range []string{"sessions", "messages", "import_state"} {
+		snapshot.Tables[table] = v03TableSnapshot{
+			DDL:     tableDDL(t, db.db, table),
+			Columns: tableColumns(t, db.db, table),
+			Rows:    tableRows(t, db.db, table),
+		}
+	}
+	return snapshot
+}
+
+func tableRows(t *testing.T, db *sql.DB, table string) [][]any {
+	t.Helper()
+	rows, err := db.Query("SELECT * FROM " + table + " ORDER BY 1")
+	if err != nil {
+		t.Fatalf("select %s rows: %v", table, err)
+	}
+	defer rows.Close()
+
+	columns, err := rows.Columns()
+	if err != nil {
+		t.Fatalf("columns %s: %v", table, err)
+	}
+	var result [][]any
+	for rows.Next() {
+		values := make([]any, len(columns))
+		dest := make([]any, len(columns))
+		for i := range values {
+			dest[i] = &values[i]
+		}
+		if err := rows.Scan(dest...); err != nil {
+			t.Fatalf("scan %s row: %v", table, err)
+		}
+		result = append(result, values)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate %s rows: %v", table, err)
+	}
+	return result
+}
+
+func TestMigrateToV04_RollsBackAfterDestructiveStepFailure(t *testing.T) {
+	db := setupV03DB(t)
+	insertV03Session(t, db, "s1", "/proj", "/proj")
+	insertV03Session(t, db, "s2", "/other", "")
+	insertV03Message(t, db, "s1", "m1")
+	insertV03ImportState(t, db, "/path/to/a.jsonl")
+	if _, err := db.db.Exec("PRAGMA foreign_keys = ON"); err != nil {
+		t.Fatalf("enable foreign_keys: %v", err)
+	}
+
+	before := snapshotV03Database(t, db)
+	injected := errors.New("injected failure after drop sessions")
+	_, _, _, err := migrateToV04WithRestoreAfterDropSessions(db, restoreForeignKeys, func(tx *sql.Tx) error {
+		var oldTableCount int
+		if err := tx.QueryRow(`SELECT COUNT(*) FROM sqlite_master WHERE type='table' AND name IN ('messages', 'sessions')`).Scan(&oldTableCount); err != nil {
+			t.Fatalf("inspect destructive migration state: %v", err)
+		}
+		if oldTableCount != 0 {
+			t.Fatalf("old tables remaining after drop sessions = %d, want 0", oldTableCount)
+		}
+		return injected
+	})
+	if !errors.Is(err, injected) {
+		t.Fatalf("migrateToV04WithRestoreAfterDropSessions error = %v, want injected failure", err)
+	}
+
+	after := snapshotV03Database(t, db)
+	if !reflect.DeepEqual(after, before) {
+		t.Errorf("v0.3 database changed after rollback\n got: %#v\nwant: %#v", after, before)
 	}
 }
 
