@@ -76,6 +76,9 @@ type SessionMetaWriter interface {
 type fileHandler struct {
 	resolveRepoPath ingest.RepoResolver
 	importedAt      string
+	path            string
+	lineNumber      int
+	diagnostic      error
 	repoCache       map[string]string
 	titles          map[string]string
 	agentNames      map[string]string
@@ -96,10 +99,28 @@ func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileS
 }
 
 func (h *fileHandler) Begin(path string, offset int64) error {
+	h.path = path
+	if offset <= 0 {
+		return nil
+	}
+
+	f, err := os.Open(path)
+	if err != nil {
+		return err
+	}
+	defer f.Close()
+
+	lineNumber, err := ingest.CountLineFeeds(f, offset)
+	if err != nil {
+		return err
+	}
+	h.lineNumber = lineNumber
 	return nil
 }
 
 func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (ingest.LineOutcome, error) {
+	h.lineNumber++
+	h.diagnostic = nil
 	trimmed := bytes.TrimSpace(line)
 	if len(trimmed) == 0 {
 		return ingest.LineIgnored, nil
@@ -107,6 +128,7 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 
 	rec, perr := ParseRecord(trimmed)
 	if perr != nil {
+		h.setUnparsedDiagnostic(perr)
 		return ingest.LineUnparsed, nil
 	}
 
@@ -119,6 +141,7 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 		}
 		normalized, perr := NormalizeRecord(rec, repo)
 		if perr != nil {
+			h.setUnparsedDiagnostic(perr)
 			return ingest.LineUnparsed, nil
 		}
 		if err := ingest.PersistMessage(tx, normalized, h.importedAt); err != nil {
@@ -131,6 +154,14 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 		h.agentNames[rec.SessionID] = rec.AgentName
 	}
 	return ingest.LineIgnored, nil
+}
+
+func (h *fileHandler) UnparsedDiagnostic() error {
+	return h.diagnostic
+}
+
+func (h *fileHandler) setUnparsedDiagnostic(err error) {
+	h.diagnostic = fmt.Errorf("%s:%d: %w", h.path, h.lineNumber, err)
 }
 
 func (h *fileHandler) Flush(tx ingest.ImportTransaction) error {

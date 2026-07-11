@@ -19,7 +19,10 @@ type ImportResult struct {
 	// were dropped (broken JSON, malformed payloads). Record types a source
 	// deliberately ignores are not counted.
 	UnparsedLines int
-	Errors        []error
+	// UnparsedDiagnostics holds the first five parse or normalization errors
+	// encountered by this import run, in source/file/line encounter order.
+	UnparsedDiagnostics []error
+	Errors              []error
 }
 
 type ImportOptions struct {
@@ -120,7 +123,19 @@ func (r *ImportResult) add(other *ImportResult) {
 	r.FilesSkipped += other.FilesSkipped
 	r.FilesFailed += other.FilesFailed
 	r.UnparsedLines += other.UnparsedLines
+	r.addUnparsedDiagnostics(other.UnparsedDiagnostics)
 	r.Errors = append(r.Errors, other.Errors...)
+}
+
+func (r *ImportResult) addUnparsedDiagnostics(diagnostics []error) {
+	remaining := ingest.MaxUnparsedDiagnostics - len(r.UnparsedDiagnostics)
+	if remaining <= 0 {
+		return
+	}
+	if len(diagnostics) > remaining {
+		diagnostics = diagnostics[:remaining]
+	}
+	r.UnparsedDiagnostics = append(r.UnparsedDiagnostics, diagnostics...)
 }
 
 func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportResult, error) {
@@ -167,6 +182,7 @@ func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportR
 			continue
 		}
 		result.UnparsedLines += pr.UnparsedLines
+		result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
 		result.FilesImported++
 	}
 

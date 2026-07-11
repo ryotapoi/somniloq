@@ -10,6 +10,10 @@ import (
 
 const readBufferSize = 64 * 1024
 
+// MaxUnparsedDiagnostics bounds retained parse/normalization diagnostics for
+// one import run. It is intentionally fixed rather than user-configurable.
+const MaxUnparsedDiagnostics = 5
+
 // LineOutcome describes how a FileHandler consumed one line.
 type LineOutcome int
 
@@ -33,6 +37,16 @@ type ProcessResult struct {
 	NewOffset int64
 	// UnparsedLines counts lines dropped as LineUnparsed during this pass.
 	UnparsedLines int
+	// UnparsedDiagnostics holds up to five parse or normalization diagnostics
+	// in encounter order. Each one identifies the physical JSONL line.
+	UnparsedDiagnostics []error
+}
+
+// UnparsedDiagnosticReporter lets a source-specific handler attach the
+// underlying error to its most recent LineUnparsed outcome. It intentionally
+// does not report persistence failures, which abort the file instead.
+type UnparsedDiagnosticReporter interface {
+	UnparsedDiagnostic() error
 }
 
 // FileHandler is the source-specific part of processing one JSONL file.
@@ -100,6 +114,11 @@ func ProcessJSONL(store Store, source Source, handler FileHandler, file File, of
 			hasBody = true
 		case LineUnparsed:
 			unparsed++
+			if reporter, ok := handler.(UnparsedDiagnosticReporter); ok && len(keep.UnparsedDiagnostics) < MaxUnparsedDiagnostics {
+				if diagnostic := reporter.UnparsedDiagnostic(); diagnostic != nil {
+					keep.UnparsedDiagnostics = append(keep.UnparsedDiagnostics, diagnostic)
+				}
+			}
 		}
 		return nil
 	})
@@ -156,4 +175,32 @@ func ForEachLine(r io.Reader, limit int64, fn func(line []byte) error) (int64, e
 		}
 	}
 	return consumed, nil
+}
+
+// CountLineFeeds counts complete physical lines in the first limit bytes of r.
+// Unlike ForEachLine with a byte limit, it never reads past that boundary; an
+// unterminated line at the boundary is therefore counted when its continuation
+// is processed on a later incremental import.
+func CountLineFeeds(r io.Reader, limit int64) (int, error) {
+	if limit <= 0 {
+		return 0, nil
+	}
+
+	limited := io.LimitReader(r, limit)
+	buf := make([]byte, readBufferSize)
+	var lines int
+	for {
+		n, err := limited.Read(buf)
+		for _, b := range buf[:n] {
+			if b == '\n' {
+				lines++
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return lines, nil
+			}
+			return lines, err
+		}
+	}
 }

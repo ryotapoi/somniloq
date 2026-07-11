@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -163,7 +164,8 @@ func TestImport_FillsRepoPath(t *testing.T) {
 
 	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/Users/test/proj/.claude/worktrees/feature","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
 `
-	os.WriteFile(filepath.Join(projDir, "s1.jsonl"), []byte(jsonl), 0o644)
+	path := filepath.Join(projDir, "s1.jsonl")
+	os.WriteFile(path, []byte(jsonl), 0o644)
 
 	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 	if err != nil {
@@ -196,7 +198,8 @@ func TestImport_CountsUnparsedLines(t *testing.T) {
 {"type":"user","uuid":"u2","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":"not an envelope object"}
 {"type":"summary","summary":"ignored record type"}
 `
-	os.WriteFile(filepath.Join(projDir, "s1.jsonl"), []byte(jsonl), 0o644)
+	path := filepath.Join(projDir, "s1.jsonl")
+	os.WriteFile(path, []byte(jsonl), 0o644)
 
 	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 	if err != nil {
@@ -208,11 +211,119 @@ func TestImport_CountsUnparsedLines(t *testing.T) {
 	if res.UnparsedLines != 2 {
 		t.Errorf("UnparsedLines: got %d, want 2", res.UnparsedLines)
 	}
+	if len(res.UnparsedDiagnostics) != 2 {
+		t.Fatalf("UnparsedDiagnostics: got %d, want 2: %v", len(res.UnparsedDiagnostics), res.UnparsedDiagnostics)
+	}
+	for i, want := range []string{
+		path + ":2: invalid character 'b' looking for beginning of object key string",
+		path + ":3: json: cannot unmarshal string into Go value of type claudecode.MessageEnvelope",
+	} {
+		if got := res.UnparsedDiagnostics[i].Error(); got != want {
+			t.Errorf("UnparsedDiagnostics[%d] = %q, want %q", i, got, want)
+		}
+	}
 
 	var count int
 	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count)
 	if count != 1 {
 		t.Errorf("messages: got %d, want 1", count)
+	}
+}
+
+func TestImport_CapsUnparsedDiagnosticsInEncounterOrder(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "-Users-test-proj")
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	lines := []string{
+		`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}`,
+		`{broken 1`, `{broken 2`, `{broken 3`, `{broken 4`, `{broken 5`, `{broken 6`,
+	}
+	path := filepath.Join(projDir, "s1.jsonl")
+	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+	if res.UnparsedLines != 6 {
+		t.Errorf("UnparsedLines: got %d, want 6", res.UnparsedLines)
+	}
+	if len(res.UnparsedDiagnostics) != 5 {
+		t.Fatalf("UnparsedDiagnostics: got %d, want 5: %v", len(res.UnparsedDiagnostics), res.UnparsedDiagnostics)
+	}
+	for i, diagnostic := range res.UnparsedDiagnostics {
+		wantPrefix := path + ":" + strconv.Itoa(i+2) + ": "
+		if !strings.HasPrefix(diagnostic.Error(), wantPrefix) {
+			t.Errorf("UnparsedDiagnostics[%d] = %q, want prefix %q", i, diagnostic, wantPrefix)
+		}
+	}
+}
+
+func TestImport_ReportsClaudeCodeDiagnosticLineAfterOffset(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "-Users-test-proj")
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(projDir, "s1.jsonl")
+	first := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}` + "\n"
+	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+		t.Fatalf("initial Import failed: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(first+"{broken json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	if err != nil {
+		t.Fatalf("incremental Import failed: %v", err)
+	}
+	if res.UnparsedLines != 1 || len(res.UnparsedDiagnostics) != 1 {
+		t.Fatalf("incremental diagnostics: lines=%d diagnostics=%v", res.UnparsedLines, res.UnparsedDiagnostics)
+	}
+	if got, wantPrefix := res.UnparsedDiagnostics[0].Error(), path+":2: "; !strings.HasPrefix(got, wantPrefix) {
+		t.Errorf("diagnostic = %q, want prefix %q", got, wantPrefix)
+	}
+}
+
+func TestImport_ReportsClaudeCodeDiagnosticOnUnterminatedPrefixLine(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "-Users-test-proj")
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(projDir, "s1.jsonl")
+	first := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}`
+	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+		t.Fatalf("initial Import failed: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(first+"{broken json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	if err != nil {
+		t.Fatalf("incremental Import failed: %v", err)
+	}
+	if res.UnparsedLines != 1 || len(res.UnparsedDiagnostics) != 1 {
+		t.Fatalf("incremental diagnostics: lines=%d diagnostics=%v", res.UnparsedLines, res.UnparsedDiagnostics)
+	}
+	if got, wantPrefix := res.UnparsedDiagnostics[0].Error(), path+":1: "; !strings.HasPrefix(got, wantPrefix) {
+		t.Errorf("diagnostic = %q, want prefix %q", got, wantPrefix)
 	}
 }
 

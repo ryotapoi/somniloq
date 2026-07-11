@@ -17,6 +17,7 @@ const importHelpDetails = `Output:
   skipped: unchanged files skipped by differential import.
   failed: files that were discovered but could not be imported.
   unparsed lines: broken JSON or malformed payload lines. Deliberately ignored record types are not counted.
+  Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.
 
 Notes:
   Default import is differential. Use --full to delete the whole somniloq DB and re-import from the selected source(s).
@@ -76,6 +77,9 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 
 	for _, e := range result.Errors {
 		fmt.Fprintf(errOut, "  error: %v\n", e)
+	}
+	for _, diagnostic := range result.UnparsedDiagnostics {
+		fmt.Fprintf(errOut, "  error: %v\n", diagnostic)
 	}
 
 	// Errors covers failed files and non-fatal scan failures alike.

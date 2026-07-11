@@ -42,6 +42,10 @@ func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	if out.String() != want {
 		t.Errorf("stdout = %q, want %q", out.String(), want)
 	}
+	wantErr := "  error: " + filepath.Join(projDir, "s1.jsonl") + ":2: invalid character 'b' looking for beginning of object key string\n"
+	if errOut.String() != wantErr {
+		t.Errorf("stderr = %q, want %q", errOut.String(), wantErr)
+	}
 }
 
 // Pins the CLI contract for non-fatal scan failures: discovered files are

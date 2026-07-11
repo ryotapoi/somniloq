@@ -70,7 +70,7 @@ Claude Code の JSONL を `~/.claude/projects/` から、Codex の rollout JSONL
 
 `--full` は再取り込み前に somniloq DB 全体を削除する。`somniloq import --source codex --full` を実行した場合も Claude Code の行は削除され、その後 Codex のログだけを取り込む。
 
-エラーは非致命として扱う。parse できない行（壊れた JSON、不正な payload）はスキップしてサマリの `unparsed lines` に計上し、読めないディレクトリ・ファイルもスキップして残りを取り込む。スキップしたエラーは stderr に列挙され、1 件以上あれば exit code は 1 になる。source のディレクトリ自体が存在しない場合は未使用の source として扱い、エラーにしない。
+エラーは非致命として扱う。parse できない行（壊れた JSON、不正な payload）はスキップしてサマリの `unparsed lines` に計上する。スキーマ変更時の原因を追えるよう、parse / normalize 失敗の先頭 5 件を `ファイル:行番号: エラー内容` として stderr に出すが、これだけでは exit code は変わらない。読めないディレクトリ・ファイルもスキップして残りを取り込み、これらのエラーは stderr に列挙して exit code を 1 にする。source のディレクトリ自体が存在しない場合は未使用の source として扱い、エラーにしない。
 
 ### backfill
 

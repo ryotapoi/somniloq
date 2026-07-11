@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -74,6 +75,7 @@ type fileHandler struct {
 	meta            SessionMeta
 	hasMeta         bool
 	lineNumber      int
+	diagnostic      error
 }
 
 func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
@@ -101,8 +103,16 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 	}
 	defer f.Close()
 
-	_, err = ingest.ForEachLine(f, offset, func(line []byte) error {
-		h.lineNumber++
+	lineNumber, err := ingest.CountLineFeeds(f, offset)
+	if err != nil {
+		return err
+	}
+	h.lineNumber = lineNumber
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return err
+	}
+
+	_, err = ingest.ForEachLine(io.LimitReader(f, offset), -1, func(line []byte) error {
 		trimmed := bytes.TrimSpace(line)
 		if len(trimmed) == 0 {
 			return nil
@@ -124,6 +134,7 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 
 func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (ingest.LineOutcome, error) {
 	h.lineNumber++
+	h.diagnostic = nil
 	trimmed := bytes.TrimSpace(line)
 	if len(trimmed) == 0 {
 		return ingest.LineIgnored, nil
@@ -131,12 +142,14 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 
 	rec, perr := ParseRecord(trimmed)
 	if perr != nil {
+		h.setUnparsedDiagnostic(perr)
 		return ingest.LineUnparsed, nil
 	}
 
 	if rec.Type == "session_meta" {
 		nextMeta, perr := ParseSessionMeta(rec, h.resolveRepoPathFromRecord(rec))
 		if perr != nil {
+			h.setUnparsedDiagnostic(perr)
 			return ingest.LineUnparsed, nil
 		}
 		h.meta = *nextMeta
@@ -146,6 +159,7 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 
 	ok, _, perr := IsMessageRecord(rec)
 	if perr != nil {
+		h.setUnparsedDiagnostic(perr)
 		return ingest.LineUnparsed, nil
 	}
 	if !ok || !h.hasMeta {
@@ -154,12 +168,21 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 
 	normalized, perr := NormalizeMessage(rec, h.meta, h.path, h.lineNumber)
 	if perr != nil {
+		h.setUnparsedDiagnostic(perr)
 		return ingest.LineUnparsed, nil
 	}
 	if err := ingest.PersistMessage(tx, normalized, h.importedAt); err != nil {
 		return ingest.LineIgnored, err
 	}
 	return ingest.LineWroteBody, nil
+}
+
+func (h *fileHandler) UnparsedDiagnostic() error {
+	return h.diagnostic
+}
+
+func (h *fileHandler) setUnparsedDiagnostic(err error) {
+	h.diagnostic = fmt.Errorf("%s:%d: %w", h.path, h.lineNumber, err)
 }
 
 func (h *fileHandler) Flush(tx ingest.ImportTransaction) error {

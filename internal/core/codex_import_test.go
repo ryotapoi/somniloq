@@ -148,11 +148,51 @@ func TestCodexProcessFile_CountsUnparsedLines(t *testing.T) {
 	if pr.UnparsedLines != 2 {
 		t.Errorf("UnparsedLines: got %d, want 2", pr.UnparsedLines)
 	}
+	if len(pr.UnparsedDiagnostics) != 2 {
+		t.Fatalf("UnparsedDiagnostics: got %d, want 2: %v", len(pr.UnparsedDiagnostics), pr.UnparsedDiagnostics)
+	}
+	for i, wantPrefix := range []string{path + ":2: ", path + ":4: "} {
+		if got := pr.UnparsedDiagnostics[i].Error(); !strings.HasPrefix(got, wantPrefix) {
+			t.Errorf("UnparsedDiagnostics[%d] = %q, want prefix %q", i, got, wantPrefix)
+		}
+	}
 
 	var count int
 	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='codex-session'").Scan(&count)
 	if count != 1 {
 		t.Errorf("messages: got %d, want 1", count)
+	}
+}
+
+func TestCodexImport_ReportsDiagnosticOnUnterminatedPrefixLine(t *testing.T) {
+	db := testDB(t)
+	root := t.TempDir()
+	nested := filepath.Join(root, "2026", "05", "01")
+	if err := os.MkdirAll(nested, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(nested, "rollout.jsonl")
+	first := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-session","cwd":"/nonexistent/codex-project","cli_version":"0.128.0","git":{"branch":"main"}}}` + "\n" +
+		`{"timestamp":"2026-05-01T00:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}`
+	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Import(db, ImportOptions{CodexSessionsDir: root, Source: ImportSourceCodex}); err != nil {
+		t.Fatalf("initial Import failed: %v", err)
+	}
+	if err := os.WriteFile(path, []byte(first+"{broken json\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	res, err := Import(db, ImportOptions{CodexSessionsDir: root, Source: ImportSourceCodex})
+	if err != nil {
+		t.Fatalf("incremental Import failed: %v", err)
+	}
+	if res.UnparsedLines != 1 || len(res.UnparsedDiagnostics) != 1 {
+		t.Fatalf("incremental diagnostics: lines=%d diagnostics=%v", res.UnparsedLines, res.UnparsedDiagnostics)
+	}
+	if got, wantPrefix := res.UnparsedDiagnostics[0].Error(), path+":2: "; !strings.HasPrefix(got, wantPrefix) {
+		t.Errorf("diagnostic = %q, want prefix %q", got, wantPrefix)
 	}
 }
 

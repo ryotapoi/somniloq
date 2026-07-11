@@ -34,7 +34,7 @@ JSONL 取り込みを変えるときの読む順序。仕様そのものは `doc
 - Claude Code: `internal/ingest/claudecode/adapter.go` が `custom-title` / `agent-name` を buffer し、body record があるファイルだけ `Flush` で反映する。拡張 interface は `claudecode.SessionMetaWriter`。
 - Codex: `internal/ingest/codex/adapter.go` の `Begin` が offset 前の prefix から `session_meta` を復元する。差分取り込みで追記分だけ読むと meta を失うため。
 - Codex の message UUID は `internal/ingest/codex/jsonl.go` の path + line number。line number は blank line も数える。
-- `LineUnparsed` は壊れた JSON / malformed payload の計上用。未知 type や意図的に無視する record は `LineIgnored`。
+- `LineUnparsed` は壊れた JSON / malformed payload の計上用。adapter は物理行番号付きの原因を添え、`ProcessResult` と `ImportResult` は import run ごとに encounter order の先頭 5 件だけを保持する。CLI は既存の非致命 import error と同じ stderr へ出すが、parse/normalize 診断だけでは exit code を変えない。未知 type や意図的に無視する record は `LineIgnored`。
 
 ## 変更時のテスト入口
 
