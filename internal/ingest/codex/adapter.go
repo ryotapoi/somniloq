@@ -157,7 +157,7 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 		return ingest.LineUnparsed, nil
 	}
 	if err := ingest.PersistMessage(tx, normalized, h.importedAt); err != nil {
-		return ingest.LineWroteBody, err
+		return ingest.LineIgnored, err
 	}
 	return ingest.LineWroteBody, nil
 }
