@@ -34,6 +34,13 @@ func sanitizeTSV(s string) string {
 	return tsvReplacer.Replace(s)
 }
 
+// firstLine returns the first line of the content after trimming surrounding
+// whitespace, so leading blank lines do not produce an empty outline entry.
+func firstLine(s string) string {
+	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return strings.TrimRight(line, "\r")
+}
+
 func formatSession(w io.Writer, session core.SessionRow, displayName string, messages []core.MessageRow, loc *time.Location) {
 	title := session.CustomTitle
 	if title == "" {

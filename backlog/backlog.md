@@ -4,7 +4,7 @@
 
 2026-07-08 maintenance audit（deep pass、6 観点: 構造 / 重複 / 結合 / エラー処理 / テスト / BSSN）の推奨タスク。import の parse 失敗診断の追加（機能、出力仕様に触る）を 1 件含むため v0.8.0。それ以外はすべて内部整理でユーザー可視の挙動変更なし。順序は上から。
 
-- [ ] `firstLine` ヘルパーの配置を集約先に揃える: outline.go:104 定義の `firstLine` が sessions.go:128 からも呼ばれており、「ファイル名 = 担当コマンド」の前提が崩れている。v0.7.2 のクロスコマンドヘルパー集約（sanitizeTSV 等）の取り残し。format.go へ移動する
+- [x] `firstLine` ヘルパーの配置を集約先に揃える: outline.go:104 定義の `firstLine` が sessions.go:128 からも呼ばれており、「ファイル名 = 担当コマンド」の前提が崩れている。v0.7.2 のクロスコマンドヘルパー集約（sanitizeTSV 等）の取り残し。format.go へ移動する
 - [ ] `sessionRowSelect` と `scanSessionRow` の列順結合を構造で守る: db_query.go:57-61 の SELECT 列リストと :69-77 の Scan 順序が別々の場所で位置結合しており、列追加時に片方を直し忘れると ListSessions / GetSession / LookupSessionsByID の全 session 系コマンドが実行時エラーで死ぬ（コンパイルでは捕まらない）。列定義と scan を単一定義から導出するか、同一箇所に固定して結合を1箇所へ集約する
 - [ ] orphan セッション判定述語の一本化: `NOT EXISTS (SELECT 1 FROM messages ...)` の orphan 定義が backfill.go の 3 箇所（selectBackfillTargets:194 は補集合 / CountOrphanSessions:224 / DELETE:266）に手書き重複。「数える条件」と「消す条件」がズレると destructive な backfill の挙動が静かに変わる。述語を定数 SQL フラグメントに切り出して 1 箇所に集約する
 - [ ] backfill.go のスキーマ移行コードを migrate_v04.go（または db_schema.go）へ分離: v0.4 移行（MigrateToV04IfNeeded / needsV04Migration / migrateToV04WithRestore / restoreForeignKeys、backfill.go:18-184 の約 160 行）が「データ補正」の backfill.go に同居し、起動時マイグレーションの canonical layer（db_schema.go）と置き場所が 2 ファイルに割れている。次のスキーマ変更時に既存移行の見落とし・順序破壊を招くため、DDL 移行を分離して backfill.go をデータ補正に限定する。分離すると既存テストファイル（db_migration_test.go / backfill_test.go）とソースの対応も 1:1 に揃う

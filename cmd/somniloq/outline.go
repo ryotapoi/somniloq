@@ -4,7 +4,6 @@ import (
 	"flag"
 	"fmt"
 	"io"
-	"strings"
 	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
@@ -97,11 +96,4 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 			tm.Turn, sanitizeTSV(formatLocalTime(tm.Msg.Timestamp, time.Local)), bodySizes[tm.Turn], sanitizeTSV(firstLine(tm.Msg.Content)))
 	}
 	return 0, nil
-}
-
-// firstLine returns the first line of the content after trimming surrounding
-// whitespace, so leading blank lines do not produce an empty outline entry.
-func firstLine(s string) string {
-	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
-	return strings.TrimRight(line, "\r")
 }
