@@ -118,16 +118,23 @@ func scanSessionRows(rows *sql.Rows) ([]SessionRow, error) {
 	return result, nil
 }
 
-// timeFilterConditions returns started_at range conditions for filter.Since /
-// filter.Until. filter.Projects is intentionally not handled here: only
-// ListSessions and SearchMessages support it (via projectsCondition).
-func timeFilterConditions(filter SessionFilter) (conditions []string, args []any) {
+type timestampColumn string
+
+const (
+	sessionStartedAtColumn timestampColumn = "s.started_at"
+	messageTimestampColumn  timestampColumn = "m.timestamp"
+)
+
+// timeFilterConditions returns range conditions for filter.Since / filter.Until
+// on a trusted internal timestamp column. The column constants above are the
+// only callers; user-provided values remain query parameters.
+func timeFilterConditions(filter SessionFilter, column timestampColumn) (conditions []string, args []any) {
 	if filter.Since != "" {
-		conditions = append(conditions, "s.started_at >= ?")
+		conditions = append(conditions, string(column)+" >= ?")
 		args = append(args, filter.Since)
 	}
 	if filter.Until != "" {
-		conditions = append(conditions, "s.started_at < ?")
+		conditions = append(conditions, string(column)+" < ?")
 		args = append(args, filter.Until)
 	}
 	return conditions, args
@@ -148,14 +155,23 @@ func projectsCondition(projects []string) (condition string, args []any) {
 	return "(" + strings.Join(likes, " OR ") + ")", args
 }
 
-func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
-	query := sessionRowSelect
-
-	conditions, args := timeFilterConditions(filter)
+// sessionFilterConditions composes the supported SessionFilter conditions in
+// their stable parameter order. Callers select the timestamp for their primary
+// record: sessions use started_at, while search uses message timestamp (ADR
+// 0013).
+func sessionFilterConditions(filter SessionFilter, column timestampColumn) (conditions []string, args []any) {
+	conditions, args = timeFilterConditions(filter, column)
 	if cond, condArgs := projectsCondition(filter.Projects); cond != "" {
 		conditions = append(conditions, cond)
 		args = append(args, condArgs...)
 	}
+	return conditions, args
+}
+
+func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
+	query := sessionRowSelect
+
+	conditions, args := sessionFilterConditions(filter, sessionStartedAtColumn)
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
@@ -181,7 +197,7 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	query := `SELECT COALESCE(MIN(s.repo_path), ''), COUNT(*)
 	FROM sessions s`
 
-	conditions, args := timeFilterConditions(filter)
+	conditions, args := timeFilterConditions(filter, sessionStartedAtColumn)
 	if len(conditions) > 0 {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
@@ -345,17 +361,10 @@ func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, er
 		WHERE m.is_sidechain = 0
 		  AND m.content LIKE '%' || ? || '%'`
 	args := []any{query}
-	if filter.Since != "" {
-		q += " AND m.timestamp >= ?"
-		args = append(args, filter.Since)
-	}
-	if filter.Until != "" {
-		q += " AND m.timestamp < ?"
-		args = append(args, filter.Until)
-	}
-	if cond, condArgs := projectsCondition(filter.Projects); cond != "" {
-		q += " AND " + cond
-		args = append(args, condArgs...)
+	conditions, filterArgs := sessionFilterConditions(filter, messageTimestampColumn)
+	if len(conditions) > 0 {
+		q += " AND " + strings.Join(conditions, " AND ")
+		args = append(args, filterArgs...)
 	}
 	q += " ORDER BY m.timestamp DESC, m.rowid DESC"
 

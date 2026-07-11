@@ -90,6 +90,27 @@ func TestSearchMessages_MultipleProjectsMatchAny(t *testing.T) {
 	}
 }
 
+func TestSearchMessages_CombinedFiltersUseMessageTimestamp(t *testing.T) {
+	db := newSearchTestDB(t)
+
+	// This session began before the range, but its matching message is inside
+	// it. ADR 0013 requires search to filter the message timestamp instead.
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "long-brim", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "late-auth", SessionID: "long-brim", Role: "user", Content: "late auth update", Timestamp: "2026-03-28T12:00:00Z"}))
+
+	rows, err := db.SearchMessages(SessionFilter{
+		Since:    "2026-03-28T11:00:00.000Z",
+		Until:    "2026-03-28T13:00:00.000Z",
+		Projects: []string{"Brimday"},
+	}, "auth")
+	if err != nil {
+		t.Fatalf("SearchMessages: %v", err)
+	}
+	if len(rows) != 1 || rows[0].SessionID != "long-brim" {
+		t.Fatalf("rows = %+v, want only the in-range Brimday message", rows)
+	}
+}
+
 // Mirrors TestListSessions_SinceFilter_MillisecondTimestamp: stored
 // timestamps carry milliseconds (e.g. .977Z) while the filter always uses
 // .000Z, and the string comparison must still include same-second rows.
