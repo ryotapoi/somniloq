@@ -13,7 +13,7 @@ func TestFileHandler_HandleLineReturnsIgnoredOutcomeOnPersistError(t *testing.T)
 		importedAt: "2026-07-12T00:00:00Z",
 		path:       "/tmp/rollout.jsonl",
 		hasMeta:    true,
-		meta: SessionMeta{
+		meta: sessionMetaCursor{
 			SessionID: "s1",
 			CWD:       "/repo",
 			RepoPath:  "/repo",
@@ -28,6 +28,42 @@ func TestFileHandler_HandleLineReturnsIgnoredOutcomeOnPersistError(t *testing.T)
 	}
 	if outcome != ingest.LineIgnored {
 		t.Errorf("HandleLine outcome = %v, want %v", outcome, ingest.LineIgnored)
+	}
+}
+
+func TestFileHandler_HandleLineReportsMalformedPayloads(t *testing.T) {
+	tests := []struct {
+		name string
+		line string
+	}{
+		{
+			name: "session meta payload",
+			line: `{"type":"session_meta","payload":[]}`,
+		},
+		{
+			name: "response item payload",
+			line: `{"type":"response_item","payload":[]}`,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := &fileHandler{
+				path:            "/tmp/rollout.jsonl",
+				resolveRepoPath: func(string) string { return "/repo" },
+			}
+
+			outcome, err := h.HandleLine(&failingTransaction{}, []byte(tt.line))
+			if err != nil {
+				t.Fatalf("HandleLine error = %v, want nil", err)
+			}
+			if outcome != ingest.LineUnparsed {
+				t.Errorf("HandleLine outcome = %v, want %v", outcome, ingest.LineUnparsed)
+			}
+			if h.UnparsedDiagnostic() == nil {
+				t.Error("UnparsedDiagnostic = nil, want malformed payload diagnostic")
+			}
+		})
 	}
 }
 

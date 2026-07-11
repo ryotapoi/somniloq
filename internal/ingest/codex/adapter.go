@@ -2,7 +2,6 @@ package codex
 
 import (
 	"bytes"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -72,7 +71,7 @@ type fileHandler struct {
 	resolveRepoPath ingest.RepoResolver
 	importedAt      string
 	path            string
-	meta            SessionMeta
+	meta            sessionMetaCursor
 	hasMeta         bool
 	lineNumber      int
 	diagnostic      error
@@ -121,12 +120,9 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 		if perr != nil || rec.Type != "session_meta" {
 			return nil
 		}
-		nextMeta, perr := ParseSessionMeta(rec, h.resolveRepoPathFromRecord(rec))
-		if perr != nil {
+		if err := h.applySessionMeta(rec); err != nil {
 			return nil
 		}
-		h.meta = *nextMeta
-		h.hasMeta = true
 		return nil
 	})
 	return err
@@ -147,28 +143,28 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 	}
 
 	if rec.Type == "session_meta" {
-		nextMeta, perr := ParseSessionMeta(rec, h.resolveRepoPathFromRecord(rec))
-		if perr != nil {
-			h.setUnparsedDiagnostic(perr)
+		if err := h.applySessionMeta(rec); err != nil {
+			h.setUnparsedDiagnostic(err)
 			return ingest.LineUnparsed, nil
 		}
-		h.meta = *nextMeta
-		h.hasMeta = true
 		return ingest.LineIgnored, nil
 	}
 
-	ok, _, perr := IsMessageRecord(rec)
-	if perr != nil {
-		h.setUnparsedDiagnostic(perr)
+	if rec.Type != "response_item" {
+		return ingest.LineIgnored, nil
+	}
+	payload, err := parseResponseItem(rec)
+	if err != nil {
+		h.setUnparsedDiagnostic(err)
 		return ingest.LineUnparsed, nil
 	}
-	if !ok || !h.hasMeta {
+	if !isConversationMessage(payload) || !h.hasMeta {
 		return ingest.LineIgnored, nil
 	}
 
-	normalized, perr := NormalizeMessage(rec, h.meta, h.path, h.lineNumber)
-	if perr != nil {
-		h.setUnparsedDiagnostic(perr)
+	normalized, err := normalizeMessage(rec, payload, h.meta, h.path, h.lineNumber)
+	if err != nil {
+		h.setUnparsedDiagnostic(err)
 		return ingest.LineUnparsed, nil
 	}
 	if err := ingest.PersistMessage(tx, normalized, h.importedAt); err != nil {
@@ -189,10 +185,12 @@ func (h *fileHandler) Flush(tx ingest.ImportTransaction) error {
 	return nil
 }
 
-func (h *fileHandler) resolveRepoPathFromRecord(rec *RawRecord) string {
-	var payload SessionMetaPayload
-	if err := json.Unmarshal(rec.Payload, &payload); err != nil {
-		return ""
+func (h *fileHandler) applySessionMeta(rec *RawRecord) error {
+	meta, err := parseSessionMetaCursor(rec, h.resolveRepoPath)
+	if err != nil {
+		return err
 	}
-	return h.resolveRepoPath(payload.CWD)
+	h.meta = *meta
+	h.hasMeta = true
+	return nil
 }

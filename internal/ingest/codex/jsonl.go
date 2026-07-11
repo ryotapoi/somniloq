@@ -36,7 +36,11 @@ type ContentBlock struct {
 	Text string `json:"text"`
 }
 
-type SessionMeta struct {
+// sessionMetaCursor retains the latest session_meta fields needed to normalize
+// later response_item records. normalizeMessage maps its fields to the
+// persisted ingest.SessionMeta: SessionID, CWD, RepoPath, GitBranch, Version,
+// and Timestamp becomes StartedAt/EndedAt when the response has no timestamp.
+type sessionMetaCursor struct {
 	SessionID string
 	CWD       string
 	RepoPath  string
@@ -53,26 +57,22 @@ func ParseRecord(line []byte) (*RawRecord, error) {
 	return &rec, nil
 }
 
-func ParseSessionMeta(rec *RawRecord, repoPath string) (*SessionMeta, error) {
+func parseSessionMetaCursor(rec *RawRecord, resolveRepoPath ingest.RepoResolver) (*sessionMetaCursor, error) {
 	var payload SessionMetaPayload
 	if err := json.Unmarshal(rec.Payload, &payload); err != nil {
 		return nil, err
 	}
-	return &SessionMeta{
+	return &sessionMetaCursor{
 		SessionID: payload.ID,
 		CWD:       payload.CWD,
-		RepoPath:  repoPath,
+		RepoPath:  resolveRepoPath(payload.CWD),
 		GitBranch: payload.Git.Branch,
 		Version:   payload.CLIVersion,
 		Timestamp: rec.Timestamp,
 	}, nil
 }
 
-func NormalizeMessage(rec *RawRecord, meta SessionMeta, rolloutPath string, lineNumber int) (*ingest.NormalizedRecord, error) {
-	var payload ResponseItemPayload
-	if err := json.Unmarshal(rec.Payload, &payload); err != nil {
-		return nil, err
-	}
+func normalizeMessage(rec *RawRecord, payload *ResponseItemPayload, meta sessionMetaCursor, rolloutPath string, lineNumber int) (*ingest.NormalizedRecord, error) {
 	content, err := ExtractText(payload.Content)
 	if err != nil {
 		return nil, err
@@ -105,21 +105,16 @@ func NormalizeMessage(rec *RawRecord, meta SessionMeta, rolloutPath string, line
 	}, nil
 }
 
-func IsMessageRecord(rec *RawRecord) (bool, string, error) {
-	if rec.Type != "response_item" {
-		return false, "", nil
-	}
+func parseResponseItem(rec *RawRecord) (*ResponseItemPayload, error) {
 	var payload ResponseItemPayload
 	if err := json.Unmarshal(rec.Payload, &payload); err != nil {
-		return false, "", err
+		return nil, err
 	}
-	if payload.Type != "message" {
-		return false, payload.Role, nil
-	}
-	if payload.Role != "user" && payload.Role != "assistant" {
-		return false, payload.Role, nil
-	}
-	return true, payload.Role, nil
+	return &payload, nil
+}
+
+func isConversationMessage(payload *ResponseItemPayload) bool {
+	return payload.Type == "message" && (payload.Role == "user" || payload.Role == "assistant")
 }
 
 func ExtractText(raw json.RawMessage) (string, error) {

@@ -17,7 +17,7 @@ func TestExtractText_CodexContentBlocks(t *testing.T) {
 	}
 }
 
-func TestIsMessageRecord(t *testing.T) {
+func TestParseResponseItemAndIsConversationMessage(t *testing.T) {
 	tests := []struct {
 		name string
 		line string
@@ -56,10 +56,17 @@ func TestIsMessageRecord(t *testing.T) {
 			if err != nil {
 				t.Fatalf("ParseRecord failed: %v", err)
 			}
-			got, _, err := IsMessageRecord(rec)
-			if err != nil {
-				t.Fatalf("IsMessageRecord failed: %v", err)
+			if rec.Type != "response_item" {
+				if tt.want {
+					t.Fatalf("non-response_item record cannot be a conversation message")
+				}
+				return
 			}
+			payload, err := parseResponseItem(rec)
+			if err != nil {
+				t.Fatalf("parseResponseItem failed: %v", err)
+			}
+			got := isConversationMessage(payload)
 			if got != tt.want {
 				t.Errorf("got %v, want %v", got, tt.want)
 			}
@@ -68,7 +75,7 @@ func TestIsMessageRecord(t *testing.T) {
 }
 
 func TestNormalizeMessage_UsesRolloutPathAndLineNumberUUID(t *testing.T) {
-	meta := SessionMeta{
+	meta := sessionMetaCursor{
 		SessionID: "s1",
 		CWD:       "/tmp/project",
 		RepoPath:  "/tmp/project",
@@ -81,9 +88,13 @@ func TestNormalizeMessage_UsesRolloutPathAndLineNumberUUID(t *testing.T) {
 		t.Fatalf("ParseRecord failed: %v", err)
 	}
 
-	got, err := NormalizeMessage(rec, meta, "/tmp/rollout.jsonl", 7)
+	payload, err := parseResponseItem(rec)
 	if err != nil {
-		t.Fatalf("NormalizeMessage failed: %v", err)
+		t.Fatalf("parseResponseItem failed: %v", err)
+	}
+	got, err := normalizeMessage(rec, payload, meta, "/tmp/rollout.jsonl", 7)
+	if err != nil {
+		t.Fatalf("normalizeMessage failed: %v", err)
 	}
 
 	if got.Message.UUID != messageUUID("/tmp/rollout.jsonl", 7) {
