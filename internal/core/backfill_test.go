@@ -694,15 +694,34 @@ func TestMigrateToV04IfNeeded_MigratesV03ToV04(t *testing.T) {
 		t.Errorf("composite PK columns: got %d, want 2", pkCount)
 	}
 
-	// Round-trip data: existing rows are stamped source='claude_code'.
+	// Round-trip data: every copied table uses the canonical Claude Code source.
+	expectedSource := string(SourceClaudeCode)
+	for _, table := range []string{"sessions", "messages", "import_state"} {
+		var count int
+		if err := db.db.QueryRow(`SELECT COUNT(*) FROM `+table+` WHERE source=?`, expectedSource).Scan(&count); err != nil {
+			t.Fatalf("count %s rows by source: %v", table, err)
+		}
+		if count != 2 {
+			t.Errorf("%s rows with source %q = %d, want 2", table, expectedSource, count)
+		}
+	}
+
 	var src, sid, cwd string
 	if err := db.db.QueryRow(
 		`SELECT source, session_id, cwd FROM sessions WHERE session_id='s1'`,
 	).Scan(&src, &sid, &cwd); err != nil {
 		t.Fatalf("SELECT s1: %v", err)
 	}
-	if src != "claude_code" || sid != "s1" || cwd != "/Users/test/proj" {
+	if src != expectedSource || sid != "s1" || cwd != "/Users/test/proj" {
 		t.Errorf("s1 round-trip mismatch: src=%q sid=%q cwd=%q", src, sid, cwd)
+	}
+
+	var joined int
+	if err := db.db.QueryRow(`SELECT COUNT(*) FROM messages m JOIN sessions s ON s.source=m.source AND s.session_id=m.session_id`).Scan(&joined); err != nil {
+		t.Fatalf("join migrated messages to sessions: %v", err)
+	}
+	if joined != 2 {
+		t.Errorf("joined migrated messages = %d, want 2", joined)
 	}
 }
 

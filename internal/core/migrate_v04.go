@@ -1,6 +1,10 @@
 package core
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/ryotapoi/somniloq/internal/ingest"
+)
 
 // MigrateToV04IfNeeded performs v0.3 → v0.4 schema migration if the DB is
 // still on v0.3. Idempotent: returns (0, 0, 0, nil) on a v0.4 DB.
@@ -92,8 +96,8 @@ func migrateToV04WithRestore(db *DB, restore func(execer, int) error) (sessionsN
 		return 0, 0, 0, fmt.Errorf("create sessions_new: %w", err)
 	}
 	if _, err = tx.Exec(`INSERT INTO sessions_new (source, session_id, cwd, repo_path, git_branch, custom_title, agent_name, version, started_at, ended_at, imported_at)
-		SELECT 'claude_code', session_id, cwd, repo_path, git_branch, custom_title, agent_name, version, started_at, ended_at, imported_at
-		FROM sessions`); err != nil {
+		SELECT ?, session_id, cwd, repo_path, git_branch, custom_title, agent_name, version, started_at, ended_at, imported_at
+		FROM sessions`, string(ingest.SourceClaudeCode)); err != nil {
 		return 0, 0, 0, fmt.Errorf("copy sessions: %w", err)
 	}
 	if err = tx.QueryRow(`SELECT COUNT(*) FROM sessions_new`).Scan(&sessionsN); err != nil {
@@ -115,8 +119,8 @@ func migrateToV04WithRestore(db *DB, restore func(execer, int) error) (sessionsN
 		return 0, 0, 0, fmt.Errorf("create messages_new: %w", err)
 	}
 	if _, err = tx.Exec(`INSERT INTO messages_new (uuid, source, session_id, parent_uuid, role, content, timestamp, is_sidechain)
-		SELECT uuid, 'claude_code', session_id, parent_uuid, role, content, timestamp, is_sidechain
-		FROM messages`); err != nil {
+		SELECT uuid, ?, session_id, parent_uuid, role, content, timestamp, is_sidechain
+		FROM messages`, string(ingest.SourceClaudeCode)); err != nil {
 		return 0, 0, 0, fmt.Errorf("copy messages: %w", err)
 	}
 	if err = tx.QueryRow(`SELECT COUNT(*) FROM messages_new`).Scan(&messagesN); err != nil {
@@ -136,8 +140,8 @@ func migrateToV04WithRestore(db *DB, restore func(execer, int) error) (sessionsN
 		return 0, 0, 0, fmt.Errorf("create import_state_new: %w", err)
 	}
 	if _, err = tx.Exec(`INSERT INTO import_state_new (jsonl_path, source, file_size, last_offset, imported_at)
-		SELECT jsonl_path, 'claude_code', file_size, last_offset, imported_at
-		FROM import_state`); err != nil {
+		SELECT jsonl_path, ?, file_size, last_offset, imported_at
+		FROM import_state`, string(ingest.SourceClaudeCode)); err != nil {
 		return 0, 0, 0, fmt.Errorf("copy import_state: %w", err)
 	}
 	if err = tx.QueryRow(`SELECT COUNT(*) FROM import_state_new`).Scan(&importStatesN); err != nil {
