@@ -725,6 +725,63 @@ func TestLookupSessionsByID_NotFound(t *testing.T) {
 	}
 }
 
+func TestSessionRowQueryPaths_ReturnAllFields(t *testing.T) {
+	db := testDB(t)
+
+	want := SessionRow{
+		Source:       SourceClaudeCode,
+		SessionID:    "s1",
+		CWD:          "/Users/test/project",
+		RepoPath:     "/Users/test/project",
+		StartedAt:    "2026-03-28T10:00:00Z",
+		EndedAt:      "2026-03-28T10:30:00Z",
+		CustomTitle:  "session title",
+		MessageCount: 1,
+		BodySize:     7,
+	}
+	must(t, db.UpsertSession(SessionMeta{
+		Source:       want.Source,
+		SessionID:    want.SessionID,
+		CWD:          want.CWD,
+		RepoPath:     want.RepoPath,
+		StartedAt:    want.StartedAt,
+		EndedAt:      want.EndedAt,
+	}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpdateSessionTitle(want.Source, want.SessionID, want.CustomTitle, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(NormalizedMessage{
+		Source:    want.Source,
+		UUID:      "m1",
+		SessionID: want.SessionID,
+		Role:      "user",
+		Content:   "visible",
+		Timestamp: want.StartedAt,
+	}))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions failed: %v", err)
+	}
+	if len(rows) != 1 || rows[0] != want {
+		t.Fatalf("ListSessions result: got %+v, want %+v", rows, want)
+	}
+
+	got, err := db.GetSession(want.Source, want.SessionID)
+	if err != nil {
+		t.Fatalf("GetSession failed: %v", err)
+	}
+	if got == nil || *got != want {
+		t.Fatalf("GetSession result: got %+v, want %+v", got, want)
+	}
+
+	rows, err = db.LookupSessionsByID(want.SessionID)
+	if err != nil {
+		t.Fatalf("LookupSessionsByID failed: %v", err)
+	}
+	if len(rows) != 1 || rows[0] != want {
+		t.Fatalf("LookupSessionsByID result: got %+v, want %+v", rows, want)
+	}
+}
+
 func TestListProjects_Empty(t *testing.T) {
 	db := testDB(t)
 
