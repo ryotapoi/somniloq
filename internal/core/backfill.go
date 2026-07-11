@@ -2,6 +2,11 @@ package core
 
 import "fmt"
 
+// orphanSessionPredicate defines a session with no associated messages.
+// Keep count, deletion, and the backfill-target complement aligned to this
+// predicate: the count controls the destructive CLI confirmation.
+const orphanSessionPredicate = `NOT EXISTS (SELECT 1 FROM messages m WHERE m.source = sessions.source AND m.session_id = sessions.session_id)`
+
 type backfillTarget struct {
 	source    Source
 	sessionID string
@@ -191,7 +196,7 @@ func migrateToV04WithRestore(db *DB, restore func(execer, int) error) (sessionsN
 // them, so resolving repo_path on rows that are about to be deleted would
 // inflate the Resolved counter and waste a write.
 func selectBackfillTargets(db *DB) ([]backfillTarget, error) {
-	rows, err := db.execer().Query(`SELECT source, session_id, cwd FROM sessions WHERE repo_path IS NULL AND cwd IS NOT NULL AND cwd != '' AND EXISTS (SELECT 1 FROM messages m WHERE m.source = sessions.source AND m.session_id = sessions.session_id)`)
+	rows, err := db.execer().Query(`SELECT source, session_id, cwd FROM sessions WHERE repo_path IS NULL AND cwd IS NOT NULL AND cwd != '' AND NOT (` + orphanSessionPredicate + `)`)
 	if err != nil {
 		return nil, fmt.Errorf("select sessions for backfill: %w", err)
 	}
@@ -221,7 +226,7 @@ func selectBackfillTargets(db *DB) ([]backfillTarget, error) {
 func CountOrphanSessions(db *DB) (int, error) {
 	var count int
 	err := db.execer().QueryRow(
-		`SELECT COUNT(*) FROM sessions WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.source = sessions.source AND m.session_id = sessions.session_id)`,
+		`SELECT COUNT(*) FROM sessions WHERE ` + orphanSessionPredicate,
 	).Scan(&count)
 	if err != nil {
 		return 0, fmt.Errorf("count orphan sessions: %w", err)
@@ -263,7 +268,7 @@ func Backfill(db *DB) (BackfillResult, error) {
 	}
 	defer tx.Rollback()
 
-	res, err := tx.Exec(`DELETE FROM sessions WHERE NOT EXISTS (SELECT 1 FROM messages m WHERE m.source = sessions.source AND m.session_id = sessions.session_id)`)
+	res, err := tx.Exec(`DELETE FROM sessions WHERE ` + orphanSessionPredicate)
 	if err != nil {
 		return result, fmt.Errorf("delete orphan sessions: %w", err)
 	}
