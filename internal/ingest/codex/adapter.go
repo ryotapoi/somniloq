@@ -77,7 +77,7 @@ type fileHandler struct {
 	diagnostic      error
 }
 
-func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
+func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, file ingest.File, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
 	if a.resolveRepoPath == nil {
 		return ingest.ProcessResult{NewOffset: offset}, errors.New("resolve repo path is nil")
 	}
@@ -85,7 +85,7 @@ func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileS
 		resolveRepoPath: a.resolveRepoPath,
 		importedAt:      importedAt,
 	}
-	return ingest.ProcessJSONL(store, ingest.SourceCodex, h, file, offset, fileSize, importedAt)
+	return ingest.ProcessJSONL(newTransaction, ingest.SourceCodex, h, file, offset, fileSize, importedAt)
 }
 
 // Begin recovers session_meta from the already-imported prefix so incremental

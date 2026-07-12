@@ -7,14 +7,6 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
 )
 
-func (d *DB) BeginImport() (ingest.ImportTransaction, error) {
-	tx, err := d.Begin()
-	if err != nil {
-		return nil, err
-	}
-	return importTx{tx: tx}, nil
-}
-
 type importTx struct {
 	tx *sql.Tx
 }

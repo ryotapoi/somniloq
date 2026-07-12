@@ -13,8 +13,7 @@ import (
 )
 
 func processCodexFile(db *DB, path, sessionID, jsonl string) (int64, error) {
-	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(
-		db,
+	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db),
 		JSONLFile{Path: path, SessionID: sessionID},
 		0,
 		int64(len(jsonl)),
@@ -135,8 +134,7 @@ func TestCodexProcessFile_CountsUnparsedLines(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(
-		db,
+	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db),
 		JSONLFile{Path: path, SessionID: "rollout"},
 		0,
 		int64(len(jsonl)),

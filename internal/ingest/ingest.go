@@ -68,10 +68,10 @@ type ImportTransaction interface {
 	Rollback() error
 }
 
-// Store starts the transaction used by an adapter to persist one file.
-type Store interface {
-	BeginImport() (ImportTransaction, error)
-}
+// NewImportTransaction starts the transaction used to persist one file.
+// ProcessJSONL owns when it is called and the resulting transaction's
+// commit/rollback lifecycle.
+type NewImportTransaction func() (ImportTransaction, error)
 
 // RepoResolver resolves a session's working directory to its repository root.
 // Contract: an empty cwd resolves to ""; a cwd whose root cannot be determined
@@ -87,5 +87,5 @@ type Adapter interface {
 	// alongside the files that could be discovered. A missing rootDir means
 	// the source is unused and yields no files and no errors.
 	ScanFiles(rootDir string) (files []File, errs []error)
-	ProcessFile(store Store, file File, offset, fileSize int64, importedAt string) (ProcessResult, error)
+	ProcessFile(newTransaction NewImportTransaction, file File, offset, fileSize int64, importedAt string) (ProcessResult, error)
 }

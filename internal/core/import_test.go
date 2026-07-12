@@ -17,8 +17,18 @@ func scanJSONLFiles(projectsDir string) ([]JSONLFile, []error) {
 	return claudecode.NewAdapter(ResolveRepoPath).ScanFiles(projectsDir)
 }
 
+func newImportTransaction(db *DB) ingest.NewImportTransaction {
+	return func() (ingest.ImportTransaction, error) {
+		tx, err := db.Begin()
+		if err != nil {
+			return nil, err
+		}
+		return importTx{tx: tx}, nil
+	}
+}
+
 func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt string) (int64, error) {
-	pr, err := claudecode.NewAdapter(ResolveRepoPath).ProcessFile(db, file, offset, fileSize, importedAt)
+	pr, err := claudecode.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db), file, offset, fileSize, importedAt)
 	return pr.NewOffset, err
 }
 

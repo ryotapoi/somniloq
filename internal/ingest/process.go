@@ -73,7 +73,7 @@ type FileHandler interface {
 // record has ever been written for the file, it commits nothing and keeps the
 // old offset so the next import re-reads the meta-only prefix once a body
 // record finally appears.
-func ProcessJSONL(store Store, source Source, handler FileHandler, file File, offset, fileSize int64, importedAt string) (ProcessResult, error) {
+func ProcessJSONL(newTransaction NewImportTransaction, source Source, handler FileHandler, file File, offset, fileSize int64, importedAt string) (ProcessResult, error) {
 	keep := ProcessResult{NewOffset: offset}
 
 	if err := handler.Begin(file.Path, offset); err != nil {
@@ -92,7 +92,7 @@ func ProcessJSONL(store Store, source Source, handler FileHandler, file File, of
 		}
 	}
 
-	tx, err := store.BeginImport()
+	tx, err := newTransaction()
 	if err != nil {
 		return keep, err
 	}

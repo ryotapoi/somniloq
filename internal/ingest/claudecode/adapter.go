@@ -84,7 +84,7 @@ type fileHandler struct {
 	agentNames      map[string]string
 }
 
-func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
+func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, file ingest.File, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
 	if a.resolveRepoPath == nil {
 		return ingest.ProcessResult{NewOffset: offset}, errors.New("resolve repo path is nil")
 	}
@@ -95,7 +95,7 @@ func (a Adapter) ProcessFile(store ingest.Store, file ingest.File, offset, fileS
 		titles:          map[string]string{},
 		agentNames:      map[string]string{},
 	}
-	return ingest.ProcessJSONL(store, ingest.SourceClaudeCode, h, file, offset, fileSize, importedAt)
+	return ingest.ProcessJSONL(newTransaction, ingest.SourceClaudeCode, h, file, offset, fileSize, importedAt)
 }
 
 func (h *fileHandler) Begin(path string, offset int64) error {

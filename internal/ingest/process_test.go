@@ -19,7 +19,7 @@ func TestProcessJSONL_HandlerErrorDiscardsOutcomeAndRollsBack(t *testing.T) {
 	wantErr := errors.New("persist failed")
 	tx := &processRecordingTx{}
 	result, err := ProcessJSONL(
-		processRecordingStore{tx: tx},
+		func() (ImportTransaction, error) { return tx, nil },
 		SourceClaudeCode,
 		errorOutcomeHandler{err: wantErr},
 		File{Path: path},
@@ -60,14 +60,6 @@ func (h errorOutcomeHandler) HandleLine(ImportTransaction, []byte) (LineOutcome,
 
 func (h errorOutcomeHandler) Flush(ImportTransaction) error { return nil }
 
-type processRecordingStore struct {
-	tx *processRecordingTx
-}
-
-func (s processRecordingStore) BeginImport() (ImportTransaction, error) {
-	return s.tx, nil
-}
-
 type processRecordingTx struct {
 	importStateWrites int
 	commits           int
@@ -91,4 +83,29 @@ func (t *processRecordingTx) Commit() error {
 func (t *processRecordingTx) Rollback() error {
 	t.rollbacks++
 	return nil
+}
+
+func TestProcessJSONL_TransactionCreationErrorKeepsOffset(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	if err := os.WriteFile(path, []byte("record\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	wantErr := errors.New("begin import failed")
+	result, err := ProcessJSONL(
+		func() (ImportTransaction, error) { return nil, wantErr },
+		SourceClaudeCode,
+		errorOutcomeHandler{},
+		File{Path: path},
+		0,
+		int64(len("record\n")),
+		"2026-07-12T00:00:00Z",
+	)
+
+	if !errors.Is(err, wantErr) {
+		t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
+	}
+	if result.NewOffset != 0 {
+		t.Errorf("NewOffset = %d, want 0", result.NewOffset)
+	}
 }
