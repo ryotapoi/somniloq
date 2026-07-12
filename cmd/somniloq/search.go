@@ -51,7 +51,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	searchUsage := "usage: " + searchUsageLine
 
 	if fs.NArg() > 1 {
-		fmt.Fprintln(errOut, "error: too many arguments")
+		writeUsageError(errOut, "too many arguments")
 		fmt.Fprintln(errOut, searchUsage)
 		return 1, nil
 	}

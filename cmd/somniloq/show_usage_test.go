@@ -40,14 +40,10 @@ func TestWriteAmbiguousSessionErrorListsSources(t *testing.T) {
 		{Source: core.SourceCodex, SessionID: "same-id"},
 	})
 
-	out := buf.String()
-	for _, want := range []string{
-		`error: session id "same-id" is ambiguous; matched multiple sources:`,
-		"claude_code\tsame-id",
-		"codex\tsame-id",
-	} {
-		if !strings.Contains(out, want) {
-			t.Errorf("output missing %q: %q", want, out)
-		}
+	const want = "error: session id \"same-id\" is ambiguous; matched multiple sources:\n" +
+		"  claude_code\tsame-id\n" +
+		"  codex\tsame-id\n"
+	if got := buf.String(); got != want {
+		t.Errorf("output = %q, want %q", got, want)
 	}
 }

@@ -47,7 +47,7 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 	outlineUsage := "usage: " + outlineUsageLine
 
 	if fs.NArg() > 1 {
-		fmt.Fprintln(errOut, "error: too many arguments")
+		writeUsageError(errOut, "too many arguments")
 		fmt.Fprintln(errOut, outlineUsage)
 		return 1, nil
 	}

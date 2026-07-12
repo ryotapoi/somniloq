@@ -43,7 +43,7 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	}
 
 	if fs.NArg() != 0 {
-		fmt.Fprintln(errOut, "error: unexpected arguments")
+		writeUsageError(errOut, "unexpected arguments")
 		fmt.Fprintln(errOut, "usage: somniloq projects [--since <time>] [--until <time>] [--short] [--format <fmt>]")
 		return 1, nil
 	}

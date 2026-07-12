@@ -97,8 +97,12 @@ func resolveSessionByID(db *core.DB, sessionID string, errOut io.Writer) (core.S
 }
 
 func writeAmbiguousSessionError(w io.Writer, sessionID string, sessions []core.SessionRow) {
-	fmt.Fprintf(w, "error: session id %q is ambiguous; matched multiple sources:\n", sessionID)
+	writeUsageError(w, fmt.Sprintf("session id %q is ambiguous; matched multiple sources:", sessionID))
 	for _, session := range sessions {
 		fmt.Fprintf(w, "  %s\t%s\n", session.Source, session.SessionID)
 	}
+}
+
+func writeUsageError(w io.Writer, message string) {
+	fmt.Fprintf(w, "error: %s\n", message)
 }

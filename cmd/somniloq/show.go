@@ -93,7 +93,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	showUsage := "usage: " + showUsageLine
 
 	if fs.NArg() > 1 {
-		fmt.Fprintln(errOut, "error: too many arguments")
+		writeUsageError(errOut, "too many arguments")
 		fmt.Fprintln(errOut, showUsage)
 		return 1, nil
 	}
