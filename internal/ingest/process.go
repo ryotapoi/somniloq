@@ -10,6 +10,12 @@ import (
 
 const readBufferSize = 64 * 1024
 
+type readSeekCloser interface {
+	io.Reader
+	io.Seeker
+	io.Closer
+}
+
 // MaxUnparsedDiagnostics bounds retained parse/normalization diagnostics for
 // one import run. It is intentionally fixed rather than user-configurable.
 const MaxUnparsedDiagnostics = 5
@@ -74,13 +80,19 @@ type FileHandler interface {
 // old offset so the next import re-reads the meta-only prefix once a body
 // record finally appears.
 func ProcessJSONL(newTransaction NewImportTransaction, source Source, handler FileHandler, file File, offset, fileSize int64, importedAt string) (ProcessResult, error) {
+	return processJSONL(newTransaction, source, handler, file, offset, fileSize, importedAt, func(path string) (readSeekCloser, error) {
+		return os.Open(path)
+	})
+}
+
+func processJSONL(newTransaction NewImportTransaction, source Source, handler FileHandler, file File, offset, fileSize int64, importedAt string, openFile func(string) (readSeekCloser, error)) (ProcessResult, error) {
 	keep := ProcessResult{NewOffset: offset}
 
 	if err := handler.Begin(file.Path, offset); err != nil {
 		return keep, err
 	}
 
-	f, err := os.Open(file.Path)
+	f, err := openFile(file.Path)
 	if err != nil {
 		return keep, err
 	}

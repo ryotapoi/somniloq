@@ -2,6 +2,8 @@ package codex
 
 import (
 	"errors"
+	"os"
+	"path/filepath"
 	"testing"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
@@ -28,6 +30,41 @@ func TestFileHandler_HandleLineReturnsIgnoredOutcomeOnPersistError(t *testing.T)
 	}
 	if outcome != ingest.LineIgnored {
 		t.Errorf("HandleLine outcome = %v, want %v", outcome, ingest.LineIgnored)
+	}
+}
+
+func TestAdapter_ProcessFileMalformedSessionMetaContinues(t *testing.T) {
+	const contents = `{"type":"session_meta","payload":[]}
+{"timestamp":"2026-07-12T00:00:00Z","type":"session_meta","payload":{"id":"s1","cwd":"/repo"}}
+{"timestamp":"2026-07-12T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
+`
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tx := &recordingTransaction{}
+	result, err := NewAdapter(func(string) string { return "/repo" }).ProcessFile(
+		func() (ingest.ImportTransaction, error) { return tx, nil },
+		ingest.File{Path: path},
+		0,
+		int64(len(contents)),
+		"2026-07-12T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("ProcessFile error = %v, want nil", err)
+	}
+	if result.UnparsedLines != 1 {
+		t.Errorf("UnparsedLines = %d, want 1", result.UnparsedLines)
+	}
+	if result.NewOffset != int64(len(contents)) {
+		t.Errorf("NewOffset = %d, want %d", result.NewOffset, len(contents))
+	}
+	if tx.messages != 1 {
+		t.Errorf("InsertMessage calls = %d, want 1", tx.messages)
+	}
+	if tx.commits != 1 {
+		t.Errorf("Commit calls = %d, want 1", tx.commits)
 	}
 }
 
@@ -80,3 +117,24 @@ func (t *failingTransaction) UpsertImportState(ingest.ImportState) error { retur
 func (t *failingTransaction) Commit() error { return nil }
 
 func (t *failingTransaction) Rollback() error { return nil }
+
+type recordingTransaction struct {
+	messages int
+	commits  int
+}
+
+func (*recordingTransaction) UpsertSession(ingest.SessionMeta, string) error { return nil }
+
+func (t *recordingTransaction) InsertMessage(ingest.NormalizedMessage) error {
+	t.messages++
+	return nil
+}
+
+func (*recordingTransaction) UpsertImportState(ingest.ImportState) error { return nil }
+
+func (t *recordingTransaction) Commit() error {
+	t.commits++
+	return nil
+}
+
+func (*recordingTransaction) Rollback() error { return nil }

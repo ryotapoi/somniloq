@@ -2,6 +2,7 @@ package claudecode
 
 import (
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
@@ -24,6 +25,22 @@ func TestFileHandler_HandleLineReturnsIgnoredOutcomeOnPersistError(t *testing.T)
 	}
 	if outcome != ingest.LineIgnored {
 		t.Errorf("HandleLine outcome = %v, want %v", outcome, ingest.LineIgnored)
+	}
+}
+
+func TestFileHandler_FlushErrorsWhenTransactionLacksSessionMetaWriter(t *testing.T) {
+	h := &fileHandler{
+		importedAt: "2026-07-12T00:00:00Z",
+		titles:     map[string]string{"s1": "title"},
+		agentNames: map[string]string{},
+	}
+
+	err := h.Flush(&failingTransaction{})
+	if err == nil {
+		t.Fatal("Flush error = nil, want SessionMetaWriter assertion failure")
+	}
+	if !strings.Contains(err.Error(), "does not implement claudecode.SessionMetaWriter") {
+		t.Errorf("Flush error = %v, want SessionMetaWriter assertion failure", err)
 	}
 }
 
