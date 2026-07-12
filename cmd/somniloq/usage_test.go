@@ -84,7 +84,7 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return importCmd([]string{"--help"}, openDB, "/claude", "/codex", strings.NewReader(""), &bytes.Buffer{}, errOut, false)
 			},
-			want: []string{"Examples:", "Output:", "Imported <imported> files", "somniloq import --source codex"},
+			want: []string{"Examples:", "Output:", "Imported <imported> files", "Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.", "somniloq import --source codex"},
 		},
 		{
 			name: "backfill",
