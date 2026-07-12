@@ -112,7 +112,9 @@ type ignoredHandler struct{}
 
 func (ignoredHandler) Begin(string, int64) error { return nil }
 
-func (ignoredHandler) HandleLine(ImportTransaction, []byte) (LineOutcome, error) { return LineIgnored, nil }
+func (ignoredHandler) HandleLine(ImportTransaction, []byte) (LineOutcome, error) {
+	return LineIgnored, nil
+}
 
 func (ignoredHandler) Flush(ImportTransaction) error { return nil }
 
@@ -120,7 +122,9 @@ type beginErrorHandler struct{ err error }
 
 func (h beginErrorHandler) Begin(string, int64) error { return h.err }
 
-func (beginErrorHandler) HandleLine(ImportTransaction, []byte) (LineOutcome, error) { return LineIgnored, nil }
+func (beginErrorHandler) HandleLine(ImportTransaction, []byte) (LineOutcome, error) {
+	return LineIgnored, nil
+}
 
 func (beginErrorHandler) Flush(ImportTransaction) error { return nil }
 

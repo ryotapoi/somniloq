@@ -740,12 +740,12 @@ func TestSessionRowQueryPaths_ReturnAllFields(t *testing.T) {
 		BodySize:     7,
 	}
 	must(t, db.UpsertSession(SessionMeta{
-		Source:       want.Source,
-		SessionID:    want.SessionID,
-		CWD:          want.CWD,
-		RepoPath:     want.RepoPath,
-		StartedAt:    want.StartedAt,
-		EndedAt:      want.EndedAt,
+		Source:    want.Source,
+		SessionID: want.SessionID,
+		CWD:       want.CWD,
+		RepoPath:  want.RepoPath,
+		StartedAt: want.StartedAt,
+		EndedAt:   want.EndedAt,
 	}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpdateSessionTitle(want.Source, want.SessionID, want.CustomTitle, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(NormalizedMessage{

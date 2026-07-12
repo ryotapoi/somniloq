@@ -47,15 +47,15 @@ func TestSessionsCmd_FormatJSON(t *testing.T) {
 		t.Fatalf("entries = %d, want 1", len(got))
 	}
 	want := map[string]any{
-		"source":       "claude_code",
-		"sessionId":    "sess-1",
-		"project":      rows[0].RepoPath,
-		"title":        "",
-		"startedAt":    "2026-03-28T15:00:00Z",
-		"endedAt":      rows[0].EndedAt,
-		"logicalDay":   sessionLogicalDay(rows[0], dayBoundary{}, time.Local),
-		"messageCount": float64(rows[0].MessageCount),
-		"bodySize":     float64(rows[0].BodySize),
+		"source":                  "claude_code",
+		"sessionId":               "sess-1",
+		"project":                 rows[0].RepoPath,
+		"title":                   "",
+		"startedAt":               "2026-03-28T15:00:00Z",
+		"endedAt":                 rows[0].EndedAt,
+		"logicalDay":              sessionLogicalDay(rows[0], dayBoundary{}, time.Local),
+		"messageCount":            float64(rows[0].MessageCount),
+		"bodySize":                float64(rows[0].BodySize),
 		"nonCommandUserTurnCount": float64(2),
 		"firstNonCommandUserLine": "first question",
 	}
