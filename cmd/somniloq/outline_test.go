@@ -78,8 +78,8 @@ func TestOutlineCmd_SessionNotFound(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	if err == nil || !strings.Contains(err.Error(), "session not found") {
-		t.Errorf("err = %v, want session not found", err)
+	if err == nil || err.Error() != "session not found: no-such" {
+		t.Errorf("err = %v, want session not found: no-such", err)
 	}
 }
 
