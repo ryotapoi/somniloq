@@ -20,11 +20,9 @@ func TestListSessions_Empty(t *testing.T) {
 func TestListSessions_OrderAndCount(t *testing.T) {
 	db := testDB(t)
 
-	// Older session with 1 message
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
 
-	// Newer session with 2 messages
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s2", StartedAt: "2026-03-28T14:00:00Z", EndedAt: "2026-03-28T14:30:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s2", Role: "user", Content: "hi", Timestamp: "2026-03-28T14:00:00Z"}))
 	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s2", Role: "assistant", Content: "hey", Timestamp: "2026-03-28T14:01:00Z"}))
@@ -37,7 +35,6 @@ func TestListSessions_OrderAndCount(t *testing.T) {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
-	// Newer session first (DESC order)
 	if rows[0].SessionID != "s2" {
 		t.Errorf("first row should be s2 (newer), got %s", rows[0].SessionID)
 	}
@@ -75,7 +72,6 @@ func TestListSessions_ZeroMessages(t *testing.T) {
 func TestListSessions_NullTitle(t *testing.T) {
 	db := testDB(t)
 
-	// Session with no custom_title set
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListSessions(SessionFilter{})
@@ -90,7 +86,6 @@ func TestListSessions_NullTitle(t *testing.T) {
 func TestListSessions_NullStartedAt(t *testing.T) {
 	db := testDB(t)
 
-	// Session with started_at (normal)
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	// Session created via UpsertSession with no StartedAt, then title applied.
@@ -105,7 +100,6 @@ func TestListSessions_NullStartedAt(t *testing.T) {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
 
-	// Normal session first, NULL started_at at the end
 	if rows[0].SessionID != "s1" {
 		t.Errorf("first row should be s1 (has started_at), got %s", rows[0].SessionID)
 	}
@@ -483,7 +477,6 @@ func TestGetMessages_OrderByTimestamp(t *testing.T) {
 		t.Fatalf("expected 2 messages, got %d", len(msgs))
 	}
 
-	// Should be in timestamp ASC order
 	if msgs[0].UUID != "m1" {
 		t.Errorf("first message UUID: got %s, want m1", msgs[0].UUID)
 	}
@@ -797,11 +790,9 @@ func TestListProjects_Empty(t *testing.T) {
 func TestListProjects_GroupByProject(t *testing.T) {
 	db := testDB(t)
 
-	// Project A: 2 sessions
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "a1", RepoPath: "/Users/test/projA", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "a2", RepoPath: "/Users/test/projA", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	// Project B: 1 session
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "b1", RepoPath: "/Users/test/projB", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{})
@@ -830,10 +821,8 @@ func TestListProjects_GroupByProject(t *testing.T) {
 func TestListProjects_SinceFilter(t *testing.T) {
 	db := testDB(t)
 
-	// Old project (only old sessions)
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "old1", RepoPath: "/Users/test/old", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	// New project
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "new1", RepoPath: "/Users/test/new", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{Since: "2026-03-28T00:00:00.000Z"})
@@ -851,10 +840,8 @@ func TestListProjects_SinceFilter(t *testing.T) {
 func TestListProjects_UntilFilter(t *testing.T) {
 	db := testDB(t)
 
-	// Early project
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "early1", RepoPath: "/Users/test/early", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	// Late project (only late sessions)
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "late1", RepoPath: "/Users/test/late", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
 
 	rows, err := db.ListProjects(SessionFilter{Until: "2026-03-28T12:00:00.000Z"})
@@ -1027,13 +1014,10 @@ func TestListProjects_GroupByRepoPath_OrderByLatest(t *testing.T) {
 func TestListProjects_NullStartedAt(t *testing.T) {
 	db := testDB(t)
 
-	// Normal session
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: "/Users/test/normal", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	// Session with NULL started_at
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s2", RepoPath: "/Users/test/titleonly"}, "2026-03-28T15:00:00Z"))
 
-	// No filter: both projects should appear
 	rows, err := db.ListProjects(SessionFilter{})
 	if err != nil {
 		t.Fatalf("ListProjects failed: %v", err)
@@ -1041,7 +1025,6 @@ func TestListProjects_NullStartedAt(t *testing.T) {
 	if len(rows) != 2 {
 		t.Fatalf("expected 2 rows, got %d", len(rows))
 	}
-	// Normal project first, NULL started_at project last
 	if rows[0].RepoPath != "/Users/test/normal" {
 		t.Errorf("first row: got %s, want /Users/test/normal", rows[0].RepoPath)
 	}
@@ -1049,7 +1032,6 @@ func TestListProjects_NullStartedAt(t *testing.T) {
 		t.Errorf("second row: got %s, want /Users/test/titleonly", rows[1].RepoPath)
 	}
 
-	// With filter: NULL started_at excluded
 	rows, err = db.ListProjects(SessionFilter{Since: "2026-03-28T00:00:00.000Z"})
 	if err != nil {
 		t.Fatalf("ListProjects with Since failed: %v", err)
@@ -1333,7 +1315,6 @@ func TestGetSession_CWD(t *testing.T) {
 func TestListSessions_CWD_Null(t *testing.T) {
 	db := testDB(t)
 
-	// Session with no CWD
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpdateSessionTitle(SourceClaudeCode, "s1", "title", "2026-03-28T15:00:00Z"))
 

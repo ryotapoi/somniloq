@@ -78,7 +78,6 @@ func TestFormatSession_WithTitle(t *testing.T) {
 	formatSession(&buf, session, displayName, messages, time.UTC)
 	got := buf.String()
 
-	// Check h2 uses custom_title
 	if !strings.Contains(got, "## Fix login bug\n") {
 		t.Errorf("expected h2 with custom_title, got:\n%s", got)
 	}
@@ -116,7 +115,6 @@ func TestFormatSession_EmptyTitle(t *testing.T) {
 	formatSession(&buf, session, "-Users-test", nil, time.UTC)
 	got := buf.String()
 
-	// Should fallback to session_id
 	if !strings.Contains(got, "## abc-123\n") {
 		t.Errorf("expected h2 with session_id fallback, got:\n%s", got)
 	}
@@ -153,7 +151,6 @@ func TestFormatSessions_Multiple(t *testing.T) {
 		t.Errorf("expected Session Two heading, got:\n%s", got)
 	}
 
-	// Check separator between sessions (but not after last)
 	parts := strings.Split(got, "\n---\n")
 	if len(parts) != 2 {
 		t.Errorf("expected exactly one --- separator between 2 sessions, got %d parts:\n%s", len(parts), got)
@@ -196,7 +193,6 @@ func TestFormatSession_TitleWithNewline(t *testing.T) {
 	formatSession(&buf, session, "-Users-test", nil, time.UTC)
 	got := buf.String()
 
-	// Newline in title should be replaced with space
 	if !strings.Contains(got, "## line1 line2\n") {
 		t.Errorf("expected newline sanitized in title, got:\n%s", got)
 	}

@@ -35,7 +35,6 @@ func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt stri
 func TestScanJSONLFiles(t *testing.T) {
 	dir := t.TempDir()
 
-	// Create project dirs with JSONL files
 	projA := filepath.Join(dir, "-Users-test-projA")
 	projB := filepath.Join(dir, "-Users-test-projB")
 	os.MkdirAll(projA, 0o755)
@@ -62,7 +61,6 @@ func TestScanJSONLFiles(t *testing.T) {
 		t.Fatalf("expected 3 files, got %d: %+v", len(files), files)
 	}
 
-	// Check that SessionID is correctly derived
 	found := map[string]bool{}
 	for _, f := range files {
 		found[f.SessionID] = true
@@ -106,7 +104,6 @@ func TestProcessFile(t *testing.T) {
 		t.Errorf("offset: got %d, want %d", newOffset, len(jsonl))
 	}
 
-	// Check sessions
 	var title string
 	err = db.db.QueryRow("SELECT custom_title FROM sessions WHERE session_id='s1'").Scan(&title)
 	if err != nil {
@@ -116,7 +113,6 @@ func TestProcessFile(t *testing.T) {
 		t.Errorf("title: got %q, want %q", title, "test session")
 	}
 
-	// Check messages
 	var count int
 	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count)
 	if count != 2 {
@@ -358,7 +354,6 @@ func TestProcessFile_NoTrailingNewline(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
 
-	// No trailing newline
 	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}`
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
@@ -441,7 +436,6 @@ func TestImport_Incremental(t *testing.T) {
 	projDir := filepath.Join(dir, "-test-proj")
 	os.MkdirAll(projDir, 0o755)
 
-	// First import: 2 messages
 	jsonl1 := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"first"}}
 {"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"reply1"}]}}
 `
@@ -456,7 +450,6 @@ func TestImport_Incremental(t *testing.T) {
 		t.Errorf("expected 1 imported, got %d", res.FilesImported)
 	}
 
-	// Append 1 more message
 	jsonl2 := jsonl1 + `{"type":"user","uuid":"u2","sessionId":"s1","timestamp":"2026-03-28T14:02:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"second"}}
 `
 	os.WriteFile(path, []byte(jsonl2), 0o644)
@@ -483,7 +476,6 @@ func TestImport_FileShrink(t *testing.T) {
 	projDir := filepath.Join(dir, "-test-proj")
 	os.MkdirAll(projDir, 0o755)
 
-	// First import with larger file
 	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"original"}}
 {"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"reply"}]}}
 `
@@ -538,7 +530,6 @@ func TestImport_Full(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	// First import
 	Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 
 	var count int
@@ -547,7 +538,6 @@ func TestImport_Full(t *testing.T) {
 		t.Fatalf("expected 1 message after first import, got %d", count)
 	}
 
-	// Full re-import
 	res, err := Import(db, ImportOptions{Full: true, ProjectsDir: dir, Source: ImportSourceClaudeCode})
 	if err != nil {
 		t.Fatalf("Import --full failed: %v", err)

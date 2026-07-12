@@ -32,7 +32,6 @@ func TestUpsertSession(t *testing.T) {
 		t.Errorf("repo_path: got %q, want %q", repoPath, "/Users/test")
 	}
 
-	// Second upsert with later ended_at
 	meta2 := SessionMeta{
 		Source:    SourceClaudeCode,
 		SessionID: "s1",
@@ -169,7 +168,6 @@ func TestUpsertSession_RepoPath_AfterUpdateSessionTitle(t *testing.T) {
 func TestInsertMessage(t *testing.T) {
 	db := testDB(t)
 
-	// Need a session first
 	if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1"}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
@@ -199,7 +197,6 @@ func TestInsertMessage(t *testing.T) {
 		t.Errorf("unexpected: role=%s content=%s", role, content)
 	}
 
-	// Duplicate insert should not error
 	if err := db.InsertMessage(msg); err != nil {
 		t.Fatalf("duplicate InsertMessage should not error: %v", err)
 	}
@@ -264,7 +261,6 @@ func TestUpsertImportState(t *testing.T) {
 		t.Errorf("unexpected state: %+v", got)
 	}
 
-	// Update
 	state.FileSize = 2000
 	state.LastOffset = 1500
 	if err := db.UpsertImportState(state); err != nil {
