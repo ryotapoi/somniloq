@@ -48,6 +48,8 @@ func (d *DB) UpsertSession(meta SessionMeta, importedAt string) error {
 }
 
 func upsertSession(e execer, meta SessionMeta, importedAt string) error {
+	// custom_title and agent_name have source-specific update paths; excluding
+	// them here prevents ordinary message imports from overwriting that metadata.
 	_, err := e.Exec(`
 		INSERT INTO sessions (source, session_id, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
 		VALUES (?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
@@ -105,6 +107,8 @@ func (d *DB) UpsertImportState(state ImportState) error {
 	return upsertImportState(d.execer(), state)
 }
 
+// jsonl_path is globally unique across source roots; source is recorded as
+// metadata and intentionally is not part of the incremental cursor key (ADR 0004).
 func upsertImportState(e execer, state ImportState) error {
 	_, err := e.Exec(`
 		INSERT INTO import_state (jsonl_path, source, file_size, last_offset, imported_at)

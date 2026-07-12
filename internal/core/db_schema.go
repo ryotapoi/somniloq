@@ -5,6 +5,9 @@ import (
 	"fmt"
 )
 
+// Schema changes that add or drop one column belong in the ensure helpers in
+// this file. Changes to table structure require a migrate/table-rebuild path.
+
 // ensureSessionsProjectDirColumnDropped removes the legacy project_dir column
 // if it is still present. Required when upgrading from v0.2.x DBs.
 // Precondition: the sessions table exists. SQLite 3.35+ required for

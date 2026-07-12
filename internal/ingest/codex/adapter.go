@@ -89,7 +89,9 @@ func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, file in
 }
 
 // Begin recovers session_meta from the already-imported prefix so incremental
-// imports can normalize messages that appear after the offset.
+// imports can normalize messages that appear after the offset. Parse failures
+// in this prefix are intentionally ignored: the initial import already counted
+// them as unparsed, so resuming must not count them again (ADR 0009).
 func (h *fileHandler) Begin(path string, offset int64) error {
 	h.path = path
 	if offset <= 0 {
