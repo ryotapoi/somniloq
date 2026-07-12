@@ -44,6 +44,11 @@ func resolveTimeFlag(value string, now time.Time, isUntil bool, loc *time.Locati
 	if isUntil && dateOnly {
 		t = t.AddDate(0, 0, 1)
 	}
+	// Keep this three-digit UTC representation compatible with the lexical range
+	// comparisons in internal/core/db_query.go. Source JSONL timestamps are
+	// stored in sessions.started_at and messages.timestamp with RFC3339
+	// second-or-finer precision, so an equal seconds-precision value (…:05Z)
+	// remains >= this boundary (…:05.000Z).
 	return t.UTC().Format("2006-01-02T15:04:05.000Z"), nil
 }
 

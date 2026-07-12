@@ -122,12 +122,16 @@ type timestampColumn string
 
 const (
 	sessionStartedAtColumn timestampColumn = "s.started_at"
-	messageTimestampColumn  timestampColumn = "m.timestamp"
+	messageTimestampColumn timestampColumn = "m.timestamp"
 )
 
 // timeFilterConditions returns range conditions for filter.Since / filter.Until
 // on a trusted internal timestamp column. The column constants above are the
-// only callers; user-provided values remain query parameters.
+// only callers; user-provided values remain query parameters. Its lexical
+// comparisons rely on cmd/somniloq/filter.go emitting three-digit UTC filter
+// boundaries that remain ordered with source JSONL timestamps stored in
+// sessions.started_at and messages.timestamp at RFC3339 second-or-finer
+// precision (for example, …:05Z >= …:05.000Z).
 func timeFilterConditions(filter SessionFilter, column timestampColumn) (conditions []string, args []any) {
 	if filter.Since != "" {
 		conditions = append(conditions, string(column)+" >= ?")

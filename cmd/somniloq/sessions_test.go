@@ -111,6 +111,58 @@ func TestSessionsCmd_DayBoundaryFiltersDateOnlySinceAndDisplaysLogicalDay(t *tes
 	}
 }
 
+func TestSessionsCmd_TimeFilterBoundaryWithSecondsPrecisionStartedAt(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.UTC
+	defer func() { time.Local = oldLocal }()
+
+	newDBWithBoundarySession := func(t *testing.T) *core.DB {
+		t.Helper()
+		db, err := core.OpenDB(":memory:")
+		if err != nil {
+			t.Fatalf("OpenDB: %v", err)
+		}
+		t.Cleanup(func() { db.Close() })
+		if err := db.UpsertSession(core.SessionMeta{
+			Source:    core.SourceClaudeCode,
+			SessionID: "at-boundary",
+			RepoPath:  "/Users/test/proj",
+			StartedAt: "2026-03-28T10:00:00Z",
+		}, "2026-03-28T12:00:00Z"); err != nil {
+			t.Fatalf("UpsertSession: %v", err)
+		}
+		return db
+	}
+
+	t.Run("since includes equal boundary", func(t *testing.T) {
+		var out, errOut bytes.Buffer
+		code, err := sessionsCmd([]string{"--since", "2026-03-28T10:00"}, staticDB(newDBWithBoundarySession(t)), config{}, &out, &errOut)
+		if err != nil {
+			t.Fatalf("sessionsCmd: %v", err)
+		}
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+		}
+		if !strings.HasPrefix(out.String(), "at-boundary\t") {
+			t.Fatalf("equal seconds-precision started_at must match --since boundary:\n%s", out.String())
+		}
+	})
+
+	t.Run("until excludes equal boundary", func(t *testing.T) {
+		var out, errOut bytes.Buffer
+		code, err := sessionsCmd([]string{"--until", "2026-03-28T10:00"}, staticDB(newDBWithBoundarySession(t)), config{}, &out, &errOut)
+		if err != nil {
+			t.Fatalf("sessionsCmd: %v", err)
+		}
+		if code != 0 {
+			t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+		}
+		if out.Len() != 0 {
+			t.Fatalf("equal seconds-precision started_at must not match exclusive --until boundary:\n%s", out.String())
+		}
+	})
+}
+
 func newSessionSkipHintsDB(t *testing.T) *core.DB {
 	t.Helper()
 	db, err := core.OpenDB(":memory:")
