@@ -16,7 +16,7 @@ sources:
 
 # Storage and query map
 
-DB schema、migration、query helper を触るときの地図。SQL の意味や migration は High-risk なので、仕様・テスト・`project-risk-check` を同時に見る。
+DB schema、migration、query helper を触るときの地図。SQL の意味や migration は High-risk なので、仕様とテストを同時に見る。
 
 ## 主な入口
 
