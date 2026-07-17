@@ -20,5 +20,6 @@ modernc.org/sqlite と SQLite 固有の外部知見。設計判断や CLI 仕様
 
 ## SQLite
 
+- `INSERT ... ON CONFLICT DO NOTHING` で挿入がスキップされた場合、`LastInsertId()` は今回の文の結果ではなく接続の以前の `last_insert_rowid` を返す。挿入された行の ID として使う前に `RowsAffected()` で実際に挿入されたことを確認する。
 - TEXT のバイト数は `OCTET_LENGTH(text)` で取る。`LENGTH(text)` は文字数を返す。`internal/core/db_query.go` の `sessionRowSelect` は `show` が出す本文量に合わせるため、sidechain を除外して `OCTET_LENGTH(m.content)` を集計する。
 - SQLite には `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` がない。migration は `PRAGMA table_info(<table>)` で列の有無を先に確認し、失敗時も再度 state を見て成功扱いにできるか判断する。`internal/core/db_schema.go` の `ensureSessionsRepoPathColumn` / `ensureSessionsProjectDirColumnDropped` / `tableColumnPresent` がこの方針。
