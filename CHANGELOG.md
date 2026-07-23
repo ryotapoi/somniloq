@@ -4,6 +4,14 @@ English | [日本語](CHANGELOG.ja.md)
 
 ## Unreleased
 
+## v0.9.0 — 2026-07-24
+
+### Fixed
+
+- Database query errors now include the operation and stage (query, scan, or iteration), while preserving wrapped causes and existing not-found behavior.
+
+## v0.8.1 — 2026-07-23
+
 ### Changed
 
 - Consolidated config-command flag declarations so help prechecks derive flag recognition and value consumption from the same `FlagSet` definitions.
