@@ -2,6 +2,13 @@
 
 [English](CHANGELOG.md) | 日本語
 
+## Unreleased
+
+### 変更
+
+- config を読むサブコマンドの flag 宣言を統合し、help の事前判定で使う flag の認識と値消費判定を、実際の `FlagSet` 定義から導くようにした。
+- 未使用の `ingest.Adapter.Source` メソッドを削除した。import source identity は引き続き import source の登録と JSONL 処理で決まる。
+
 ## v0.8.0 — 2026-07-12
 
 ### 追加

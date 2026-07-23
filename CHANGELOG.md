@@ -2,6 +2,13 @@
 
 English | [日本語](CHANGELOG.ja.md)
 
+## Unreleased
+
+### Changed
+
+- Consolidated config-command flag declarations so help prechecks derive flag recognition and value consumption from the same `FlagSet` definitions.
+- Removed the unused `ingest.Adapter.Source` method; import source identity remains defined by import source registration and JSONL processing.
+
 ## v0.8.0 — 2026-07-12
 
 ### Added
