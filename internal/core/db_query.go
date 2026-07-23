@@ -3,6 +3,7 @@ package core
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 )
 
@@ -17,7 +18,7 @@ func (d *DB) GetImportState(jsonlPath string) (*ImportState, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get import state: scan row: %w", err)
 	}
 	s.Source = Source(src)
 	return &s, nil
@@ -101,19 +102,19 @@ func scanSessionRow(row rowScanner) (SessionRow, error) {
 	return r, nil
 }
 
-func scanSessionRows(rows *sql.Rows) ([]SessionRow, error) {
+func scanSessionRows(rows *sql.Rows, operation string) ([]SessionRow, error) {
 	defer rows.Close()
 
 	result := []SessionRow{}
 	for rows.Next() {
 		r, err := scanSessionRow(rows)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s: scan row: %w", operation, err)
 		}
 		result = append(result, r)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: iterate rows: %w", operation, err)
 	}
 	return result, nil
 }
@@ -184,9 +185,9 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 
 	rows, err := d.execer().Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list sessions: query: %w", err)
 	}
-	return scanSessionRows(rows)
+	return scanSessionRows(rows, "list sessions")
 }
 
 type ProjectRow struct {
@@ -210,7 +211,7 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 
 	rows, err := d.execer().Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list projects: query: %w", err)
 	}
 	defer rows.Close()
 
@@ -218,12 +219,12 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	for rows.Next() {
 		var r ProjectRow
 		if err := rows.Scan(&r.RepoPath, &r.SessionCount); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("list projects: scan row: %w", err)
 		}
 		result = append(result, r)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("list projects: iterate rows: %w", err)
 	}
 	return result, nil
 }
@@ -249,7 +250,7 @@ func (d *DB) GetSession(source Source, sessionID string) (*SessionRow, error) {
 		return nil, nil
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get session: scan row: %w", err)
 	}
 	return &r, nil
 }
@@ -262,9 +263,9 @@ func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
 		sessionID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("lookup sessions by ID: query: %w", err)
 	}
-	return scanSessionRows(rows)
+	return scanSessionRows(rows, "lookup sessions by ID")
 }
 
 // GetMessages returns the session's messages in chronological order.
@@ -285,9 +286,9 @@ func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) 
 		string(source), sessionID,
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get messages: query: %w", err)
 	}
-	return scanMessages(rows)
+	return scanMessages(rows, "get messages")
 }
 
 // Prefixes of user message content that mark synthetic entries inserted by
@@ -335,9 +336,9 @@ func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, incl
 
 	rows, err := d.execer().Query(query, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get summary messages: query: %w", err)
 	}
-	return scanMessages(rows)
+	return scanMessages(rows, "get summary messages")
 }
 
 // SearchRow is one message that matched a search query.
@@ -374,7 +375,7 @@ func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, er
 
 	rows, err := d.execer().Query(q, args...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("search messages: query: %w", err)
 	}
 	defer rows.Close()
 
@@ -383,30 +384,30 @@ func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, er
 		var r SearchRow
 		var src string
 		if err := rows.Scan(&src, &r.UUID, &r.SessionID, &r.RepoPath, &r.Timestamp, &r.Content); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("search messages: scan row: %w", err)
 		}
 		r.Source = Source(src)
 		result = append(result, r)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("search messages: iterate rows: %w", err)
 	}
 	return result, nil
 }
 
-func scanMessages(rows *sql.Rows) ([]MessageRow, error) {
+func scanMessages(rows *sql.Rows, operation string) ([]MessageRow, error) {
 	defer rows.Close()
 
 	result := []MessageRow{}
 	for rows.Next() {
 		var m MessageRow
 		if err := rows.Scan(&m.UUID, &m.Role, &m.Content, &m.Timestamp); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("%s: scan row: %w", operation, err)
 		}
 		result = append(result, m)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("%s: iterate rows: %w", operation, err)
 	}
 	return result, nil
 }

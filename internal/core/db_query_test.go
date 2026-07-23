@@ -1,9 +1,102 @@
 package core
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 )
+
+func TestQueryMethods_ClosedDatabaseErrorsIncludeOperationAndCause(t *testing.T) {
+	tests := []struct {
+		name      string
+		operation string
+		query     func(*DB) error
+	}{
+		{
+			name:      "GetImportState",
+			operation: "get import state",
+			query: func(db *DB) error {
+				_, err := db.GetImportState("/tmp/session.jsonl")
+				return err
+			},
+		},
+		{
+			name:      "ListSessions",
+			operation: "list sessions",
+			query: func(db *DB) error {
+				_, err := db.ListSessions(SessionFilter{})
+				return err
+			},
+		},
+		{
+			name:      "ListProjects",
+			operation: "list projects",
+			query: func(db *DB) error {
+				_, err := db.ListProjects(SessionFilter{})
+				return err
+			},
+		},
+		{
+			name:      "GetSession",
+			operation: "get session",
+			query: func(db *DB) error {
+				_, err := db.GetSession(SourceClaudeCode, "session")
+				return err
+			},
+		},
+		{
+			name:      "LookupSessionsByID",
+			operation: "lookup sessions by ID",
+			query: func(db *DB) error {
+				_, err := db.LookupSessionsByID("session")
+				return err
+			},
+		},
+		{
+			name:      "GetMessages",
+			operation: "get messages",
+			query: func(db *DB) error {
+				_, err := db.GetMessages(SourceClaudeCode, "session")
+				return err
+			},
+		},
+		{
+			name:      "GetSummaryMessages",
+			operation: "get summary messages",
+			query: func(db *DB) error {
+				_, err := db.GetSummaryMessages(SourceClaudeCode, "session", 1, false)
+				return err
+			},
+		},
+		{
+			name:      "SearchMessages",
+			operation: "search messages",
+			query: func(db *DB) error {
+				_, err := db.SearchMessages(SessionFilter{}, "query")
+				return err
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			db := testDB(t)
+			must(t, db.Close())
+
+			err := tt.query(db)
+			if err == nil {
+				t.Fatal("expected query error from closed database")
+			}
+			if !strings.Contains(err.Error(), tt.operation) {
+				t.Errorf("error %q does not identify operation %q", err, tt.operation)
+			}
+			if errors.Unwrap(err) == nil {
+				t.Errorf("error %q does not retain its cause", err)
+			}
+		})
+	}
+}
 
 func TestListSessions_Empty(t *testing.T) {
 	db := testDB(t)
