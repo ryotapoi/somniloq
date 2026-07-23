@@ -21,10 +21,6 @@ func NewAdapter(resolveRepoPath ingest.RepoResolver) Adapter {
 	return Adapter{resolveRepoPath: resolveRepoPath}
 }
 
-func (a Adapter) Source() ingest.Source {
-	return ingest.SourceCodex
-}
-
 func (a Adapter) ScanFiles(rootDir string) ([]ingest.File, []error) {
 	var files []ingest.File
 	var errs []error

@@ -19,10 +19,6 @@ func NewAdapter(resolveRepoPath ingest.RepoResolver) Adapter {
 	return Adapter{resolveRepoPath: resolveRepoPath}
 }
 
-func (a Adapter) Source() ingest.Source {
-	return ingest.SourceClaudeCode
-}
-
 func (a Adapter) ScanFiles(projectsDir string) ([]ingest.File, []error) {
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
