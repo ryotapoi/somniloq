@@ -28,17 +28,13 @@ Examples:
 // projectsCmd runs the projects subcommand without calling os.Exit, so it can
 // be tested directly.
 func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
-	fs := flag.NewFlagSet("projects", flag.ContinueOnError)
-	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	short := fs.Bool("short", false, "shorten unaliased projects to repo basename")
-	format := fs.String("format", "tsv", "output format (tsv, json)")
+	fs, flags := newProjectsFlagSet()
 	setUsage(fs, "List projects", "somniloq projects [flags]", projectsHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
 
-	if err := validateFormat(*format, "tsv", "json"); err != nil {
+	if err := validateFormat(*flags.format, "tsv", "json"); err != nil {
 		return 1, err
 	}
 
@@ -48,7 +44,7 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 		return 1, nil
 	}
 
-	filter, err := buildSessionFilter(*since, *until, "", config{}, dayBoundary{})
+	filter, err := buildSessionFilter(*flags.since, *flags.until, "", config{}, dayBoundary{})
 	if err != nil {
 		return 1, err
 	}
@@ -63,9 +59,9 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	if err != nil {
 		return 1, err
 	}
-	displayRows := projectDisplayRows(rows, *short, cfg)
+	displayRows := projectDisplayRows(rows, *flags.short, cfg)
 
-	if *format == "json" {
+	if *flags.format == "json" {
 		entries := make([]projectJSON, len(displayRows))
 		for i, r := range displayRows {
 			entries[i] = projectJSON{Project: r.Project, SessionCount: r.SessionCount}
@@ -80,6 +76,21 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 		fmt.Fprintf(out, "%s\t%d\n", r.Project, r.SessionCount)
 	}
 	return 0, nil
+}
+
+type projectsFlags struct {
+	since, until, format *string
+	short                *bool
+}
+
+func newProjectsFlagSet() (*flag.FlagSet, projectsFlags) {
+	fs := flag.NewFlagSet("projects", flag.ContinueOnError)
+	return fs, projectsFlags{
+		since:  fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		until:  fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		short:  fs.Bool("short", false, "shorten unaliased projects to repo basename"),
+		format: fs.String("format", "tsv", "output format (tsv, json)"),
+	}
 }
 
 type projectDisplayRow struct {

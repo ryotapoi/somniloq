@@ -113,6 +113,11 @@ func loadConfigForCommand(configPath, command string, commandArgs []string) (con
 }
 
 func isHelpRequest(command string, args []string) bool {
+	fs := configCommandFlagSet(command)
+	if fs == nil {
+		return false
+	}
+
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
 		if arg == "--" {
@@ -125,11 +130,11 @@ func isHelpRequest(command string, args []string) bool {
 		if name == "h" || name == "help" {
 			return true
 		}
-		consumesValue, known := configCommandFlagConsumesValue(command, name)
-		if !known {
+		f := fs.Lookup(name)
+		if f == nil {
 			return false
 		}
-		if consumesValue && !hasValue {
+		if flagConsumesValue(f) && !hasValue {
 			i++
 		}
 	}
@@ -151,36 +156,27 @@ func splitFlagArg(arg string) (name string, hasValue bool, ok bool) {
 	return name, hasValue, true
 }
 
-func configCommandFlagConsumesValue(command, name string) (bool, bool) {
+func configCommandFlagSet(command string) *flag.FlagSet {
 	switch command {
 	case "sessions":
-		switch name {
-		case "since", "until", "day-boundary", "project", "format":
-			return true, true
-		case "short":
-			return false, true
-		}
+		fs, _ := newSessionsFlagSet()
+		return fs
 	case "show":
-		switch name {
-		case "since", "until", "project", "summary", "turn", "tail", "format":
-			return true, true
-		case "short", "include-clear":
-			return false, true
-		}
+		fs, _ := newShowFlagSet()
+		return fs
 	case "search":
-		switch name {
-		case "since", "until", "day-boundary", "project":
-			return true, true
-		}
+		fs, _ := newSearchFlagSet()
+		return fs
 	case "projects":
-		switch name {
-		case "since", "until", "format":
-			return true, true
-		case "short":
-			return false, true
-		}
+		fs, _ := newProjectsFlagSet()
+		return fs
 	}
-	return false, false
+	return nil
+}
+
+func flagConsumesValue(f *flag.Flag) bool {
+	boolFlag, ok := f.Value.(interface{ IsBoolFlag() bool })
+	return !ok || !boolFlag.IsBoolFlag()
 }
 
 func openDB(dbPath string) (*core.DB, error) {

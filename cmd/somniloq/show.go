@@ -37,28 +37,19 @@ Examples:
 // showCmd runs the show subcommand without calling os.Exit, so it can be
 // tested directly.
 func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
-	fs := flag.NewFlagSet("show", flag.ContinueOnError)
-	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	project := fs.String("project", "", "filter by repo path (substring match)")
-	short := fs.Bool("short", false, "shorten unaliased project to repo basename")
-	summary := fs.Int("summary", 0, "show first N user messages skipping /clear and local-command-caveat (0 disables)")
-	includeClear := fs.Bool("include-clear", false, "keep /clear and local-command-caveat messages in --summary output (requires --summary >= 1)")
-	turnRange := fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)")
-	tail := fs.Int("tail", 0, "show only the last N turns (0 disables)")
-	format := fs.String("format", "markdown", "output format (markdown, json)")
+	fs, flags := newShowFlagSet()
 	setUsage(fs, "Show session content in Markdown", showUsageLine, showHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
 
-	if *summary < 0 {
+	if *flags.summary < 0 {
 		return 1, errors.New("--summary must be >= 0")
 	}
-	if *includeClear && *summary == 0 {
+	if *flags.includeClear && *flags.summary == 0 {
 		return 1, errors.New("--include-clear requires --summary >= 1")
 	}
-	if *tail < 0 {
+	if *flags.tail < 0 {
 		return 1, errors.New("--tail must be >= 0")
 	}
 	// Detect --turn via Visit so an explicit empty value (e.g. an unset shell
@@ -70,23 +61,23 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 			turnSet = true
 		}
 	})
-	if turnSet && *tail > 0 {
+	if turnSet && *flags.tail > 0 {
 		return 1, errors.New("specify either --turn or --tail, not both")
 	}
-	turnFiltered := turnSet || *tail > 0
-	if turnFiltered && *summary > 0 {
+	turnFiltered := turnSet || *flags.tail > 0
+	if turnFiltered && *flags.summary > 0 {
 		return 1, errors.New("--turn/--tail cannot be combined with --summary")
 	}
 	var turnLo, turnHi int
 	if turnSet {
 		var err error
-		turnLo, turnHi, err = parseTurnRange(*turnRange)
+		turnLo, turnHi, err = parseTurnRange(*flags.turnRange)
 		if err != nil {
 			return 1, err
 		}
 	}
 
-	if err := validateFormat(*format, "markdown", "json"); err != nil {
+	if err := validateFormat(*flags.format, "markdown", "json"); err != nil {
 		return 1, err
 	}
 
@@ -100,10 +91,10 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 	sessionID := fs.Arg(0)
 
-	if sessionID != "" && (*since != "" || *until != "") {
+	if sessionID != "" && (*flags.since != "" || *flags.until != "") {
 		return 1, errors.New("specify either session-id or --since/--until, not both")
 	}
-	if sessionID == "" && *since == "" && *until == "" {
+	if sessionID == "" && *flags.since == "" && *flags.until == "" {
 		fmt.Fprintln(errOut, showUsage)
 		return 1, nil
 	}
@@ -117,8 +108,8 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	getMessages := func(src core.Source, id string) ([]core.MessageRow, error) {
 		return db.GetMessages(src, id)
 	}
-	if *summary >= 1 {
-		n, ic := *summary, *includeClear
+	if *flags.summary >= 1 {
+		n, ic := *flags.summary, *flags.includeClear
 		getMessages = func(src core.Source, id string) ([]core.MessageRow, error) {
 			return db.GetSummaryMessages(src, id, n, ic)
 		}
@@ -126,7 +117,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	if turnFiltered {
 		// Turn filtering must run on the full GetMessages output so the
 		// numbers match outline (see assignTurns).
-		tailN := *tail
+		tailN := *flags.tail
 		getMessages = func(src core.Source, id string) ([]core.MessageRow, error) {
 			msgs, err := db.GetMessages(src, id)
 			if err != nil {
@@ -144,12 +135,12 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 		if code != 0 {
 			return code, err
 		}
-		proj := resolveProjectDisplayName(session.RepoPath, *short, cfg)
+		proj := resolveProjectDisplayName(session.RepoPath, *flags.short, cfg)
 		messages, err := getMessages(session.Source, session.SessionID)
 		if err != nil {
 			return 1, err
 		}
-		if *format == "json" {
+		if *flags.format == "json" {
 			// Always an array, so consumers parse single-session and
 			// time-range output the same way.
 			if err := writeJSON(out, []showSessionJSON{newShowSessionJSON(session, proj, messages)}); err != nil {
@@ -162,7 +153,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	}
 
 	// --since/--until mode
-	filter, err := buildSessionFilter(*since, *until, *project, cfg, dayBoundary{})
+	filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, dayBoundary{})
 	if err != nil {
 		return 1, err
 	}
@@ -171,14 +162,14 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	if err != nil {
 		return 1, err
 	}
-	if *format == "json" {
+	if *flags.format == "json" {
 		entries := make([]showSessionJSON, len(sessions))
 		for i, session := range sessions {
 			messages, err := getMessages(session.Source, session.SessionID)
 			if err != nil {
 				return 1, err
 			}
-			entries[i] = newShowSessionJSON(session, resolveProjectDisplayName(session.RepoPath, *short, cfg), messages)
+			entries[i] = newShowSessionJSON(session, resolveProjectDisplayName(session.RepoPath, *flags.short, cfg), messages)
 		}
 		if err := writeJSON(out, entries); err != nil {
 			return 1, err
@@ -191,11 +182,32 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 	displayNames := make([]string, len(sessions))
 	for i := range sessions {
-		displayNames[i] = resolveProjectDisplayName(sessions[i].RepoPath, *short, cfg)
+		displayNames[i] = resolveProjectDisplayName(sessions[i].RepoPath, *flags.short, cfg)
 	}
 
 	if err := formatSessions(out, sessions, displayNames, getMessages, time.Local); err != nil {
 		return 1, err
 	}
 	return 0, nil
+}
+
+type showFlags struct {
+	since, until, project, turnRange, format *string
+	short, includeClear                      *bool
+	summary, tail                            *int
+}
+
+func newShowFlagSet() (*flag.FlagSet, showFlags) {
+	fs := flag.NewFlagSet("show", flag.ContinueOnError)
+	return fs, showFlags{
+		since:        fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		until:        fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		project:      fs.String("project", "", "filter by repo path (substring match)"),
+		short:        fs.Bool("short", false, "shorten unaliased project to repo basename"),
+		summary:      fs.Int("summary", 0, "show first N user messages skipping /clear and local-command-caveat (0 disables)"),
+		includeClear: fs.Bool("include-clear", false, "keep /clear and local-command-caveat messages in --summary output (requires --summary >= 1)"),
+		turnRange:    fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)"),
+		tail:         fs.Int("tail", 0, "show only the last N turns (0 disables)"),
+		format:       fs.String("format", "markdown", "output format (markdown, json)"),
+	}
 }

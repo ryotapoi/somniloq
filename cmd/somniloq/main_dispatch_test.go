@@ -146,6 +146,27 @@ func TestMainDispatchHelpLikeFlagValueDoesNotSkipBrokenConfig(t *testing.T) {
 	}
 }
 
+func TestIsHelpRequestRecognizesEveryDeclaredConfigCommandFlag(t *testing.T) {
+	for _, command := range []string{"sessions", "show", "search", "projects"} {
+		fs := configCommandFlagSet(command)
+		if fs == nil {
+			t.Fatalf("configCommandFlagSet(%q) = nil", command)
+		}
+
+		fs.VisitAll(func(f *flag.Flag) {
+			t.Run(command+"/"+f.Name, func(t *testing.T) {
+				args := []string{"--" + f.Name, "--help"}
+				if flagConsumesValue(f) {
+					args = []string{"--" + f.Name, "value", "--help"}
+				}
+				if !isHelpRequest(command, args) {
+					t.Fatalf("isHelpRequest(%q, %q) = false, want true", command, args)
+				}
+			})
+		})
+	}
+}
+
 func homeWithBrokenConfig(t *testing.T) string {
 	t.Helper()
 

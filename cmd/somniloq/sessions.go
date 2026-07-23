@@ -35,31 +35,25 @@ Examples:
 // sessionsCmd runs the sessions subcommand without calling os.Exit, so it can
 // be tested directly.
 func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
-	fs := flag.NewFlagSet("sessions", flag.ContinueOnError)
-	since := fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	until := fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	dayBoundaryFlag := fs.String("day-boundary", "", "logical day boundary for date filters and display (HH:MM, overrides config dayBoundary)")
-	project := fs.String("project", "", "filter by repo path (substring match)")
-	short := fs.Bool("short", false, "shorten unaliased projects to repo basename")
-	format := fs.String("format", "tsv", "output format (tsv, json)")
+	fs, flags := newSessionsFlagSet()
 	setUsage(fs, "List sessions", "somniloq sessions [flags]", sessionsHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
 
-	if err := validateFormat(*format, "tsv", "json"); err != nil {
+	if err := validateFormat(*flags.format, "tsv", "json"); err != nil {
 		return 1, err
 	}
 	matcher, err := newCommandMatcher(cfg)
 	if err != nil {
 		return 1, err
 	}
-	boundary, err := resolveDayBoundary(*dayBoundaryFlag, cfg)
+	boundary, err := resolveDayBoundary(*flags.dayBoundary, cfg)
 	if err != nil {
 		return 1, err
 	}
 
-	filter, err := buildSessionFilter(*since, *until, *project, cfg, boundary)
+	filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, boundary)
 	if err != nil {
 		return 1, err
 	}
@@ -79,10 +73,10 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 		return 1, err
 	}
 
-	if *format == "json" {
+	if *flags.format == "json" {
 		entries := make([]sessionJSON, len(rows))
 		for i, r := range rows {
-			entries[i] = newSessionJSON(r, resolveProjectDisplayName(r.RepoPath, *short, cfg), sessionLogicalDay(r, boundary, time.Local), derived[i])
+			entries[i] = newSessionJSON(r, resolveProjectDisplayName(r.RepoPath, *flags.short, cfg), sessionLogicalDay(r, boundary, time.Local), derived[i])
 		}
 		if err := writeJSON(out, entries); err != nil {
 			return 1, err
@@ -92,12 +86,29 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 
 	for i, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
-		proj := resolveProjectDisplayName(r.RepoPath, *short, cfg)
+		proj := resolveProjectDisplayName(r.RepoPath, *flags.short, cfg)
 		fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
 			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
 			derived[i].NonCommandUserTurnCount, sanitizeTSV(derived[i].FirstNonCommandUserLine))
 	}
 	return 0, nil
+}
+
+type sessionsFlags struct {
+	since, until, dayBoundary, project, format *string
+	short                                      *bool
+}
+
+func newSessionsFlagSet() (*flag.FlagSet, sessionsFlags) {
+	fs := flag.NewFlagSet("sessions", flag.ContinueOnError)
+	return fs, sessionsFlags{
+		since:       fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		until:       fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters and display (HH:MM, overrides config dayBoundary)"),
+		project:     fs.String("project", "", "filter by repo path (substring match)"),
+		short:       fs.Bool("short", false, "shorten unaliased projects to repo basename"),
+		format:      fs.String("format", "tsv", "output format (tsv, json)"),
+	}
 }
 
 type sessionUserTurnSummary struct {

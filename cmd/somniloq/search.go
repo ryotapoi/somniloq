@@ -38,11 +38,7 @@ const snippetContext = 40
 // searchCmd runs the search subcommand without calling os.Exit, so it can be
 // tested directly.
 func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
-	fs := flag.NewFlagSet("search", flag.ContinueOnError)
-	since := fs.String("since", "", "filter by message time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	until := fs.String("until", "", "filter messages before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time")
-	dayBoundaryFlag := fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)")
-	project := fs.String("project", "", "filter by repo path (substring match)")
+	fs, flags := newSearchFlagSet()
 	setUsage(fs, "Search message content across sessions and print TSV with session_id, turn, time, project, snippet", searchUsageLine, searchHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
@@ -61,11 +57,11 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 		return 1, nil
 	}
 
-	boundary, err := resolveDayBoundary(*dayBoundaryFlag, cfg)
+	boundary, err := resolveDayBoundary(*flags.dayBoundary, cfg)
 	if err != nil {
 		return 1, err
 	}
-	filter, err := buildSessionFilter(*since, *until, *project, cfg, boundary)
+	filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, boundary)
 	if err != nil {
 		return 1, err
 	}
@@ -99,6 +95,20 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 			sanitizeTSV(searchSnippet(r.Content, query)))
 	}
 	return 0, nil
+}
+
+type searchFlags struct {
+	since, until, dayBoundary, project *string
+}
+
+func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
+	fs := flag.NewFlagSet("search", flag.ContinueOnError)
+	return fs, searchFlags{
+		since:       fs.String("since", "", "filter by message time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		until:       fs.String("until", "", "filter messages before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)"),
+		project:     fs.String("project", "", "filter by repo path (substring match)"),
+	}
 }
 
 type searchSessionKey struct {
