@@ -59,6 +59,11 @@ type UnparsedDiagnosticReporter interface {
 // ProcessJSONL owns the shared skeleton (open, seek, offset tracking,
 // transaction lifecycle, import_state advance); the handler owns record
 // interpretation and any per-file state.
+//
+// Because that state is per-file, adapters must build a fresh handler for
+// every ProcessFile call; reusing one leaks the previous file's state (line
+// numbers, buffered metadata) into the next. The adapters themselves stay
+// stateless.
 type FileHandler interface {
 	// Begin restores per-file state from the already-imported prefix before
 	// any line is handled. Sources without resume state return nil.

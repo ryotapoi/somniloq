@@ -2,9 +2,11 @@
 
 ## Status
 
-Accepted
+Accepted（2026-06-11 決定）
 
 ## Context
+
+本 ADR は ADR 0007 が定めた `ScanFiles` の戻り値の契約を一部変更する（骨格を 1 箇所に集約するという ADR 0007 の決定自体は維持する）。
 
 import はファイル処理のエラーを非致命として扱い（失敗ファイルをスキップして
 `ImportResult.Errors` に記録し、exit code 1 で続行）、他のファイルの取り込みを

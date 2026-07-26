@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted（2026-06-11 決定）
 
 ## Context
 
@@ -25,7 +25,7 @@ We will load project aliases from `~/.somniloq/config.json` (overridable with th
 
 ## Consequences
 
-- `SessionFilter.Project string` は `Projects []string` に変わる（core API の破壊的変更だが、利用者は cmd 層のみ）
+- core の project フィルタ API は単一値から複数値を取る形へ変わる（破壊的変更だが、利用者は cmd 層のみなので影響範囲が閉じている）
 - alias 編集の UX はテキストエディタ頼み。管理コマンドが欲しくなったら別 ADR で追加を検討する
 - 表示では、alias グループの canonical 名または旧名に一致する `repo_path` / basename を canonical 名だけで出す。`projects` 一覧は表示上の canonical 名で session count を合算する。DB の `repo_path` は取り込み元の事実として書き換えない
 - canonical 名が別グループの旧名にも含まれるような循環・重複定義は検証しない（最初に一致したグループで展開される）。実用上 1 リポジトリ 1 グループで足りるため

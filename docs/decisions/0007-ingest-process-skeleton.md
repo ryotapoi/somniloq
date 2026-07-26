@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Superseded by ADR 0009 / ADR 0010（2026-06-11 決定）
 
 ## Context
 
@@ -27,5 +27,5 @@ C は却下: 骨格は「incremental JSONL import」という同一目的を持�
 
 - 3rd source の追加は「ScanFiles + FileHandler 実装 + parser」だけになり、トランザクション・offset 管理を再実装しなくてよい。
 - 骨格の契約変更（backlog の走査エラー非致命化など）が `ProcessJSONL` 1 箇所の変更になる。
-- `Adapter` interface（`ScanFiles` / `ProcessFile`）という core から見える境界の形は維持される。source identity は `importSourceSpecs` と各 adapter の `ProcessJSONL` 呼び出しで決まる。戻り値の契約はその後 ADR 0009（`ProcessResult`）と ADR 0010（`ScanFiles` の非致命エラー）で変更した。
+- `Adapter` interface（`ScanFiles` / `ProcessFile`）という core から見える境界の形は維持される。source identity は `importSourceSpecs` と各 adapter の `ProcessJSONL` 呼び出しで決まる。
 - handler は per-file 状態を持つため、`ProcessFile` 呼び出しごとに新しい handler を生成する規約が増える（adapter 自体は stateless を維持）。

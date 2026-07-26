@@ -95,6 +95,7 @@ id, timestamp, cwd, originator, cli_version, source, model_provider, git
 - `payload.role in ("user", "assistant")`
 - `payload.content` は配列。`type` が `input_text`, `output_text`, `text` の要素の `text` を抽出し、複数あれば空行区切りで結合する
 - `function_call`, `function_call_output`, `reasoning`, `event_msg` 等は保存しない
+- レコード自身が `timestamp` を持たない場合は `session_meta` の `timestamp` を使う。per-record timestamp を持たない旧形式の rollout では、結果として同一セッションの全メッセージが同じ timestamp になる
 
 ### 一意性と差分取り込み
 

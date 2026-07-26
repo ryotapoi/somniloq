@@ -15,6 +15,7 @@ source（DB 内部値は `claude_code` / `codex`）ごとに専用の adapter �
 - 取り込み終了時に `Imported <n> files (<scanned> scanned, <skipped> skipped, <failed> failed, <unparsed> unparsed lines)` を stdout に出力する
 - parse / 正規化できない行（壊れた JSON、不正な payload）はスキップして続行し、`unparsed lines` に計上する。source が意図的に無視するレコード型（未知 type・非 message レコード・空行等）はカウントしない（`docs/decisions/0009-unparsed-line-visibility.md`）
 - parse / 正規化失敗のうち先頭 5 件を `ファイル:行番号: エラー内容` 形式で stderr に出力する。この診断だけでは exit code を変更しない
+- `unparsed lines` は「その実行で読んで解釈できなかった行数」を意味する。`import_state` の offset が進まないファイル（メタセッション等）の unparsed 行は、`import` のたびに繰り返し計上される
 - ディレクトリ走査で読めないディレクトリはスキップして続行し、発見できたファイルは取り込む。ファイル単位の取り込み失敗も同様にスキップして続行する（`docs/decisions/0010-non-fatal-scan-errors.md`）
 - ディレクトリ走査・ファイル単位の取り込みエラーは stderr に列挙し、1 件以上あれば exit code は 1（取り込み自体は部分的に完了している）
 - source のルートディレクトリが存在しない場合は、その source を未使用として扱いエラーにしない
@@ -55,11 +56,12 @@ source（DB 内部値は `claude_code` / `codex`）ごとに専用の adapter �
   - `sessions` / `messages` に `source` カラムを追加し、既存行に `'claude_code'` を埋め込む
   - `sessions` の主キーを `(source, session_id)` 複合主キーに、`messages` の外部キーを `(source, session_id)` 複合外部キーに張り直す（テーブル再作成方式）
   - `import_state` に `source` カラムを追加し、既存行に `'claude_code'` を埋め込む
-  - 詳細は `docs/decisions/0004-codex-schema-and-migration.md` 参照
+  - 判断の経緯は `docs/decisions/0004-codex-schema-and-migration.md` 参照
 - `messages` を持たない `sessions` 行を DELETE
   - 主目的は v0.2.x 由来のメタ前置 INSERT 残骸の除去
   - 副次的に、text 抽出結果が空の `user`/`assistant` レコードしか持たないセッション（`tool_use` のみ・添付のみ・空白のみ）も消える。取り込み側は text 非空判定の前に `upsertSession` を呼ぶため `messages` 0 件で残る仕様で、show / sessions 一覧で実体が無く実害はほぼゼロ。`--full` で再取り込みすれば戻る
 - `repo_path IS NULL` かつ `cwd` 非空 の行を `ResolveRepoPath` で埋める（手順 4 が cwd 返却になったため `cwd` 非空なら必ず解決される）
+  - 解決できなかった行にはマーカーを書かず `repo_path` を NULL のまま残す。次回以降の `backfill` で毎回再試行されるため、git 設定やインストールを直して再実行すれば解決する（`docs/decisions/0003-backfill-as-separate-subcommand.md`）
 - DELETE 対象が 1 件以上ある場合のみ件数を起動時に表示し確認プロンプトを出す（デフォルト No）。0 件なら無確認で進む。`--yes` で確認をスキップ。非対話環境（パイプ・CI 等）では DELETE 対象 1 件以上のとき `--yes` 必須（`import --full` と同じ作法）
 - `import` から独立。v0.3 / v0.4 へアップグレード後に一度叩く想定（v0.4 ではスキーマ移行が含まれるため、`import` を叩く前の実行が必須）
 
@@ -95,7 +97,7 @@ source（DB 内部値は `claude_code` / `codex`）ごとに専用の adapter �
 - セッション内容を Markdown で出力
 - `show <session-id>` は Claude Code / Codex を横断検索する。同じ `session_id` が複数 source に存在する場合は曖昧エラーとして候補を表示する
 - Started 行に `started_at ~ ended_at` の時刻範囲を表示。ended_at がない場合は `started_at ~`
-- `--since`/`--until` で期間指定して一括表示
+- `--since`/`--until` で期間指定して一括表示（`started_at` 基準）。date-only は `projects` と同じくローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
 - `--summary N` で各セッションの user メッセージ先頭 N 件を表示（`/clear` と `<local-command-caveat>` はスキップ）。`0` または未指定で従来の全文表示
 - `--include-clear` で `/clear`・caveat のスキップを無効化（`--summary >= 1` が前提）
 - `--turn N` / `--turn N..M` で指定ターンだけ表示（両端含む）。1 ターンは user メッセージとそれに続く非 user メッセージ（assistant 応答等）。ターン番号は outline と同一の採番（GetMessages の全メッセージ列に対する採番）を共有する。範囲がセッションのターン数を超える場合は本文なしでセッションヘッダのみ出力し exit 0（エラーにしない）。`--turn ""`（空文字）は不正値としてエラー
@@ -169,6 +171,7 @@ source（DB 内部値は `claude_code` / `codex`）ごとに専用の adapter �
 - `projectAliases` は「現行名（canonical） → 旧名の配列」のマップ
 - `--project` の値がグループの canonical 名または旧名のいずれかに**完全一致**したとき、グループ内の全名称に展開し、いずれかに substring マッチするセッションを対象にする（OR 条件）。完全一致以外は従来どおり値をそのまま 1 パターンとして使う
 - 展開は双方向: 旧名を指定しても新名を指定しても同じグループに解決される
+- ある名前が複数グループに重複して現れるような定義は検証しない。どのグループで展開・表示されるかは不定（alias の走査は map 順のため実行ごとに変わりうる）。実用上 1 リポジトリ 1 グループで足りるため
 - `--project` フィルタ展開の対象は `--project` を持つコマンド（`sessions` / `show` / `search`）
 - 表示正規化の対象は project 名を出すコマンド（`sessions` / `show` / `projects` / `search`）。alias グループに一致する `repo_path` / basename は canonical 名だけで表示し、旧名や元のパスを追加フィールドとして出さない
 - `projects` 一覧では、alias により同じ canonical 名になる行を cmd 層で合算する。DB の `repo_path` は書き換えない
@@ -223,7 +226,7 @@ somniloq --version                          # バージョン表示
 
 ### テーブル設計
 
-主キー設計と Codex 対応 migration の詳細は `docs/decisions/0004-codex-schema-and-migration.md` 参照。
+主キー設計と Codex 対応 migration の判断の経緯は `docs/decisions/0004-codex-schema-and-migration.md` 参照。
 
 ```sql
 -- セッション単位のメタデータ
@@ -271,6 +274,7 @@ CREATE TABLE import_state (
 
 - Claude Code が将来 `cwd` 空の `user`/`assistant` レコードを生成する仕様になった場合、somniloq 側ではそのまま `repo_path` 空で保存する。`projects` 集約で複数リポジトリが空グループに潰れる（`GROUP BY repo_path` 一本のため）。その時点で対応方針を再検討する
 - `--project` の値と `search` のクエリは SQLite LIKE のメタ文字（`%`、`_`）を素通しでクエリに渡す（既存挙動の継承）。例: `--project my_repo` は `_` が 1 文字ワイルドカードとして解釈されるため `myXrepo` のような値にも誤マッチする可能性がある
+- alias グループに一致する project を JSON で出す場合、または `--short` を付けた場合、出力からは生の `repo_path` を取れない（表示名だけが出る）。生パスが必要になったら別フィールドの追加を検討する
 
 ## スキーマ変更への対応方針
 

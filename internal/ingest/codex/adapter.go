@@ -156,6 +156,10 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 		h.setUnparsedDiagnostic(err)
 		return ingest.LineUnparsed, nil
 	}
+	// A message arriving before session_meta is Ignored, not Unparsed: the line
+	// parses fine, we just cannot attribute it to a session yet. Counting it as
+	// unparsed would put a non-zero number on structurally valid rollouts and
+	// drown out the real signal.
 	if !isConversationMessage(payload) || !h.hasMeta {
 		return ingest.LineIgnored, nil
 	}

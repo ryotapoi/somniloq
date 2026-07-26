@@ -51,7 +51,7 @@ Claude Code 由来の `.claude/` は参考資料として扱ってよいが、Co
 - 自分で確認できることは自分で確認する。ユーザー確認は、実機依存・観察が必要な挙動・ユーザーの期待出力が早い場合に限る。
 - 仕様変更は `docs/rules/`、`docs/specs/`、`backlog/backlog.md` の適切な場所に同期する。`docs/specs/` とテストが矛盾したら、現在の要求・`docs/rules/`・`docs/decisions/` と照合して古い方を直す。
 - 特定ソースを編集するときだけ必要な罠は、そのソースのコメントに残す。横断的な挙動・設計理解は `llm-wiki/` の作業地図に残す。単一の集約知見ファイルは作らない。
-- 後から制約になる判断は `docs/decisions/` に残す。
+- 後から制約になる判断は、制約を `docs/rules/` / `docs/specs/` に、理由を `docs/decisions/` に残す。
 - workflow は 1 つの commit 単位で回す。Goal が複数 commit に分かれる場合は `goal-workflow` skill に従って commit 単位へ分けて繰り返す。
 - 単発依頼はコミットまで終えたら止まる（次のタスクはユーザー指示待ち）。Goal は完了したら止まる。
 - `.claude/`・`CLAUDE.md`（Claude 側）と `.agents/`・`AGENTS.md`（Codex 側）は、目的・制約・判断基準の方向性を揃える。subagent、review delegation、tool 呼び出し、skill / workflow の実行手順は各エージェントの仕組みに合わせてよい。片方で方針や制約を変更したら、同じコミットで他方にも必要な範囲を反映する。

@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted
+Accepted（2026-05-04 決定）
 
 ## Context
 

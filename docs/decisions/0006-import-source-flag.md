@@ -2,13 +2,15 @@
 
 ## Status
 
-Accepted
+Accepted（2026-05-05 決定）
 
 ## Context
 
 v0.4 リリース前に CLI の取り込み入口を整理する。ADR 0005 では `import` と `import-codex` を分ける方針にしたが、Claude Code / Codex を同じ SQLite DB に保存・検索するという mission では、通常の取り込み操作も source 横断が自然である。
 
 リリース前のため、互換性維持のためだけに `import-codex` を残す必要はない。
+
+本 ADR が覆すのは ADR 0005 の CLI サブコマンド方針だけで、ADR 0005 の残る決定——保存対象レコード・content 抽出・`session_id` の出所・`messages.uuid` の導出・差分取り込み時の `session_meta` 読み直し・adapter の配置——は当時の決定のまま有効で、現在の実装もそれに従っている。
 
 ## Considered Options
 

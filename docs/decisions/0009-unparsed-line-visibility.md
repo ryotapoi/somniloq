@@ -2,9 +2,11 @@
 
 ## Status
 
-Accepted
+Accepted（2026-06-11 決定）
 
 ## Context
+
+本 ADR は ADR 0007 が定めた `FileHandler` / `ProcessFile` の戻り値の契約を一部変更する（骨格を 1 箇所に集約するという ADR 0007 の決定自体は維持する）。
 
 両 adapter とも `ParseRecord` / Normalize 失敗行を `continue` で黙殺しており、件数も残らなかった。壊れ JSON と「仕様として無視する record type」の区別がなく、「なぜこのメッセージが DB にないか」を追う手段がなかった。backlog はこれを「可視化するか、黙殺を仕様として明文化するか決める」タスクとして積んでいた。
 
