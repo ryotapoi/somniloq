@@ -13,9 +13,8 @@
   - 振る舞い変更や bug fix では、同じ commit に unit test / regression test を追加または更新する。テストできない場合は理由を明記する。
   - 振る舞い変更があるなら、必要に応じて `docs/specs/` とテストを同期する。
   - commit に含める内容変更（code / tests / `backlog/backlog.md` / `docs/specs/` / `llm-wiki/` / `docs/decisions/` / ADR）は、この phase で完了する。review 後の finish / commit では tracked file の内容を追加・変更・削除しない。
-  - 実装中またはレビュー指摘対応中に product decision（UX・データ意味・cross-surface 等。カテゴリ一覧は同ファイル）が発生した場合は、`.agents/workflow/design-decision-record.md` の Alternative Check・記録・報告基準に従う。可逆で影響が小さい選択は採用案で進めて ledger に残す。複数の妥当案が残り、かつ選択が非可逆（データ保持・削除・マイグレーション・外部公開契約）またはやり直しコストが大きい場合、または正本と矛盾する場合は Stop Conditions に従う。
+  - 実装中またはレビュー指摘対応中に product decision（振る舞い仕様が変わる判断。定義は同ファイル）が発生した場合は、`.agents/workflow/design-decision-record.md` の Alternative Check・記録・報告基準に従う。可逆で影響が小さい選択は採用案で進めて ledger に残す。複数の妥当案が残り、かつ選択が非可逆（データ保持・削除・マイグレーション・外部公開契約）またはやり直しコストが大きい場合、または正本と矛盾する場合は Stop Conditions に従う。
   - 実装中に見つかった別タスクは、今やる理由がなければ `backlog/backlog.md` に逃がす。今回の commit の active scope 内か迷う作業は、`change/workflow.md` の横断スコープ制御で分類してから着手する（adjacent なら実行せず capture / report）。
-  - ループ内で時刻を扱う場合は各反復で取得する（ループ外で 1 回だけ取得しない）。
 - **Acceptance**:
   - 要求された振る舞いが実装されている。
   - 必要な `docs/specs/` / tests / `backlog/backlog.md` / `docs/decisions/` / `llm-wiki/` の同期が済んでいる。
@@ -44,8 +43,8 @@
   - 完了した backlog 項目があれば `backlog/backlog.md` の該当行を `[x]` 等で更新する。
   - 技術的知見は、特定ソースに紐づく罠はそのコードのコメントへ、横断的な挙動・設計理解は `llm-wiki/` の該当地図へ残す。単一の集約知見ファイルは作らない。
   - 今回の変更で `llm-wiki/` の地図が古くなっていないか確認し、古くなった場合は同じ差分で追従する。各ページの更新方法（再生成するか手編集するか）は `regen` 区分に従い、その判断基準の正本は `docs/rules/information-management.md`（および `llm-wiki/` の索引）とする。区分ごとの手順はこの workflow に写経しない。
-  - 後から制約になる判断は `docs/decisions/` に残す。
-  - commit message の本文に残す背景・理由（Why）は変更時点のものでよい。恒久的に守るべき制約は commit message にだけ残さず、コード近傍のコメントや `docs/specs/` / `docs/decisions/` に置く。
+  - 後から制約になる判断は、制約を `docs/rules/` / `docs/specs/` に、理由を `docs/decisions/` に残す。
+  - commit message の本文に残す背景・理由（Why）は変更時点のものでよい。恒久的に守るべき制約は commit message にだけ残さず、コード近傍のコメントや `docs/rules/` / `docs/specs/` に置く（判断理由は `docs/decisions/` に置く）。
 - **Acceptance**: 実装差分と情報源が矛盾していない。
 - **Relevant**: `docs/specs/`, `backlog/backlog.md`, `docs/decisions/`, `llm-wiki/`（作業地図）。
 

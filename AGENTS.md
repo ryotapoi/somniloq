@@ -14,15 +14,19 @@ somniloq は Claude Code / Codex のセッションログ（JSONL）を読み取
 ```text
 goal-workflow skill（グローバル / Goal の入口）
 └── .agents/workflow/goal.md（正本: commit slicing / Goal Review / 完了条件）
+    ├── goal-review.md — Goal Review 実行手順（実施直前に読む）
+    ├── models.md — 役割ごとのモデル・reasoning effort 定義
+    ├── design-decision-record.md — Product Decision Ledger
     └── change/workflow.md（各 commit / 単発依頼の Intake・Routing）
         ├── change/investigate.md
         ├── change/plan.md
         ├── change/implement.md
         ├── change/verify.md
         ├── change/review.md
-        ├── change/finish.md
-        └── maintenance.md
+        └── change/finish.md
 ```
+
+複数タスク後の全体構造・負債の棚卸しはユーザー起点で `maintenance-audit` skill を使う（通常レビューから自動遷移しない）。
 
 Claude Code 由来の `.claude/` は参考資料として扱ってよいが、Codex の入口は `AGENTS.md` と `.agents/` に統一する。
 
@@ -42,7 +46,7 @@ Claude Code 由来の `.claude/` は参考資料として扱ってよいが、Co
 - workflow / skill は ICAR（Intent / Constraints / Acceptance / Relevant）を基本形にする。細かい手順や長い観点は、必要に応じて workflow 内の phase ICAR、別 md、`llm-wiki/` へ逃がす。
 - 小さい変更に重い手続きを載せない。作業の大きさとリスクで plan / verify / review の深さを選ぶ。
 - 原則 1 plan = 1 commit。独立した成果が混ざるなら plan を分ける。
-- 理想は全体が綺麗な状態だが、各 plan では今回の変更範囲と直接の依存先/依存元を中心に見る。広い構造改善は必要に応じて `backlog/backlog.md` または `maintenance.md` へ切り出す。
+- 理想は全体が綺麗な状態だが、各 plan では今回の変更範囲と直接の依存先/依存元を中心に見る。広い構造改善は `backlog/backlog.md` へ切り出すか、節目でユーザー起点の `maintenance-audit` skill を使う。
 - 不明点が仕様、CLI 挙動、データ保持、削除方針に影響するならユーザーに確認する。
 - 自分で確認できることは自分で確認する。ユーザー確認は、実機依存・観察が必要な挙動・ユーザーの期待出力が早い場合に限る。
 - 仕様変更は `docs/rules/`、`docs/specs/`、`backlog/backlog.md` の適切な場所に同期する。`docs/specs/` とテストが矛盾したら、現在の要求・`docs/rules/`・`docs/decisions/` と照合して古い方を直す。
@@ -61,7 +65,7 @@ Codex 用のプロジェクトスキルは `.agents/skills/` に置く。グロ�
 - `goal-workflow`（グローバル）: `/goal` または明示指定時だけ使う。Goal を 1 commit 単位へ分割して完了まで進める
 - `investigate`: 計画前の不明点を調査する
 - `design-decision`: 設計判断の価値基準を当てる
-- `change-review`: 変更差分をリスクに応じてレビューする
+- `diff-review`: 変更差分をリスクに応じてレビューする
 - `maintenance-audit`: 複数タスク後の構造・負債を棚卸しする（light / deep を scope で指定）
 - `commit`（グローバル）: Conventional Commits 形式でコミットする
 

@@ -14,15 +14,19 @@ somniloq は Claude Code / Codex のセッションログ（JSONL）を読み取
 ```text
 goal-workflow skill（Goal の入口）
 └── .claude/workflow/goal.md（正本: commit slicing / Goal Review）
+    ├── goal-review.md — Goal Review 実行手順（実施直前に読む）
+    ├── models.md — 役割ごとのモデル・reasoning effort 定義
+    ├── design-decision-record.md — Product Decision Ledger
     └── change/workflow.md（各 commit / 単発依頼の Intake・Routing）
         ├── change/investigate.md — Exploratory 用の事実集め
         ├── change/plan.md — 計画作成（省略可条件含む。plan mode は使わない）
         ├── change/implement.md — 実装
         ├── change/verify.md — 動作確認
         ├── change/review.md — リスクベースの review depth 選択
-        ├── change/finish.md — コミット
-        └── maintenance.md — L3、節目で呼ぶ構造棚卸し
+        └── change/finish.md — コミット
 ```
+
+複数タスク後の全体構造・負債の棚卸しはユーザー起点で `maintenance-audit` skill を使う（通常レビューから自動遷移しない）。
 
 各 phase ファイルは入る前に Read で読む（CLAUDE.md の要約で済ませない）。
 plan mode（`EnterPlanMode` / `ExitPlanMode`）は使わない。計画は内部で立ててそのまま実装する。
