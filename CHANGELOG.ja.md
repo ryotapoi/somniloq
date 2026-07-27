@@ -2,8 +2,6 @@
 
 [English](CHANGELOG.md) | 日本語
 
-## Unreleased
-
 ## v0.9.0 — 2026-07-24
 
 ### 修正
