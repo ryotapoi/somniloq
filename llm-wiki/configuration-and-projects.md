@@ -11,7 +11,8 @@ sources:
   - internal/core/import.go
   - internal/core/backfill.go
   - internal/core/repo_path.go
-  - internal/core/db_query.go
+  - internal/core/db_sessions_projects.go
+  - internal/core/db_search.go
 ---
 
 # Configuration and projects
@@ -29,7 +30,7 @@ sources:
 - config 読み込みは `cmd/somniloq/config.go`。missing file は空 config、invalid JSON は error。
 - alias 展開は `config.expandProject`。完全一致したときだけ canonical + old names に展開する。
 - `cmd/somniloq/filter.go` の `buildSessionFilter` が time flag と project alias をまとめて `core.SessionFilter` にする。`sessions` / `search` は date-only filter に `dayBoundary` を渡し、`show` / `projects` は従来どおり 00:00 境界で呼ぶ。
-- SQL 条件は `internal/core/db_query.go` の `projectsCondition`。repo_path substring LIKE を OR でつなぐ。
+- SQL 条件は `internal/core/db_sessions_projects.go` の `projectsCondition`。repo_path substring LIKE を OR でつなぐ。
 
 ## commandPatterns
 
@@ -56,5 +57,5 @@ sources:
 ## 変更時のテスト入口
 
 - config と alias: `cmd/somniloq/config_test.go`
-- time/project filter: `cmd/somniloq/resolve_test.go`, `internal/core/db_query_test.go`, `internal/core/db_search_test.go`
+- time/project filter: `cmd/somniloq/resolve_test.go`, `internal/core/db_sessions_projects_test.go`, `internal/core/db_search_test.go`
 - repo path: `internal/core/repo_path_test.go`

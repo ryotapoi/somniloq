@@ -7,23 +7,6 @@ import (
 	"strings"
 )
 
-func (d *DB) GetImportState(jsonlPath string) (*ImportState, error) {
-	var s ImportState
-	var src string
-	err := d.execer().QueryRow(
-		"SELECT jsonl_path, source, file_size, last_offset, imported_at FROM import_state WHERE jsonl_path=?",
-		jsonlPath,
-	).Scan(&s.JSONLPath, &src, &s.FileSize, &s.LastOffset, &s.ImportedAt)
-	if errors.Is(err, sql.ErrNoRows) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, fmt.Errorf("get import state: scan row: %w", err)
-	}
-	s.Source = Source(src)
-	return &s, nil
-}
-
 type SessionRow struct {
 	Source       Source
 	SessionID    string
@@ -229,16 +212,6 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	return result, nil
 }
 
-// MessageRow deliberately has no IsSidechain field: every query that
-// produces it excludes sidechain rows in SQL, so the value would always be
-// false.
-type MessageRow struct {
-	UUID      string
-	Role      string
-	Content   string
-	Timestamp string
-}
-
 func (d *DB) GetSession(source Source, sessionID string) (*SessionRow, error) {
 	row := d.execer().QueryRow(sessionRowSelect+`
 		WHERE s.source = ? AND s.session_id = ?
@@ -266,148 +239,4 @@ func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
 		return nil, fmt.Errorf("lookup sessions by ID: query: %w", err)
 	}
 	return scanSessionRows(rows, "lookup sessions by ID")
-}
-
-// GetMessages returns the session's messages in chronological order.
-// Sidechain rows are excluded: they are subagent transcripts, not part of the
-// user-facing conversation.
-//
-// rowid breaks timestamp ties: Codex records without per-record timestamps
-// all inherit the session_meta timestamp, and rowid preserves insertion
-// (JSONL line) order because messages are INSERT OR IGNORE, never replaced.
-// Turn numbering is derived from this order, so it must stay deterministic.
-func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) {
-	rows, err := d.execer().Query(`
-		SELECT uuid, role, content, timestamp
-		FROM messages
-		WHERE source = ? AND session_id = ?
-		  AND is_sidechain = 0
-		ORDER BY timestamp ASC, rowid ASC`,
-		string(source), sessionID,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("get messages: query: %w", err)
-	}
-	return scanMessages(rows, "get messages")
-}
-
-// Prefixes of user message content that mark synthetic entries inserted by
-// Claude Code itself (a /clear command echo and the caveat block that
-// accompanies commands like /clear and shell `!` invocations). They are
-// skipped by GetSummaryMessages so that --summary surfaces real user input.
-//
-// When adding a new prefix, check it does not contain SQLite LIKE wildcards
-// (`%` or `_`). If it does, the LIKE clauses in GetSummaryMessages need
-// `ESCAPE '\'` and the pattern must escape those characters.
-const (
-	clearCommandPrefix       = "<command-name>/clear</command-name>"
-	localCommandCaveatPrefix = "<local-command-caveat>"
-)
-
-// GetSummaryMessages returns the first `limit` user messages of the session
-// in chronological order, intended for --summary output. Returns an error if
-// limit <= 0.
-//
-// Always filters to role='user' and is_sidechain=0. By default, also skips
-// entries whose content starts with clearCommandPrefix or
-// localCommandCaveatPrefix; includeClear=true disables that prefix skip only.
-func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, includeClear bool) ([]MessageRow, error) {
-	if limit <= 0 {
-		return nil, errors.New("limit must be >= 1")
-	}
-
-	query := `
-		SELECT uuid, role, content, timestamp
-		FROM messages
-		WHERE source = ? AND session_id = ?
-		  AND role = 'user'
-		  AND is_sidechain = 0`
-	args := []any{string(source), sessionID}
-	if !includeClear {
-		query += `
-		  AND content NOT LIKE ?
-		  AND content NOT LIKE ?`
-		args = append(args, clearCommandPrefix+"%", localCommandCaveatPrefix+"%")
-	}
-	query += `
-		ORDER BY timestamp ASC, rowid ASC
-		LIMIT ?`
-	args = append(args, limit)
-
-	rows, err := d.execer().Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("get summary messages: query: %w", err)
-	}
-	return scanMessages(rows, "get summary messages")
-}
-
-// SearchRow is one message that matched a search query.
-type SearchRow struct {
-	Source    Source
-	UUID      string
-	SessionID string
-	RepoPath  string
-	Timestamp string
-	Content   string
-}
-
-// SearchMessages returns non-sidechain messages whose content contains the
-// query, newest first. Matching uses SQLite LIKE: ASCII-only
-// case-insensitivity, and `%`/`_` in the query act as wildcards (the same
-// known limitation as the --project filter). filter.Since/Until apply to the
-// message timestamp, not the session start, because the search target is the
-// message. rowid breaks timestamp ties like GetMessages, inverted to follow
-// the DESC order.
-func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, error) {
-	q := `
-		SELECT m.source, m.uuid, m.session_id, COALESCE(s.repo_path, ''), m.timestamp, m.content
-		FROM messages m
-		JOIN sessions s ON m.source = s.source AND m.session_id = s.session_id
-		WHERE m.is_sidechain = 0
-		  AND m.content LIKE '%' || ? || '%'`
-	args := []any{query}
-	conditions, filterArgs := sessionFilterConditions(filter, messageTimestampColumn)
-	if len(conditions) > 0 {
-		q += " AND " + strings.Join(conditions, " AND ")
-		args = append(args, filterArgs...)
-	}
-	q += " ORDER BY m.timestamp DESC, m.rowid DESC"
-
-	rows, err := d.execer().Query(q, args...)
-	if err != nil {
-		return nil, fmt.Errorf("search messages: query: %w", err)
-	}
-	defer rows.Close()
-
-	result := []SearchRow{}
-	for rows.Next() {
-		var r SearchRow
-		var src string
-		if err := rows.Scan(&src, &r.UUID, &r.SessionID, &r.RepoPath, &r.Timestamp, &r.Content); err != nil {
-			return nil, fmt.Errorf("search messages: scan row: %w", err)
-		}
-		r.Source = Source(src)
-		result = append(result, r)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("search messages: iterate rows: %w", err)
-	}
-	return result, nil
-}
-
-func scanMessages(rows *sql.Rows, operation string) ([]MessageRow, error) {
-	defer rows.Close()
-
-	result := []MessageRow{}
-	for rows.Next() {
-		var m MessageRow
-		if err := rows.Scan(&m.UUID, &m.Role, &m.Content, &m.Timestamp); err != nil {
-			return nil, fmt.Errorf("%s: scan row: %w", operation, err)
-		}
-		result = append(result, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: iterate rows: %w", operation, err)
-	}
-	return result, nil
 }

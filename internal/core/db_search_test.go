@@ -1,6 +1,26 @@
 package core
 
-import "testing"
+import (
+	"errors"
+	"strings"
+	"testing"
+)
+
+func TestSearchMessages_ClosedDatabaseErrorIncludesOperationAndCause(t *testing.T) {
+	db := testDB(t)
+	must(t, db.Close())
+
+	_, err := db.SearchMessages(SessionFilter{}, "query")
+	if err == nil {
+		t.Fatal("expected query error from closed database")
+	}
+	if !strings.Contains(err.Error(), "search messages") {
+		t.Errorf("error %q does not identify operation", err)
+	}
+	if errors.Unwrap(err) == nil {
+		t.Errorf("error %q does not retain its cause", err)
+	}
+}
 
 func newSearchTestDB(t *testing.T) *DB {
 	t.Helper()

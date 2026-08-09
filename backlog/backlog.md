@@ -30,7 +30,7 @@
   - 新しい汎用出力 abstraction は追加せず、既存のcommand / formatter内でerrorを返す
   - write errorを返すwriterを使い、直接TSVを書き出す経路とMarkdown formatter経路の回帰テストを追加する
 
-- [ ] `internal/core/db_query.go` と対応テストを、import state、sessions / projects、messages / summary、search の責務単位へ分割する
+- [x] `internal/core/db_query.go` と対応テストを、import state、sessions / projects、messages / summary、search の責務単位へ分割する
   - `internal/core` package、公開 API、SQL、振る舞いは変更しない
   - 共有する型や helper は中心となる責務の file に置き、分割のためだけの `common` / `utils` file は追加しない
   - テストも同じ責務単位に分け、既存の共通 test helper は `helpers_test.go` に維持する

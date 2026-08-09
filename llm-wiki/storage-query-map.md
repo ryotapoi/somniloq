@@ -9,7 +9,10 @@ sources:
   - internal/core/db_schema.go
   - internal/core/migrate_v04.go
   - internal/core/db_write.go
-  - internal/core/db_query.go
+  - internal/core/db_import_state.go
+  - internal/core/db_sessions_projects.go
+  - internal/core/db_messages_summary.go
+  - internal/core/db_search.go
   - internal/core/backfill.go
   - llm-wiki/sqlite-driver-notes.md
 ---
@@ -29,10 +32,15 @@ DB schema、migration、query helper を触るときの地図。SQL の意味や
 - `internal/core/db_write.go`
   - `importTx`: `ingest.ImportTransaction` と `claudecode.SessionMetaWriter` の DB 書き込み実装。
   - `upsertSession` / `insertMessage` / `updateSessionTitle` / `updateSessionAgentName` / `upsertImportState`: import/write 系 SQL。
-- `internal/core/db_query.go`
+- `internal/core/db_import_state.go`
+  - `GetImportState`: JSONL path ごとの取り込み状態を読む。
+- `internal/core/db_sessions_projects.go`
   - `sessionRowSelect` / `scanSessionRow`: sessions 系表示の SELECT と scan shape。列を変えるなら両方を同時に変える。
   - `timeFilterConditions` / `projectsCondition`: sessions/projects/search が共有する filter 組み立て。
-  - `GetMessages` / `GetSummaryMessages` / `SearchMessages`: sidechain 除外と rowid tie-break の中心。
+- `internal/core/db_messages_summary.go`
+  - `GetMessages` / `GetSummaryMessages`: sidechain 除外と rowid tie-break の中心。
+- `internal/core/db_search.go`
+  - `SearchMessages`: sidechain を除外し、message timestamp と rowid の降順で検索結果を返す。
 - `internal/core/migrate_v04.go`
   - `MigrateToV04IfNeeded`: v0.3 DB を v0.4 composite source schema へ rebuild。
 - `internal/core/backfill.go`
@@ -43,8 +51,8 @@ DB schema、migration、query helper を触るときの地図。SQL の意味や
 
 - schema column を追加/削除する: `db_schema.go` の `schema` -> `OpenDB` migration -> `docs/rules/scope.md` のテーブル設計 -> migration tests。
 - import/write SQL を変える: `db_write.go` の `importTx` / upsert / insert / update 群 -> import tests。
-- sessions/projects の列や集計を変える: `db_query.go` の `sessionRowSelect` -> `scanSessionRow` -> `ListSessions` / `ListProjects` -> cmd formatter / JSON output。
-- message order を変える: `db_query.go` の `GetMessages`, `GetSummaryMessages`, `SearchMessages` -> `cmd/somniloq/turn.go` -> outline/show/search tests。
+- sessions/projects の列や集計を変える: `db_sessions_projects.go` の `sessionRowSelect` -> `scanSessionRow` -> `ListSessions` / `ListProjects` -> cmd formatter / JSON output。
+- message order を変える: `db_messages_summary.go` の `GetMessages` / `GetSummaryMessages` と `db_search.go` の `SearchMessages` -> `cmd/somniloq/turn.go` -> outline/show/search tests。
 - v0.4 migration を変える: `internal/core/migrate_v04.go` の PRAGMA / transaction / DDL order と migration tests を一緒に見る。
 - destructive backfill を変える: `cmd/somniloq/backfill.go` の prompt/TTY path と `internal/core/backfill.go` の DB path を一緒に見る。
 
