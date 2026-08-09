@@ -20,3 +20,24 @@
 - **書くときは各 commit の diff を読む**。backlog のタスク文をそのまま写さない。内部整理のつもりの項目でも、エラー文言等のユーザー影響が出ることがある
 - 同一バージョン内で「A を作って後で X に変えた」場合は、A に触れず X だけを書く。前のバージョンの A を変えた場合は変更として書く
 - 完了項目は `- [x]` にして残し、そのバージョンをリリースしたら見出しごと削除する（内容は CHANGELOG と commit に残る）。**削除は明示指示があるときだけ**
+
+## maintenance
+
+### import 終了フェーズの失敗契約をテストする
+
+- [ ] `ProcessJSONL` の `Flush`、`UpsertImportState`、`Commit` 失敗を回帰テストで保護する
+  - 各失敗でエラーが返り、`NewOffset` が実行前の値から進まない
+  - transaction が rollback され、失敗位置より後の処理が実行されないことを call count で確認する
+  - production API や production code は変更しない
+
+### agent entry document の specs 記述を現在形に直す
+
+- [ ] `AGENTS.md` の `docs/specs/` を「未配置」とする記述を、実在する `docs/specs/jsonl-schema.md` と矛盾しない説明へ直す
+  - JSONL ingest を変更する agent が `docs/specs/jsonl-schema.md` を仕様照合先として発見できる
+  - 情報源一覧で同じ説明を不必要に重複させない
+
+### ADR 0007 の Status を実際の継承関係に合わせる
+
+- [ ] ADR 0007 の shared ingest runner という決定が維持され、ADR 0009 / 0010 は契約の一部だけを変更したと分かる Status に直す
+  - ADR 本文を現在仕様へ書き換えず、決定時点の理由を維持する
+  - ADR 0009 / 0010 の Context と矛盾しない
