@@ -1,53 +1,31 @@
-# モデル定義
+# Model Definitions
 
-Goal workflow の役割（Conductor / Implementer / Gatekeeper / Advisor / Auditor）に指定できるモデルと reasoning effort の正本。ルール（`goal.md` 等）はこの表を参照し、モデル名・序列・effort 値をハードコードしない。モデルの世代交代はこのファイルだけ更新する。
+モデル一覧、role defaults、effort、選択・検証方針の正本は `~/.config/agents/workflow/models.md`。これを Read し、以下を Claude 入口の transport adapter として使う。wrapper 単体に表がないことをモデル一覧の欠如と判定しない。
 
-## モデル一覧
+## Claude transport
 
-同一系統内で下の行ほど上位。「1 段上」は同系統で 1 行下のモデルを指す（最上位に上はない）。系統は跨がない。
+- Claude subagent は `Agent` の `model` に短名を渡す。Implementer は write-capable な `worker`、Gatekeeper と Plan Review は Edit / Write 系 tool を禁止した汎用 `reviewer` を使う。
+- Claude subagent の effort は per-call 指定できない。`worker` と `reviewer` の custom agent 定義は現在 `high` を固定し、明示された effort をその起動経路で保証できなければ停止する。
+- Claude Conductor pane は `--model <短名> --effort <値>` で起動する。
+- 単発 Change の `workers: codex` は `codex exec` を使い、モデル、effort、sandbox を明示する。Implementer は workspace-write、Gatekeeper は read-only とする。
+- `codex exec resume <session-id> <CLI args> "<prompt>"` の順で指定し、`--last` は使わない。resume は sandbox を引き継がないため、`-c sandbox_mode=<read-only|workspace-write>` で再指定する。prompt を省略して stdin 待ちにしない。
+- skill 経由ではこの file の短名を渡し、skill 側に実体名を写さない。
+- Claude model の canonical 短名は `Agent --model` と `claude --model` にそのまま渡す。GPT model の canonical ID は `codex exec -m` に渡す。
+- Claude 系 effort は custom agent 定義または起動元から継承し、pane では `--effort <value>` とする。GPT 系 effort は `-c model_reasoning_effort=<value>` とする。
 
-### Claude 系（起動はネイティブ subagent。`model` に短名をそのまま渡す）
+## Auditor defaults
 
-| 短名 | 起動指定 |
+`auditors:` が未指定の場合は、次の短名を表の順序どおりリストとして使う。表の全行を選び、要素数を仮定しない。
+
+| 順序 | 短名 |
 |---|---|
-| haiku | `haiku` |
-| sonnet | `sonnet` |
-| opus | `opus` |
-| fable | `fable` |
+| 1 | opus |
 
-### GPT 系（起動は codex exec。`-m` にフル ID を渡す）
+## Goal Review / Auditor family launchers
 
-| 短名 | 起動指定 |
+| family | launcher |
 |---|---|
-| luna | `-m gpt-5.6-luna` |
-| terra | `-m gpt-5.6-terra` |
-| sol | `-m gpt-5.6-sol` |
+| Claude | `running-fresh-claude` |
+| GPT | `running-fresh-codex` |
 
-## reasoning effort
-
-| 系統 | 有効値（低→高） | ベンダー推奨既定 |
-|---|---|---|
-| Claude 系 | low / medium / high / xhigh / max | high |
-| GPT 系 | none / low / medium / high / xhigh / max（`-c model_reasoning_effort=<値>` で指定） | medium |
-
-GPT 系の有効値は GPT-5.6 公式ガイド（2026-07-25 参照）による。GPT-5.5 世代にあった `minimal` は 5.6 で廃止され、`max` が追加された。`xhigh` までは 5.5 世代の API エラー応答で実測済み（2026-07-13）、`max` は未実測。
-
-## 役割の既定
-
-| 入口 | Conductor | Implementer | Gatekeeper | Advisor | Auditor |
-|---|---|---|---|---|---|
-| Claude 側（`.claude/workflow/`） | opus | sonnet | sonnet | fable 固定 | opus |
-| GPT 側（`.agents/workflow/`） | sol | terra | terra | sol 固定 | sol |
-
-Conductor は Goal を起動した main セッション自身なので、この列は workflow が選択する値ではなく、ユーザーがセッションを起動する時の推奨モデル。他の役割は workflow が subagent / exec 起動時にこの表の値を使う。
-
-Goal Review の reviewer は入口によらず 2 本で、系統ごとに次を既定とする。
-
-| 系統 | Goal Review reviewer | 起動経路 |
-|---|---|---|
-| Claude 系 | fable | `claude-fresh-review` skill（呼び出し元がレビューモデルを明示する） |
-| GPT 系 | sol | `codex-fresh-review` skill（skill 側がモデルを固定して持つ。呼び出し側からは指定しない） |
-
-effort の既定はどの入口・役割でも系統のベンダー推奨既定。例外が 1 つある: Claude 系の Implementer は、Intake 分類が High-risk の Change では `xhigh` を既定にする（Sonnet 5 公式ガイドが最難関のコーディング・agentic タスクに `xhigh` を推奨しているため）。この既定は Change の Intake 分類に紐づき、失敗観測後にモデルを引き上げた場合も High-risk の間は変わらない。GPT 系には対応する事前引き上げを置かない（GPT-5.6 公式ガイドは high / xhigh を「測って効果がある場合」に限って勧めており、一律の事前推奨の根拠がないため。GPT 系の引き上げは失敗観測後の是正のみ）。
-
-Implementer / Gatekeeper は Goal の呼び出し文でモデルと effort を役割ごとに明示指定できる。指定できる短名は入口の系統に限る（Claude 側の workflow は Claude 系短名のみ、GPT 側の workflow は GPT 系短名のみ）。他系統の短名を指定されたら停止してユーザーに確認する。Conductor / Advisor / Auditor は既定固定で、Goal 呼び出し文からは指定しない。
+Goal Review と Auditor では共通 Model Catalog で短名から family を解決し、この表で launcher を解決して短名を渡す。未知の短名、family、launcher、または利用不能な launcher はエラーとして停止し、別値へ fallback しない。

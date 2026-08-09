@@ -8,15 +8,16 @@ somniloq は Claude Code / Codex のセッションログ（JSONL）を読み取
 
 入口は依頼の形で 2 通り。
 
-- **Goal（`/goal` または `goal-workflow` を明示指定）**: `goal-workflow` skill を入口にする。Goal は作業全体を 1 commit 単位へ分割し、各 commit で `.claude/workflow/change/workflow.md` 以下の phase workflow を回す。Goal 手順の正本は `.claude/workflow/goal.md`。`goal-workflow` skill はそのファイルを読んで進める。Goal 前提では都度確認を避けて自動進行し、止まるのは各 workflow の Stop Conditions だけ。
+- **Goal（`/goal` または `goal-workflow` を明示指定）**: `goal-workflow` skill を入口にする。Goal は作業全体を 1 commit 単位へ分割し、各 commit で `.claude/workflow/change/workflow.md` 以下の phase workflow を回す。共通手順の正本は `~/.config/agents/workflow/goal.md`、`.claude/workflow/goal.md` は Claude 用 wrapper。`goal-workflow` skill はその wrapper を読んで進める。Goal 前提では都度確認を避けて自動進行し、止まるのは各 workflow の Stop Conditions だけ。
 - **単発依頼**: `.claude/workflow/change/workflow.md` を最初に Read し、Intake 分類（Small / Normal / High-risk / Exploratory）から必要な phase ファイルへ進む。
 
 ```text
 goal-workflow skill（Goal の入口）
-└── .claude/workflow/goal.md（正本: commit slicing / Goal Review）
+└── .claude/workflow/goal.md（Claude wrapper。共通正本を Read）
     ├── goal-review.md — Goal Review 実行手順（実施直前に読む）
     ├── models.md — 役割ごとのモデル・reasoning effort 定義
     ├── design-decision-record.md — Product Decision Ledger
+    ├── conductor.md — 1 Change の inner loop
     └── change/workflow.md（各 commit / 単発依頼の Intake・Routing）
         ├── change/investigate.md — Exploratory 用の事実集め
         ├── change/plan.md — 計画作成（省略可条件含む。plan mode は使わない）
