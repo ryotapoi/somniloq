@@ -2,12 +2,21 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
+
+var errFailWriter = errors.New("write failed")
+
+type failWriter struct{}
+
+func (failWriter) Write([]byte) (int, error) {
+	return 0, errFailWriter
+}
 
 func TestFormatLocalTime(t *testing.T) {
 	jst := time.FixedZone("JST", 9*60*60)
@@ -75,7 +84,9 @@ func TestFormatSession_WithTitle(t *testing.T) {
 	}
 	displayName := "-Users-test-proj"
 
-	formatSession(&buf, session, displayName, messages, time.UTC)
+	if err := formatSession(&buf, session, displayName, messages, time.UTC); err != nil {
+		t.Fatalf("formatSession failed: %v", err)
+	}
 	got := buf.String()
 
 	if !strings.Contains(got, "## Fix login bug\n") {
@@ -112,7 +123,9 @@ func TestFormatSession_EmptyTitle(t *testing.T) {
 		StartedAt: "2026-03-28T10:00:00Z",
 	}
 
-	formatSession(&buf, session, "-Users-test", nil, time.UTC)
+	if err := formatSession(&buf, session, "-Users-test", nil, time.UTC); err != nil {
+		t.Fatalf("formatSession failed: %v", err)
+	}
 	got := buf.String()
 
 	if !strings.Contains(got, "## abc-123\n") {
@@ -190,10 +203,19 @@ func TestFormatSession_TitleWithNewline(t *testing.T) {
 		CustomTitle: "line1\nline2",
 	}
 
-	formatSession(&buf, session, "-Users-test", nil, time.UTC)
+	if err := formatSession(&buf, session, "-Users-test", nil, time.UTC); err != nil {
+		t.Fatalf("formatSession failed: %v", err)
+	}
 	got := buf.String()
 
 	if !strings.Contains(got, "## line1 line2\n") {
 		t.Errorf("expected newline sanitized in title, got:\n%s", got)
+	}
+}
+
+func TestFormatSession_ReturnsWriteError(t *testing.T) {
+	err := formatSession(failWriter{}, core.SessionRow{SessionID: "abc-123"}, "project", nil, time.UTC)
+	if !errors.Is(err, errFailWriter) {
+		t.Errorf("formatSession error = %v, want %v", err, errFailWriter)
 	}
 }

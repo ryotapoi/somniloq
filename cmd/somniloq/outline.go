@@ -92,8 +92,10 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 
 	bodySizes := turnBodySizes(messages)
 	for _, tm := range userTurnMessages(messages) {
-		fmt.Fprintf(out, "%d\t%s\t%d\t%s\n",
-			tm.Turn, sanitizeTSV(formatLocalTime(tm.Msg.Timestamp, time.Local)), bodySizes[tm.Turn], sanitizeTSV(firstLine(tm.Msg.Content)))
+		if _, err := fmt.Fprintf(out, "%d\t%s\t%d\t%s\n",
+			tm.Turn, sanitizeTSV(formatLocalTime(tm.Msg.Timestamp, time.Local)), bodySizes[tm.Turn], sanitizeTSV(firstLine(tm.Msg.Content))); err != nil {
+			return 1, err
+		}
 	}
 	return 0, nil
 }

@@ -87,12 +87,14 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 		if !ok {
 			return 1, fmt.Errorf("turn not found for search hit %s/%s/%s", r.Source, r.SessionID, r.UUID)
 		}
-		fmt.Fprintf(out, "%s\t%d\t%s\t%s\t%s\n",
+		if _, err := fmt.Fprintf(out, "%s\t%d\t%s\t%s\t%s\n",
 			r.SessionID,
 			turn,
 			sanitizeTSV(formatLocalTime(r.Timestamp, time.Local)),
 			sanitizeTSV(resolveProjectDisplayName(r.RepoPath, false, cfg)),
-			sanitizeTSV(searchSnippet(r.Content, query)))
+			sanitizeTSV(searchSnippet(r.Content, query))); err != nil {
+			return 1, err
+		}
 	}
 	return 0, nil
 }

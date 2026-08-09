@@ -58,6 +58,18 @@ func TestSessionsCmd_OutputColumns(t *testing.T) {
 	}
 }
 
+func TestSessionsCmd_ReturnsTSVWriteError(t *testing.T) {
+	db := newOutlineTestDB(t)
+
+	code, err := sessionsCmd(nil, staticDB(db), config{}, failWriter{}, &bytes.Buffer{})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if err != errFailWriter {
+		t.Errorf("error = %v, want %v", err, errFailWriter)
+	}
+}
+
 func TestSessionsCmd_DayBoundaryFiltersDateOnlySinceAndDisplaysLogicalDay(t *testing.T) {
 	oldLocal := time.Local
 	time.Local = time.FixedZone("JST", 9*60*60)

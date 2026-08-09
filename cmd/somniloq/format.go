@@ -41,38 +41,53 @@ func firstLine(s string) string {
 	return strings.TrimRight(line, "\r")
 }
 
-func formatSession(w io.Writer, session core.SessionRow, displayName string, messages []core.MessageRow, loc *time.Location) {
+func formatSession(w io.Writer, session core.SessionRow, displayName string, messages []core.MessageRow, loc *time.Location) error {
 	title := session.CustomTitle
 	if title == "" {
 		title = session.SessionID
 	}
 	title = titleSanitizer.Replace(title)
 
-	fmt.Fprintf(w, "## %s\n\n", title)
-	fmt.Fprintf(w, "- **Session**: `%s`\n", session.SessionID)
-	fmt.Fprintf(w, "- **Project**: `%s`\n", displayName)
-	fmt.Fprintf(w, "- **Started**: `%s`\n", formatTimeRange(session.StartedAt, session.EndedAt, loc))
+	if _, err := fmt.Fprintf(w, "## %s\n\n", title); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "- **Session**: `%s`\n", session.SessionID); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "- **Project**: `%s`\n", displayName); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "- **Started**: `%s`\n", formatTimeRange(session.StartedAt, session.EndedAt, loc)); err != nil {
+		return err
+	}
 
 	for _, msg := range messages {
 		heading := msg.Role
 		if len(heading) > 0 {
 			heading = strings.ToUpper(heading[:1]) + heading[1:]
 		}
-		fmt.Fprintf(w, "\n### %s\n\n%s\n", heading, msg.Content)
+		if _, err := fmt.Fprintf(w, "\n### %s\n\n%s\n", heading, msg.Content); err != nil {
+			return err
+		}
 	}
+	return nil
 }
 
 // formatSessions requires len(displayNames) == len(sessions).
 func formatSessions(w io.Writer, sessions []core.SessionRow, displayNames []string, getMessages func(source core.Source, sessionID string) ([]core.MessageRow, error), loc *time.Location) error {
 	for i, session := range sessions {
 		if i > 0 {
-			fmt.Fprint(w, "\n---\n\n")
+			if _, err := fmt.Fprint(w, "\n---\n\n"); err != nil {
+				return err
+			}
 		}
 		msgs, err := getMessages(session.Source, session.SessionID)
 		if err != nil {
 			return err
 		}
-		formatSession(w, session, displayNames[i], msgs, loc)
+		if err := formatSession(w, session, displayNames[i], msgs, loc); err != nil {
+			return err
+		}
 	}
 	return nil
 }

@@ -148,7 +148,9 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 			}
 			return 0, nil
 		}
-		formatSession(out, session, proj, messages, time.Local)
+		if err := formatSession(out, session, proj, messages, time.Local); err != nil {
+			return 1, err
+		}
 		return 0, nil
 	}
 

@@ -23,7 +23,7 @@
 
 ## v0.9.1
 
-- [ ] TSV / Markdown / summary の正常出力で発生した write error を捨てず、各 command の error と非0 exit codeへ伝える
+- [x] TSV / Markdown / summary の正常出力で発生した write error を捨てず、各 command の error と非0 exit codeへ伝える
   - 対象は `sessions`、`projects`、`outline`、`search`、`import`、`backfill`、`show` の正常 stdout。usage、確認プロンプト、診断 stderr は対象外
   - write error より前に出力済みの内容は巻き戻さなくてよいが、command は成功扱いしない
   - 正常に書き込めた場合の出力内容・形式・exit codeと、既存のJSON出力のerror処理は変えない

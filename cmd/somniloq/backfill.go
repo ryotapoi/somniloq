@@ -64,7 +64,9 @@ func backfillCmd(args []string, openDB func() (*core.DB, error), in io.Reader, o
 		// successfully and only the foreign_keys PRAGMA restore in the deferred
 		// cleanup failed. The user must still see the migration counts so the
 		// next backfill (which will report 0) does not silently hide them.
-		fmt.Fprintf(out, "Migrated to v0.4: sessions=%d messages=%d import_states=%d\n", ms, mm, mi)
+		if _, err := fmt.Fprintf(out, "Migrated to v0.4: sessions=%d messages=%d import_states=%d\n", ms, mm, mi); err != nil {
+			return 1, err
+		}
 	}
 	if migrateErr != nil {
 		return 1, migrateErr
@@ -87,6 +89,8 @@ func backfillCmd(args []string, openDB func() (*core.DB, error), in io.Reader, o
 	if err != nil {
 		return 1, err
 	}
-	fmt.Fprintf(out, "Backfilled: deleted=%d resolved=%d unresolved=%d\n", result.Deleted, result.Resolved, result.Unresolved)
+	if _, err := fmt.Fprintf(out, "Backfilled: deleted=%d resolved=%d unresolved=%d\n", result.Deleted, result.Resolved, result.Unresolved); err != nil {
+		return 1, err
+	}
 	return 0, nil
 }

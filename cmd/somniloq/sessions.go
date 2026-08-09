@@ -87,9 +87,11 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	for i, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
 		proj := resolveProjectDisplayName(r.RepoPath, *flags.short, cfg)
-		fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
+		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
 			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
-			derived[i].NonCommandUserTurnCount, sanitizeTSV(derived[i].FirstNonCommandUserLine))
+			derived[i].NonCommandUserTurnCount, sanitizeTSV(derived[i].FirstNonCommandUserLine)); err != nil {
+			return 1, err
+		}
 	}
 	return 0, nil
 }
