@@ -139,6 +139,17 @@ func (h *bodyHandler) HandleLine(ImportTransaction, []byte) (LineOutcome, error)
 
 func (*bodyHandler) Flush(ImportTransaction) error { return nil }
 
+type failingPersistenceHandler struct {
+	bodyHandler
+	flushErr error
+	flushes  int
+}
+
+func (h *failingPersistenceHandler) Flush(ImportTransaction) error {
+	h.flushes++
+	return h.flushErr
+}
+
 type errorAfterReader struct {
 	data   *strings.Reader
 	err    error
@@ -224,6 +235,8 @@ type processRecordingTx struct {
 	importStateWrites int
 	commits           int
 	rollbacks         int
+	upsertErr         error
+	commitErr         error
 }
 
 func (t *processRecordingTx) UpsertSession(SessionMeta, string) error { return nil }
@@ -232,17 +245,102 @@ func (t *processRecordingTx) InsertMessage(NormalizedMessage) error { return nil
 
 func (t *processRecordingTx) UpsertImportState(ImportState) error {
 	t.importStateWrites++
-	return nil
+	return t.upsertErr
 }
 
 func (t *processRecordingTx) Commit() error {
 	t.commits++
-	return nil
+	return t.commitErr
 }
 
 func (t *processRecordingTx) Rollback() error {
 	t.rollbacks++
 	return nil
+}
+
+func TestProcessJSONL_PersistenceFailureKeepsOffsetAndRollsBack(t *testing.T) {
+	const prefix = "prior-body\n"
+	const line = "body\n"
+
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	if err := os.WriteFile(path, []byte(prefix+line), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	offset := int64(len(prefix))
+
+	tests := []struct {
+		name             string
+		configure        func(*failingPersistenceHandler, *processRecordingTx, error)
+		wantFlushes      int
+		wantImportStates int
+		wantCommits      int
+	}{
+		{
+			name: "flush",
+			configure: func(handler *failingPersistenceHandler, _ *processRecordingTx, wantErr error) {
+				handler.flushErr = wantErr
+			},
+			wantFlushes:      1,
+			wantImportStates: 0,
+			wantCommits:      0,
+		},
+		{
+			name: "upsert import state",
+			configure: func(_ *failingPersistenceHandler, tx *processRecordingTx, wantErr error) {
+				tx.upsertErr = wantErr
+			},
+			wantFlushes:      1,
+			wantImportStates: 1,
+			wantCommits:      0,
+		},
+		{
+			name: "commit",
+			configure: func(_ *failingPersistenceHandler, tx *processRecordingTx, wantErr error) {
+				tx.commitErr = wantErr
+			},
+			wantFlushes:      1,
+			wantImportStates: 1,
+			wantCommits:      1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			wantErr := errors.New(tt.name + " failed")
+			handler := &failingPersistenceHandler{}
+			tx := &processRecordingTx{}
+			tt.configure(handler, tx, wantErr)
+
+			result, err := ProcessJSONL(
+				func() (ImportTransaction, error) { return tx, nil },
+				SourceClaudeCode,
+				handler,
+				File{Path: path},
+				offset,
+				int64(len(prefix+line)),
+				"2026-07-12T00:00:00Z",
+			)
+
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
+			}
+			if result.NewOffset != offset {
+				t.Errorf("NewOffset = %d, want %d", result.NewOffset, offset)
+			}
+			if handler.flushes != tt.wantFlushes {
+				t.Errorf("Flush calls = %d, want %d", handler.flushes, tt.wantFlushes)
+			}
+			if tx.importStateWrites != tt.wantImportStates {
+				t.Errorf("UpsertImportState calls = %d, want %d", tx.importStateWrites, tt.wantImportStates)
+			}
+			if tx.commits != tt.wantCommits {
+				t.Errorf("Commit calls = %d, want %d", tx.commits, tt.wantCommits)
+			}
+			if tx.rollbacks != 1 {
+				t.Errorf("Rollback calls = %d, want 1", tx.rollbacks)
+			}
+		})
+	}
 }
 
 func TestProcessJSONL_TransactionCreationErrorKeepsOffset(t *testing.T) {

@@ -35,7 +35,7 @@
   - 共有する型や helper は中心となる責務の file に置き、分割のためだけの `common` / `utils` file は追加しない
   - テストも同じ責務単位に分け、既存の共通 test helper は `helpers_test.go` に維持する
 
-- [ ] `ProcessJSONL` の `Flush`、`UpsertImportState`、`Commit` 失敗を回帰テストで保護する
+- [x] `ProcessJSONL` の `Flush`、`UpsertImportState`、`Commit` 失敗を回帰テストで保護する
   - 各失敗でエラーが返り、`NewOffset` が実行前の値から進まない
   - transaction が rollback され、失敗位置より後の処理が実行されないことを call count で確認する
   - production API や production code は変更しない
