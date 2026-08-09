@@ -34,11 +34,11 @@ Claude Code 由来の `.claude/` は参考資料として扱ってよいが、Co
 ## Information Sources
 
 - `docs/rules/`: プロダクト目的、スコープ、アーキテクチャ、制約
-- `docs/specs/`: 振る舞い仕様。JSONL ingest を変更するときは、`jsonl-schema.md` を仕様照合先として確認する
+- `docs/specs/`: 振る舞い仕様
 - `backlog/backlog.md`: 未着手・進行中の作業項目。現状は単一ファイルを正とする
 - `docs/decisions/`: 後から理由を問われる判断
 - `llm-wiki/`: AI が編纂する作業地図。正本ではなく、docs/・ソース・テストに負ける
-- `docs/specs/jsonl-schema.md`: Claude Code / Codex JSONL の参照情報
+- `docs/specs/jsonl-schema.md`: Claude Code / Codex JSONL の構造の参照情報。JSONL ingest を変更するときは、仕様照合先として確認する
 
 必要な情報だけ読む。全ファイルを毎回読む必要はない。ただし判断に影響する可能性がある情報源は、推測で済ませず実物を確認する。
 
