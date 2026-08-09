@@ -2,7 +2,7 @@
 
 ## Status
 
-Superseded by ADR 0009 / ADR 0010（2026-06-11 決定）
+Superseded by ADR 0016（2026-08-09 決定）
 
 ## Context
 

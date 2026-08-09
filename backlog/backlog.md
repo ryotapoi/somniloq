@@ -44,6 +44,6 @@
   - JSONL ingest を変更する agent が `docs/specs/jsonl-schema.md` を仕様照合先として発見できる
   - 情報源一覧で同じ説明を不必要に重複させない
 
-- [ ] ADR 0007 の shared ingest runner という決定が維持され、ADR 0009 / 0010 は契約の一部だけを変更したと分かる Status に直す
+- [x] ADR 0007 / 0009 / 0010 の ingest runner 判断系列を ADR 0016 に統合し、各旧 ADR から追跡できるようにする
   - ADR 本文を現在仕様へ書き換えず、決定時点の理由を維持する
   - ADR 0009 / 0010 の Context と矛盾しない
