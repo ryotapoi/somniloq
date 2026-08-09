@@ -40,7 +40,7 @@
   - transaction が rollback され、失敗位置より後の処理が実行されないことを call count で確認する
   - production API や production code は変更しない
 
-- [ ] `AGENTS.md` の `docs/specs/` を「未配置」とする記述を、実在する `docs/specs/jsonl-schema.md` と矛盾しない説明へ直す
+- [x] `AGENTS.md` の `docs/specs/` を「未配置」とする記述を、実在する `docs/specs/jsonl-schema.md` と矛盾しない説明へ直す
   - JSONL ingest を変更する agent が `docs/specs/jsonl-schema.md` を仕様照合先として発見できる
   - 情報源一覧で同じ説明を不必要に重複させない
 

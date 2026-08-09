@@ -34,7 +34,7 @@ Claude Code 由来の `.claude/` は参考資料として扱ってよいが、Co
 ## Information Sources
 
 - `docs/rules/`: プロダクト目的、スコープ、アーキテクチャ、制約
-- `docs/specs/`: 振る舞い仕様。現状は未配置だが、テストだけでは意図が残らない仕様が増えたら追加する
+- `docs/specs/`: 振る舞い仕様。JSONL ingest を変更するときは、`jsonl-schema.md` を仕様照合先として確認する
 - `backlog/backlog.md`: 未着手・進行中の作業項目。現状は単一ファイルを正とする
 - `docs/decisions/`: 後から理由を問われる判断
 - `llm-wiki/`: AI が編纂する作業地図。正本ではなく、docs/・ソース・テストに負ける
