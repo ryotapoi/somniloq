@@ -2,36 +2,9 @@
 
 somniloq は Claude Code / Codex のセッションログ（JSONL）を読み取り、SQLite に保存・検索する CLI ツール。詳細は `docs/rules/mission.md` を正とする。
 
-## Entry Point
-
-入口は依頼の形で 2 通り。
-
-- **Goal（`/goal` または `goal-workflow` を明示指定）**: グローバルの `goal-workflow` skill（`~/.agents/skills/goal-workflow/`）を入口にする。Goal は作業全体を 1 commit 単位へ分割し、各 commit で `.agents/workflow/change/workflow.md` 以下の phase workflow を回す。共通手順の正本は `~/.config/agents/workflow/goal.md`、`.agents/workflow/goal.md` は Codex 用 wrapper。
-- **単発依頼**: 最初に `.agents/workflow/change/workflow.md` を読み、Intake から必要な phase ファイルへ進む。
-
-各 phase に入るときだけ、対応する workflow ファイルを読む。`AGENTS.md` の要約だけで進めない。
-
-```text
-goal-workflow skill（グローバル / Goal の入口）
-└── .agents/workflow/goal.md（Codex wrapper。共通正本を Read）
-    ├── goal-review.md — Goal Review 実行手順（実施直前に読む）
-    ├── models.md — 役割ごとのモデル・reasoning effort 定義
-    ├── design-decision-record.md — Product Decision Ledger
-    ├── conductor.md — 1 Change の inner loop
-    └── change/workflow.md（各 commit / 単発依頼の Intake・Routing）
-        ├── change/investigate.md
-        ├── change/plan.md
-        ├── change/implement.md
-        ├── change/verify.md
-        ├── change/review.md
-        └── change/finish.md
-```
-
-複数タスク後の全体構造・負債の棚卸しはユーザー起点で `maintenance-audit` skill を使う（通常レビューから自動遷移しない）。
-
-Claude Code 由来の `.claude/` は参考資料として扱ってよいが、Codex の入口は `AGENTS.md` と `.agents/` に統一する。
-
 ## Information Sources
+
+変更時の検証方法と必須gateは `docs/rules/verification.md` を正本とする。
 
 - `docs/rules/`: プロダクト目的、スコープ、アーキテクチャ、制約
 - `docs/specs/`: 振る舞い仕様
@@ -44,26 +17,21 @@ Claude Code 由来の `.claude/` は参考資料として扱ってよいが、Co
 
 ## Core Policies
 
-- workflow / skill は ICAR（Intent / Constraints / Acceptance / Relevant）を基本形にする。細かい手順や長い観点は、必要に応じて workflow 内の phase ICAR、別 md、`llm-wiki/` へ逃がす。
+- skill は ICAR（Intent / Constraints / Acceptance / Relevant）を基本形にする。細かい手順や長い観点は、必要に応じて別 md や `llm-wiki/` へ逃がす。
 - 小さい変更に重い手続きを載せない。作業の大きさとリスクで plan / verify / review の深さを選ぶ。
-- 原則 1 plan = 1 commit。独立した成果が混ざるなら plan を分ける。
 - 理想は全体が綺麗な状態だが、各 plan では今回の変更範囲と直接の依存先/依存元を中心に見る。広い構造改善は `backlog/backlog.md` へ切り出すか、節目でユーザー起点の `maintenance-audit` skill を使う。
 - 不明点が仕様、CLI 挙動、データ保持、削除方針に影響するならユーザーに確認する。
 - 自分で確認できることは自分で確認する。ユーザー確認は、実機依存・観察が必要な挙動・ユーザーの期待出力が早い場合に限る。
 - 仕様変更は `docs/rules/`、`docs/specs/`、`backlog/backlog.md` の適切な場所に同期する。`docs/specs/` とテストが矛盾したら、現在の要求・`docs/rules/`・`docs/decisions/` と照合して古い方を直す。
 - 特定ソースを編集するときだけ必要な罠は、そのソースのコメントに残す。横断的な挙動・設計理解は `llm-wiki/` の作業地図に残す。単一の集約知見ファイルは作らない。
 - 後から制約になる判断は、制約を `docs/rules/` / `docs/specs/` に、理由を `docs/decisions/` に残す。
-- workflow は 1 つの commit 単位で回す。Goal が複数 commit に分かれる場合は `goal-workflow` skill に従って commit 単位へ分けて繰り返す。
-- 単発依頼はコミットまで終えたら止まる（次のタスクはユーザー指示待ち）。Goal は完了したら止まる。
-- `.claude/`・`CLAUDE.md`（Claude 側）と `.agents/`・`AGENTS.md`（Codex 側）は、目的・制約・判断基準の方向性を揃える。subagent、review delegation、tool 呼び出し、skill / workflow の実行手順は各エージェントの仕組みに合わせてよい。片方で方針や制約を変更したら、同じコミットで他方にも必要な範囲を反映する。
 
 ## Skills
 
-Codex 用のプロジェクトスキルは `.agents/skills/` に置く。グローバルスキルは `~/.agents/skills/` に置く。`goal-workflow` はグローバルスキルを使う。
+Codex 用のプロジェクトスキルは `.agents/skills/` に置く。グローバルスキルは `~/.agents/skills/` に置く。
 
 主に使うスキル:
 
-- `goal-workflow`（グローバル）: `/goal` または明示指定時だけ使う。Goal を 1 commit 単位へ分割して完了まで進める
 - `investigate`: 計画前の不明点を調査する
 - `design-decision`: 設計判断の価値基準を当てる
 - `diff-review`: 変更差分をリスクに応じてレビューする
@@ -82,16 +50,6 @@ Codex 用のプロジェクトスキルは `.agents/skills/` に置く。グロ�
 - 後方互換性のためだけの shim / deprecated / fallback 分岐を追加しない。
 - `--no-verify` でフックをスキップしない。
 - 明示的な指示なしに force push しない。
-
-## Tooling
-
-```bash
-go test ./...                                # 全テスト実行
-go build -o bin/somniloq ./cmd/somniloq      # CLI バイナリビルド
-go vet ./...                                 # 静的チェック
-```
-
-フォーマットは `gofmt` / `goimports` を使う。Codex hook は Go ファイル編集後に `.codex/hooks/go-format.sh` を実行する。
 
 ## Language
 

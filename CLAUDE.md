@@ -1,45 +1,10 @@
 # CLAUDE.md
 
+プロジェクト指示の正本は `AGENTS.md`。作業開始時に読み、このファイルと重複・矛盾する場合は `AGENTS.md` に従う。
+
 ## プロジェクト概要
 
 somniloq は Claude Code / Codex のセッションログ（JSONL）を読み取り、SQLite に保存・検索する CLI ツール。詳細: docs/rules/mission.md
-
-## ワークフロー入口
-
-入口は依頼の形で 2 通り。
-
-- **Goal（`/goal` または `goal-workflow` を明示指定）**: `goal-workflow` skill を入口にする。Goal は作業全体を 1 commit 単位へ分割し、各 commit で `.claude/workflow/change/workflow.md` 以下の phase workflow を回す。共通手順の正本は `~/.config/agents/workflow/goal.md`、`.claude/workflow/goal.md` は Claude 用 wrapper。`goal-workflow` skill はその wrapper を読んで進める。Goal 前提では都度確認を避けて自動進行し、止まるのは各 workflow の Stop Conditions だけ。
-- **単発依頼**: `.claude/workflow/change/workflow.md` を最初に Read し、Intake 分類（Small / Normal / High-risk / Exploratory）から必要な phase ファイルへ進む。
-
-```text
-goal-workflow skill（Goal の入口）
-└── .claude/workflow/goal.md（Claude wrapper。共通正本を Read）
-    ├── goal-review.md — Goal Review 実行手順（実施直前に読む）
-    ├── models.md — 役割ごとのモデル・reasoning effort 定義
-    ├── design-decision-record.md — Product Decision Ledger
-    ├── conductor.md — 1 Change の inner loop
-    └── change/workflow.md（各 commit / 単発依頼の Intake・Routing）
-        ├── change/investigate.md — Exploratory 用の事実集め
-        ├── change/plan.md — 計画作成（省略可条件含む。plan mode は使わない）
-        ├── change/implement.md — 実装
-        ├── change/verify.md — 動作確認
-        ├── change/review.md — リスクベースの review depth 選択
-        └── change/finish.md — コミット
-```
-
-複数タスク後の全体構造・負債の棚卸しはユーザー起点で `maintenance-audit` skill を使う（通常レビューから自動遷移しない）。
-
-各 phase ファイルは入る前に Read で読む（CLAUDE.md の要約で済ませない）。
-plan mode（`EnterPlanMode` / `ExitPlanMode`）は使わない。計画は内部で立ててそのまま実装する。
-不明点があれば止まってユーザーに確認。なければ自動進行。
-単発依頼はコミットまで終えたら止まる（次のタスクはユーザー指示待ち）。Goal は完了したら止まる。
-
-## ビルド・テストコマンド
-
-```bash
-go test ./...                                # 全テスト実行
-go build -o bin/somniloq ./cmd/somniloq      # バイナリビルド
-```
 
 ## Constraints / サブエージェント活用
 
@@ -73,7 +38,6 @@ CLI 出力や期待挙動が絡む調査・バグ修正では、コードから�
 
 - 各情報の置き場所は 1 箇所に限定する（同じ情報を複数のドキュメントに書くと SSoT が崩れる）
 - 情報配置の正本は `docs/rules/information-management.md`。docs/ または llm-wiki/ を編集する前に読む
-- `.claude/`・`CLAUDE.md`（Claude 側）と `.agents/`・`AGENTS.md`（Codex 側）は、目的・制約・判断基準の方向性を揃える。subagent、review delegation、tool 呼び出し、skill / workflow の実行手順は各エージェントの仕組みに合わせてよい。片方で方針や制約を変更したら、同じコミットで他方にも必要な範囲を反映する。
 - 新しいスキルやファイルを作成したら、同じステップで settings.json 等への登録も行う
 - 特定ソースを編集するときだけ必要な罠は、そのソースのコメントに残す。横断的な挙動・設計理解は `llm-wiki/` の作業地図に残す。単一の集約知見ファイルは作らない
 

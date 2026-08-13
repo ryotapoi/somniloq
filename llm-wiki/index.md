@@ -5,7 +5,6 @@ sources:
   - docs/rules/architecture.md
   - docs/rules/scope.md
   - docs/specs/jsonl-schema.md
-  - llm-wiki/agent-workflow-map.md
   - llm-wiki/command-map.md
   - llm-wiki/configuration-and-projects.md
   - llm-wiki/display-and-turns.md
@@ -40,5 +39,4 @@ sources:
 | [Storage and query map](storage-query-map.md) | compiled | schema, migration, query helper, backfill の変更入口 | internal/core/db*.go, internal/core/migrate_v04.go, internal/core/backfill.go |
 | [Display and turns](display-and-turns.md) | compiled | show / outline / search の表示・ターン採番・TSV/JSON の導線 | cmd/somniloq, internal/core/db_sessions_projects.go, internal/core/db_messages_summary.go, internal/core/db_search.go |
 | [Configuration and projects](configuration-and-projects.md) | compiled | repo_path 解決、project alias、project filter の波及先 | cmd/somniloq/config.go, internal/core/repo_path.go |
-| [Agent workflow map](agent-workflow-map.md) | compiled | Codex / Claude 側 workflow, skill, docs 配置の同期を見る導線 | AGENTS.md, CLAUDE.md, .agents, .claude |
 | [SQLite driver notes](sqlite-driver-notes.md) | none | modernc.org/sqlite / SQLite の外部由来の罠 | internal/core/db.go, internal/core/db_schema.go, internal/core/db_sessions_projects.go, internal/core/migrate_v04.go, internal/core/backfill.go |

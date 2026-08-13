@@ -201,7 +201,7 @@ sources:           # 導出元。regen: none は省略可だが、外部 URL・�
 
 揮発的一時情報。gitignore 対象で、いつ消えても壊れないものだけを置く。直下の平置きは人が手で置く一時ファイル用に残し、エージェント・workflow の作業産物はサブフォルダに置く。
 
-- `tmp/workflow/<scope>/` — workflow の一時 artifact（plan file、委譲ログ・プロンプト、列挙メモ、検証用 checkout、Product Decision Ledger、Goal Review の実行時記録等）。`<scope>` は Goal / Change の短い slug（例: `v0110_1`）。掃除は scope フォルダごとまとめて消す
+- `tmp/workflow/<scope>/` — workflow の一時 artifact（plan file、委譲ログ・プロンプト、列挙メモ、検証用 checkout、Product Decision Ledger、Range Review の実行時記録等）。`<scope>` は Goal / Change の短い slug（例: `v0110_1`）。掃除は scope フォルダごとまとめて消す
 - skill が自前の規約で確保するサブフォルダ（例: `tmp/codex-herdr/`）はその skill の規約に従う
 
 ## 運用ガイド
