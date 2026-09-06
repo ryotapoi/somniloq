@@ -64,7 +64,7 @@ type, message, sessionId, cwd, timestamp, gitBranch, uuid, parentUuid, version, 
 `~/.codex/sessions/<yyyy>/<mm>/<dd>/rollout-*.jsonl`
 
 - rollout ファイルは日付ディレクトリ配下にネストされるため、`~/.codex/sessions/` を再帰走査する
-- ファイル名の stem は走査上の補助 ID として扱い、保存する `session_id` は `session_meta.payload.id` を使う
+- 保存する `session_id` は `session_meta.payload.id` を使う
 
 ### レコード構造
 

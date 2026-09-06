@@ -12,14 +12,14 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
 
-func processCodexFile(db *DB, path, sessionID, jsonl string) (int64, error) {
-	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db),
-		JSONLFile{Path: path, SessionID: sessionID},
+func processCodexFile(db *DB, path, jsonl string) error {
+	_, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db),
+		path,
 		0,
 		int64(len(jsonl)),
 		"2026-05-01T00:10:00Z",
 	)
-	return pr.NewOffset, err
+	return err
 }
 
 func TestCodexScanFiles_Recursive(t *testing.T) {
@@ -42,8 +42,8 @@ func TestCodexScanFiles_Recursive(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("got %d files, want 1: %+v", len(files), files)
 	}
-	if files[0].SessionID != "rollout-a" {
-		t.Errorf("SessionID: got %q, want rollout-a", files[0].SessionID)
+	if filepath.Base(files[0]) != "rollout-a.jsonl" {
+		t.Errorf("path: got %q, want rollout-a.jsonl", files[0])
 	}
 }
 
@@ -112,8 +112,8 @@ func TestCodexScanFiles_UnreadableSubdirIsNonFatal(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("got %d files, want 1: %+v", len(files), files)
 	}
-	if files[0].SessionID != "rollout-a" {
-		t.Errorf("SessionID: got %q, want rollout-a", files[0].SessionID)
+	if filepath.Base(files[0]) != "rollout-a.jsonl" {
+		t.Errorf("path: got %q, want rollout-a.jsonl", files[0])
 	}
 }
 
@@ -135,7 +135,7 @@ func TestCodexProcessFile_CountsUnparsedLines(t *testing.T) {
 	}
 
 	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db),
-		JSONLFile{Path: path, SessionID: "rollout"},
+		path,
 		0,
 		int64(len(jsonl)),
 		"2026-05-01T00:10:00Z",
@@ -210,14 +210,10 @@ func TestCodexProcessFile_ImportsConversationMessages(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	newOffset, err := processCodexFile(db, path, "rollout", jsonl)
+	err := processCodexFile(db, path, jsonl)
 	if err != nil {
 		t.Fatalf("processCodexFile failed: %v", err)
 	}
-	if newOffset != int64(len(jsonl)) {
-		t.Errorf("offset: got %d, want %d", newOffset, len(jsonl))
-	}
-
 	var source, repoPath, branch, version string
 	if err := db.db.QueryRow(
 		"SELECT source, repo_path, git_branch, version FROM sessions WHERE source='codex' AND session_id='codex-session'",
@@ -365,14 +361,10 @@ func TestCodexProcessFile_MetaOnlyDoesNotAdvanceImportState(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	newOffset, err := processCodexFile(db, path, "rollout-meta-only", jsonl)
+	err := processCodexFile(db, path, jsonl)
 	if err != nil {
 		t.Fatalf("processCodexFile failed: %v", err)
 	}
-	if newOffset != 0 {
-		t.Errorf("offset: got %d, want 0", newOffset)
-	}
-
 	var count int
 	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE source='codex'").Scan(&count); err != nil {
 		t.Fatalf("COUNT sessions failed: %v", err)

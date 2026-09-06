@@ -133,67 +133,6 @@ func TestFormatSession_EmptyTitle(t *testing.T) {
 	}
 }
 
-func stubGetMessages(data map[string][]core.MessageRow) func(core.Source, string) ([]core.MessageRow, error) {
-	return func(_ core.Source, sessionID string) ([]core.MessageRow, error) {
-		return data[sessionID], nil
-	}
-}
-
-func TestFormatSessions_Multiple(t *testing.T) {
-	var buf bytes.Buffer
-
-	sessions := []core.SessionRow{
-		{SessionID: "s1", StartedAt: "2026-03-28T14:00:00Z", CustomTitle: "Session One"},
-		{SessionID: "s2", StartedAt: "2026-03-28T10:00:00Z", CustomTitle: "Session Two"},
-	}
-	msgs := map[string][]core.MessageRow{
-		"s1": {{UUID: "m1", Role: "user", Content: "hello", Timestamp: "2026-03-28T14:00:00Z"}},
-		"s2": {{UUID: "m2", Role: "user", Content: "world", Timestamp: "2026-03-28T10:00:00Z"}},
-	}
-
-	displayNames := []string{"-test", "-test"}
-	if err := formatSessions(&buf, sessions, displayNames, stubGetMessages(msgs), time.UTC); err != nil {
-		t.Fatalf("formatSessions failed: %v", err)
-	}
-	got := buf.String()
-
-	if !strings.Contains(got, "## Session One\n") {
-		t.Errorf("expected Session One heading, got:\n%s", got)
-	}
-	if !strings.Contains(got, "## Session Two\n") {
-		t.Errorf("expected Session Two heading, got:\n%s", got)
-	}
-
-	parts := strings.Split(got, "\n---\n")
-	if len(parts) != 2 {
-		t.Errorf("expected exactly one --- separator between 2 sessions, got %d parts:\n%s", len(parts), got)
-	}
-	if strings.HasSuffix(strings.TrimSpace(got), "---") {
-		t.Errorf("should not end with ---, got:\n%s", got)
-	}
-}
-
-func TestFormatSessions_Single(t *testing.T) {
-	var buf bytes.Buffer
-
-	sessions := []core.SessionRow{
-		{SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z", CustomTitle: "Only One"},
-	}
-	msgs := map[string][]core.MessageRow{
-		"s1": {{UUID: "m1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}},
-	}
-
-	displayNames := []string{"-test"}
-	if err := formatSessions(&buf, sessions, displayNames, stubGetMessages(msgs), time.UTC); err != nil {
-		t.Fatalf("formatSessions failed: %v", err)
-	}
-	got := buf.String()
-
-	if strings.Contains(got, "---") {
-		t.Errorf("single session should not have separator, got:\n%s", got)
-	}
-}
-
 func TestFormatSession_TitleWithNewline(t *testing.T) {
 	var buf bytes.Buffer
 

@@ -73,25 +73,6 @@ func formatSession(w io.Writer, session core.SessionRow, displayName string, mes
 	return nil
 }
 
-// formatSessions requires len(displayNames) == len(sessions).
-func formatSessions(w io.Writer, sessions []core.SessionRow, displayNames []string, getMessages func(source core.Source, sessionID string) ([]core.MessageRow, error), loc *time.Location) error {
-	for i, session := range sessions {
-		if i > 0 {
-			if _, err := fmt.Fprint(w, "\n---\n\n"); err != nil {
-				return err
-			}
-		}
-		msgs, err := getMessages(session.Source, session.SessionID)
-		if err != nil {
-			return err
-		}
-		if err := formatSession(w, session, displayNames[i], msgs, loc); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 // resolveSessionByID looks up sessionID across sources and reduces the result
 // to a single session. On failure it returns exit code 1, reporting an
 // ambiguous match to errOut directly and a lookup failure via the returned

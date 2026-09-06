@@ -38,9 +38,6 @@ const (
 
 // ProcessResult reports the outcome of processing one file.
 type ProcessResult struct {
-	// NewOffset is the import cursor after this pass; on error or when no
-	// body record exists yet it stays at the old offset.
-	NewOffset int64
 	// UnparsedLines counts lines dropped as LineUnparsed during this pass.
 	UnparsedLines int
 	// UnparsedDiagnostics holds up to five parse or normalization diagnostics
@@ -84,41 +81,40 @@ type FileHandler interface {
 // record has ever been written for the file, it commits nothing and keeps the
 // old offset so the next import re-reads the meta-only prefix once a body
 // record finally appears.
-func ProcessJSONL(newTransaction NewImportTransaction, source Source, handler FileHandler, file File, offset, fileSize int64, importedAt string) (ProcessResult, error) {
-	return processJSONL(newTransaction, source, handler, file, offset, fileSize, importedAt, func(path string) (readSeekCloser, error) {
+func ProcessJSONL(newTransaction NewImportTransaction, source Source, handler FileHandler, path string, offset, fileSize int64, importedAt string) (ProcessResult, error) {
+	return processJSONL(newTransaction, source, handler, path, offset, fileSize, importedAt, func(path string) (readSeekCloser, error) {
 		return os.Open(path)
 	})
 }
 
-func processJSONL(newTransaction NewImportTransaction, source Source, handler FileHandler, file File, offset, fileSize int64, importedAt string, openFile func(string) (readSeekCloser, error)) (ProcessResult, error) {
-	keep := ProcessResult{NewOffset: offset}
+func processJSONL(newTransaction NewImportTransaction, source Source, handler FileHandler, path string, offset, fileSize int64, importedAt string, openFile func(string) (readSeekCloser, error)) (ProcessResult, error) {
+	var result ProcessResult
 
-	if err := handler.Begin(file.Path, offset); err != nil {
-		return keep, err
+	if err := handler.Begin(path, offset); err != nil {
+		return result, err
 	}
 
-	f, err := openFile(file.Path)
+	f, err := openFile(path)
 	if err != nil {
-		return keep, err
+		return result, err
 	}
 	defer f.Close()
 
 	if offset > 0 {
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {
-			return keep, err
+			return result, err
 		}
 	}
 
 	tx, err := newTransaction()
 	if err != nil {
-		return keep, err
+		return result, err
 	}
 	defer tx.Rollback()
 
 	// import_state only advances after a body record was committed, so a
 	// positive offset proves a sessions row already exists for this file.
 	hasBody := offset > 0
-	var unparsed int
 	consumed, err := ForEachLine(f, -1, func(line []byte) error {
 		outcome, herr := handler.HandleLine(tx, line)
 		if herr != nil {
@@ -130,43 +126,41 @@ func processJSONL(newTransaction NewImportTransaction, source Source, handler Fi
 		case LineWroteBody:
 			hasBody = true
 		case LineUnparsed:
-			unparsed++
-			if reporter, ok := handler.(UnparsedDiagnosticReporter); ok && len(keep.UnparsedDiagnostics) < MaxUnparsedDiagnostics {
+			result.UnparsedLines++
+			if reporter, ok := handler.(UnparsedDiagnosticReporter); ok && len(result.UnparsedDiagnostics) < MaxUnparsedDiagnostics {
 				if diagnostic := reporter.UnparsedDiagnostic(); diagnostic != nil {
-					keep.UnparsedDiagnostics = append(keep.UnparsedDiagnostics, diagnostic)
+					result.UnparsedDiagnostics = append(result.UnparsedDiagnostics, diagnostic)
 				}
 			}
 		}
 		return nil
 	})
-	keep.UnparsedLines = unparsed
 	if err != nil {
-		return keep, err
+		return result, err
 	}
 
 	if !hasBody {
-		return keep, nil
+		return result, nil
 	}
 
 	if err := handler.Flush(tx); err != nil {
-		return keep, err
+		return result, err
 	}
 
 	if err := tx.UpsertImportState(ImportState{
-		JSONLPath:  file.Path,
+		JSONLPath:  path,
 		Source:     source,
 		FileSize:   fileSize,
 		LastOffset: offset + consumed,
 		ImportedAt: importedAt,
 	}); err != nil {
-		return keep, fmt.Errorf("upsert import state: %w", err)
+		return result, fmt.Errorf("upsert import state: %w", err)
 	}
 
 	if err := tx.Commit(); err != nil {
-		return keep, err
+		return result, err
 	}
-	keep.NewOffset = offset + consumed
-	return keep, nil
+	return result, nil
 }
 
 // ForEachLine feeds r's lines (newline included, blank lines included) to fn

@@ -19,7 +19,7 @@ func NewAdapter(resolveRepoPath ingest.RepoResolver) Adapter {
 	return Adapter{resolveRepoPath: resolveRepoPath}
 }
 
-func (a Adapter) ScanFiles(projectsDir string) ([]ingest.File, []error) {
+func (a Adapter) ScanFiles(projectsDir string) ([]string, []error) {
 	entries, err := os.ReadDir(projectsDir)
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -28,7 +28,7 @@ func (a Adapter) ScanFiles(projectsDir string) ([]ingest.File, []error) {
 		return nil, []error{fmt.Errorf("scan %s: %w", projectsDir, err)}
 	}
 
-	var files []ingest.File
+	var files []string
 	var errs []error
 	for _, entry := range entries {
 		if !entry.IsDir() {
@@ -49,11 +49,7 @@ func (a Adapter) ScanFiles(projectsDir string) ([]ingest.File, []error) {
 			if !strings.HasSuffix(name, ".jsonl") {
 				continue
 			}
-			sessionID := strings.TrimSuffix(name, ".jsonl")
-			files = append(files, ingest.File{
-				Path:      filepath.Join(subPath, name),
-				SessionID: sessionID,
-			})
+			files = append(files, filepath.Join(subPath, name))
 		}
 	}
 	return files, errs
@@ -80,9 +76,9 @@ type fileHandler struct {
 	agentNames      map[string]string
 }
 
-func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, file ingest.File, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
+func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, path string, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
 	if a.resolveRepoPath == nil {
-		return ingest.ProcessResult{NewOffset: offset}, errors.New("resolve repo path is nil")
+		return ingest.ProcessResult{}, errors.New("resolve repo path is nil")
 	}
 	h := &fileHandler{
 		resolveRepoPath: a.resolveRepoPath,
@@ -91,7 +87,7 @@ func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, file in
 		titles:          map[string]string{},
 		agentNames:      map[string]string{},
 	}
-	return ingest.ProcessJSONL(newTransaction, ingest.SourceClaudeCode, h, file, offset, fileSize, importedAt)
+	return ingest.ProcessJSONL(newTransaction, ingest.SourceClaudeCode, h, path, offset, fileSize, importedAt)
 }
 
 func (h *fileHandler) Begin(path string, offset int64) error {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -25,6 +26,9 @@ func TestShowCmd_TurnRange(t *testing.T) {
 	if strings.Contains(out.String(), "first question") {
 		t.Errorf("output should not contain turn 1 message, got %q", out.String())
 	}
+	if strings.Contains(out.String(), "\n---\n") {
+		t.Errorf("single-session output must not include a separator, got %q", out.String())
+	}
 }
 
 func TestShowCmd_Tail(t *testing.T) {
@@ -43,6 +47,18 @@ func TestShowCmd_Tail(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "answer one") {
 		t.Errorf("output should not contain turn 1 reply, got %q", out.String())
+	}
+}
+
+func TestShowCmd_ReturnsOutputError(t *testing.T) {
+	db := newOutlineTestDB(t)
+
+	code, err := showCmd([]string{"sess-1"}, staticDB(db), config{}, failWriter{}, &bytes.Buffer{})
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !errors.Is(err, errFailWriter) {
+		t.Errorf("error = %v, want %v", err, errFailWriter)
 	}
 }
 
@@ -92,6 +108,9 @@ func TestShowCmd_TurnFilterAppliesPerSessionInBulkMode(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "first question") {
 		t.Errorf("output should not contain sess-1 turn 1, got %q", out.String())
+	}
+	if strings.Count(out.String(), "\n---\n") != 1 {
+		t.Errorf("two-session output must include one separator, got %q", out.String())
 	}
 }
 

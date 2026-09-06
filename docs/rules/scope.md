@@ -41,7 +41,7 @@ source（DB 内部値は `claude_code` / `codex`）ごとに専用の adapter �
 - `~/.codex/sessions/` 配下の日付ディレクトリを再帰走査し、rollout JSONL を列挙
 - 各 JSONL を行単位で読み、`response_item` かつ `payload.type == "message"` かつ `role in ("user", "assistant")` のレコードのみを取り込み対象とする
 - `payload.content` は `input_text` / `output_text` / `text` block の `text` のみを抽出し、複数 block は空行区切りで結合する
-- `session_id` は `session_meta.payload.id` を使う。ファイル名 stem は走査時の補助 ID に留める
+- `session_id` は `session_meta.payload.id` を使う
 - `session_meta.payload.cwd` から `repo_path` を解決して sessions に保存（解決ロジックは Claude Code 側と共有）
 - `git_branch` は `session_meta.payload.git.branch`、`version` は `session_meta.payload.cli_version` から保存する
 - `messages.uuid` の一意性は `(rollout_path, line_number)` ベースで判定（Codex のレコードは Claude Code のような UUID を持たないため）

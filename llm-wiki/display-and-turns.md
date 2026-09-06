@@ -29,7 +29,7 @@ sources:
 
 ## 表示 path
 
-- Markdown show: `cmd/somniloq/show.go` -> `cmd/somniloq/format.go` -> `internal/core/db_sessions_projects.go` と `internal/core/db_messages_summary.go` の session/message query。
+- Show: `cmd/somniloq/show.go` が ID 解決または一覧取得後、各 session の message 取得、filter、JSON または Markdown 出力を順に行う。Markdown の session 本文は `cmd/somniloq/format.go` の `formatSession` が整形する。
 - Summary show: `show.go` が `GetSummaryMessages` に差し替える。`/clear` / `<local-command-caveat>` skip は core query 側。
 - Outline: `outline.go` が `GetMessages` と `assignTurns` を使い、user message だけ出す。`body_size` / `bodySize` は各 turn に属する非 sidechain message content の UTF-8 byte 合計で、`show --turn` の読み取り量の目安になる。
 - Sessions skip hints: `sessions.go` が `ListSessions` 後に各 session の `GetMessages` を読み、`userTurnMessages` と `config.go` の `commandMatcher` で非コマンド user turn 数と最初の非コマンド行を出す。DB schema / core の session 集約 SQL には持ち込まない。

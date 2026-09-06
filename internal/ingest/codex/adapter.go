@@ -21,8 +21,8 @@ func NewAdapter(resolveRepoPath ingest.RepoResolver) Adapter {
 	return Adapter{resolveRepoPath: resolveRepoPath}
 }
 
-func (a Adapter) ScanFiles(rootDir string) ([]ingest.File, []error) {
-	var files []ingest.File
+func (a Adapter) ScanFiles(rootDir string) ([]string, []error) {
+	var files []string
 	var errs []error
 	walkErr := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -39,10 +39,7 @@ func (a Adapter) ScanFiles(rootDir string) ([]ingest.File, []error) {
 		if !strings.HasSuffix(name, ".jsonl") {
 			return nil
 		}
-		files = append(files, ingest.File{
-			Path:      path,
-			SessionID: strings.TrimSuffix(name, ".jsonl"),
-		})
+		files = append(files, path)
 		return nil
 	})
 	if walkErr != nil {
@@ -73,15 +70,15 @@ type fileHandler struct {
 	diagnostic      error
 }
 
-func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, file ingest.File, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
+func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, path string, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
 	if a.resolveRepoPath == nil {
-		return ingest.ProcessResult{NewOffset: offset}, errors.New("resolve repo path is nil")
+		return ingest.ProcessResult{}, errors.New("resolve repo path is nil")
 	}
 	h := &fileHandler{
 		resolveRepoPath: a.resolveRepoPath,
 		importedAt:      importedAt,
 	}
-	return ingest.ProcessJSONL(newTransaction, ingest.SourceCodex, h, file, offset, fileSize, importedAt)
+	return ingest.ProcessJSONL(newTransaction, ingest.SourceCodex, h, path, offset, fileSize, importedAt)
 }
 
 // Begin recovers session_meta from the already-imported prefix so incremental

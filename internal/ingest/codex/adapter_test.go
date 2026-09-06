@@ -46,7 +46,7 @@ func TestAdapter_ProcessFileMalformedSessionMetaContinues(t *testing.T) {
 	tx := &recordingTransaction{}
 	result, err := NewAdapter(func(string) string { return "/repo" }).ProcessFile(
 		func() (ingest.ImportTransaction, error) { return tx, nil },
-		ingest.File{Path: path},
+		path,
 		0,
 		int64(len(contents)),
 		"2026-07-12T00:00:00Z",
@@ -56,9 +56,6 @@ func TestAdapter_ProcessFileMalformedSessionMetaContinues(t *testing.T) {
 	}
 	if result.UnparsedLines != 1 {
 		t.Errorf("UnparsedLines = %d, want 1", result.UnparsedLines)
-	}
-	if result.NewOffset != int64(len(contents)) {
-		t.Errorf("NewOffset = %d, want %d", result.NewOffset, len(contents))
 	}
 	if tx.messages != 1 {
 		t.Errorf("InsertMessage calls = %d, want 1", tx.messages)

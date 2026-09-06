@@ -105,90 +105,69 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	}
 	defer db.Close()
 
-	getMessages := func(src core.Source, id string) ([]core.MessageRow, error) {
-		return db.GetMessages(src, id)
-	}
-	if *flags.summary >= 1 {
-		n, ic := *flags.summary, *flags.includeClear
-		getMessages = func(src core.Source, id string) ([]core.MessageRow, error) {
-			return db.GetSummaryMessages(src, id, n, ic)
-		}
-	}
-	if turnFiltered {
-		// Turn filtering must run on the full GetMessages output so the
-		// numbers match outline (see assignTurns).
-		tailN := *flags.tail
-		getMessages = func(src core.Source, id string) ([]core.MessageRow, error) {
-			msgs, err := db.GetMessages(src, id)
-			if err != nil {
-				return nil, err
-			}
-			if tailN > 0 {
-				return filterLastTurns(msgs, tailN), nil
-			}
-			return filterTurns(msgs, turnLo, turnHi), nil
-		}
-	}
-
+	var sessions []core.SessionRow
 	if sessionID != "" {
 		session, code, err := resolveSessionByID(db, sessionID, errOut)
 		if code != 0 {
 			return code, err
 		}
-		proj := resolveProjectDisplayName(session.RepoPath, *flags.short, cfg)
-		messages, err := getMessages(session.Source, session.SessionID)
+		sessions = []core.SessionRow{session}
+	} else {
+		filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, dayBoundary{})
 		if err != nil {
 			return 1, err
 		}
-		if *flags.format == "json" {
-			// Always an array, so consumers parse single-session and
-			// time-range output the same way.
-			if err := writeJSON(out, []showSessionJSON{newShowSessionJSON(session, proj, messages)}); err != nil {
-				return 1, err
-			}
-			return 0, nil
-		}
-		if err := formatSession(out, session, proj, messages, time.Local); err != nil {
+		sessions, err = db.ListSessions(filter)
+		if err != nil {
 			return 1, err
 		}
-		return 0, nil
 	}
 
-	// --since/--until mode
-	filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, dayBoundary{})
-	if err != nil {
-		return 1, err
-	}
-
-	sessions, err := db.ListSessions(filter)
-	if err != nil {
-		return 1, err
-	}
+	var entries []showSessionJSON
 	if *flags.format == "json" {
-		entries := make([]showSessionJSON, len(sessions))
-		for i, session := range sessions {
-			messages, err := getMessages(session.Source, session.SessionID)
-			if err != nil {
+		entries = make([]showSessionJSON, 0, len(sessions))
+	}
+	for i, session := range sessions {
+		if *flags.format == "markdown" && i > 0 {
+			if _, err := fmt.Fprint(out, "\n---\n\n"); err != nil {
 				return 1, err
 			}
-			entries[i] = newShowSessionJSON(session, resolveProjectDisplayName(session.RepoPath, *flags.short, cfg), messages)
 		}
+
+		var messages []core.MessageRow
+		if *flags.summary >= 1 {
+			messages, err = db.GetSummaryMessages(session.Source, session.SessionID, *flags.summary, *flags.includeClear)
+		} else {
+			messages, err = db.GetMessages(session.Source, session.SessionID)
+			if err == nil && turnFiltered {
+				// Turn filtering must run on the full GetMessages output so the
+				// numbers match outline (see assignTurns).
+				if *flags.tail > 0 {
+					messages = filterLastTurns(messages, *flags.tail)
+				} else {
+					messages = filterTurns(messages, turnLo, turnHi)
+				}
+			}
+		}
+		if err != nil {
+			return 1, err
+		}
+
+		project := resolveProjectDisplayName(session.RepoPath, *flags.short, cfg)
+		if *flags.format == "json" {
+			entries = append(entries, newShowSessionJSON(session, project, messages))
+			continue
+		}
+		if err := formatSession(out, session, project, messages, time.Local); err != nil {
+			return 1, err
+		}
+	}
+	if *flags.format == "json" {
+		// Always an array, so consumers parse single-session and time-range
+		// output the same way.
 		if err := writeJSON(out, entries); err != nil {
 			return 1, err
 		}
-		return 0, nil
-	}
-	if len(sessions) == 0 {
-		return 0, nil
-	}
-
-	displayNames := make([]string, len(sessions))
-	for i := range sessions {
-		displayNames[i] = resolveProjectDisplayName(sessions[i].RepoPath, *flags.short, cfg)
-	}
-
-	if err := formatSessions(out, sessions, displayNames, getMessages, time.Local); err != nil {
-		return 1, err
 	}
 	return 0, nil
 }

@@ -16,20 +16,17 @@ func TestProcessJSONL_NoBodyDoesNotAdvanceOffsetOrCommit(t *testing.T) {
 	}
 
 	tx := &processRecordingTx{}
-	result, err := ProcessJSONL(
+	_, err := ProcessJSONL(
 		func() (ImportTransaction, error) { return tx, nil },
 		SourceClaudeCode,
 		ignoredHandler{},
-		File{Path: path},
+		path,
 		0,
 		int64(len("metadata\\n")),
 		"2026-07-12T00:00:00Z",
 	)
 	if err != nil {
 		t.Fatalf("ProcessJSONL error = %v, want nil", err)
-	}
-	if result.NewOffset != 0 {
-		t.Errorf("NewOffset = %d, want 0", result.NewOffset)
 	}
 	if tx.importStateWrites != 0 {
 		t.Errorf("UpsertImportState calls = %d, want 0", tx.importStateWrites)
@@ -46,23 +43,20 @@ func TestProcessJSONL_BeginErrorKeepsOffsetWithoutStartingTransaction(t *testing
 	const offset = 17
 	wantErr := errors.New("restore state failed")
 	transactions := 0
-	result, err := ProcessJSONL(
+	_, err := ProcessJSONL(
 		func() (ImportTransaction, error) {
 			transactions++
 			return &processRecordingTx{}, nil
 		},
 		SourceClaudeCode,
 		beginErrorHandler{err: wantErr},
-		File{Path: "unused.jsonl"},
+		"unused.jsonl",
 		offset,
 		offset,
 		"2026-07-12T00:00:00Z",
 	)
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
-	}
-	if result.NewOffset != offset {
-		t.Errorf("NewOffset = %d, want %d", result.NewOffset, offset)
 	}
 	if transactions != 0 {
 		t.Errorf("newTransaction calls = %d, want 0", transactions)
@@ -75,11 +69,11 @@ func TestProcessJSONL_ReadErrorAfterBodyKeepsOffsetAndRollsBack(t *testing.T) {
 	reader := &errorAfterReader{data: strings.NewReader(line), err: wantErr}
 	tx := &processRecordingTx{}
 	handler := &bodyHandler{}
-	result, err := processJSONL(
+	_, err := processJSONL(
 		func() (ImportTransaction, error) { return tx, nil },
 		SourceClaudeCode,
 		handler,
-		File{Path: "session.jsonl"},
+		"session.jsonl",
 		0,
 		int64(len(line)),
 		"2026-07-12T00:00:00Z",
@@ -90,9 +84,6 @@ func TestProcessJSONL_ReadErrorAfterBodyKeepsOffsetAndRollsBack(t *testing.T) {
 	}
 	if handler.lines != 1 {
 		t.Errorf("HandleLine calls = %d, want 1", handler.lines)
-	}
-	if result.NewOffset != 0 {
-		t.Errorf("NewOffset = %d, want 0", result.NewOffset)
 	}
 	if tx.importStateWrites != 0 {
 		t.Errorf("UpsertImportState calls = %d, want 0", tx.importStateWrites)
@@ -193,7 +184,7 @@ func TestProcessJSONL_HandlerErrorDiscardsOutcomeAndRollsBack(t *testing.T) {
 		func() (ImportTransaction, error) { return tx, nil },
 		SourceClaudeCode,
 		errorOutcomeHandler{err: wantErr},
-		File{Path: path},
+		path,
 		int64(len(prefix)),
 		int64(len(prefix+line)),
 		"2026-07-12T00:00:00Z",
@@ -201,9 +192,6 @@ func TestProcessJSONL_HandlerErrorDiscardsOutcomeAndRollsBack(t *testing.T) {
 
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
-	}
-	if result.NewOffset != int64(len(prefix)) {
-		t.Errorf("NewOffset = %d, want %d", result.NewOffset, len(prefix))
 	}
 	if result.UnparsedLines != 0 {
 		t.Errorf("UnparsedLines = %d, want 0", result.UnparsedLines)
@@ -311,11 +299,11 @@ func TestProcessJSONL_PersistenceFailureKeepsOffsetAndRollsBack(t *testing.T) {
 			tx := &processRecordingTx{}
 			tt.configure(handler, tx, wantErr)
 
-			result, err := ProcessJSONL(
+			_, err := ProcessJSONL(
 				func() (ImportTransaction, error) { return tx, nil },
 				SourceClaudeCode,
 				handler,
-				File{Path: path},
+				path,
 				offset,
 				int64(len(prefix+line)),
 				"2026-07-12T00:00:00Z",
@@ -323,9 +311,6 @@ func TestProcessJSONL_PersistenceFailureKeepsOffsetAndRollsBack(t *testing.T) {
 
 			if !errors.Is(err, wantErr) {
 				t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
-			}
-			if result.NewOffset != offset {
-				t.Errorf("NewOffset = %d, want %d", result.NewOffset, offset)
 			}
 			if handler.flushes != tt.wantFlushes {
 				t.Errorf("Flush calls = %d, want %d", handler.flushes, tt.wantFlushes)
@@ -350,11 +335,11 @@ func TestProcessJSONL_TransactionCreationErrorKeepsOffset(t *testing.T) {
 	}
 
 	wantErr := errors.New("begin import failed")
-	result, err := ProcessJSONL(
+	_, err := ProcessJSONL(
 		func() (ImportTransaction, error) { return nil, wantErr },
 		SourceClaudeCode,
 		errorOutcomeHandler{},
-		File{Path: path},
+		path,
 		0,
 		int64(len("record\n")),
 		"2026-07-12T00:00:00Z",
@@ -362,8 +347,5 @@ func TestProcessJSONL_TransactionCreationErrorKeepsOffset(t *testing.T) {
 
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
-	}
-	if result.NewOffset != 0 {
-		t.Errorf("NewOffset = %d, want 0", result.NewOffset)
 	}
 }

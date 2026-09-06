@@ -152,18 +152,18 @@ func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportR
 		return importTx{tx: tx}, nil
 	}
 
-	for _, file := range files {
-		state, err := db.GetImportState(file.Path)
+	for _, path := range files {
+		state, err := db.GetImportState(path)
 		if err != nil {
 			result.FilesFailed++
-			result.Errors = append(result.Errors, fmt.Errorf("%s: get state: %w", file.Path, err))
+			result.Errors = append(result.Errors, fmt.Errorf("%s: get state: %w", path, err))
 			continue
 		}
 
-		fi, err := os.Stat(file.Path)
+		fi, err := os.Stat(path)
 		if err != nil {
 			result.FilesFailed++
-			result.Errors = append(result.Errors, fmt.Errorf("%s: stat: %w", file.Path, err))
+			result.Errors = append(result.Errors, fmt.Errorf("%s: stat: %w", path, err))
 			continue
 		}
 
@@ -182,10 +182,10 @@ func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportR
 		}
 
 		importedAt := timeNow()
-		pr, perr := adapter.ProcessFile(newTransaction, file, offset, fi.Size(), importedAt)
+		pr, perr := adapter.ProcessFile(newTransaction, path, offset, fi.Size(), importedAt)
 		if perr != nil {
 			result.FilesFailed++
-			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", file.Path, perr))
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", path, perr))
 			continue
 		}
 		result.UnparsedLines += pr.UnparsedLines

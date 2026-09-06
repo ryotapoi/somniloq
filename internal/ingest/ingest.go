@@ -8,12 +8,6 @@ const (
 	SourceCodex      Source = "codex"
 )
 
-// File is a JSONL file discovered by a source-specific adapter.
-type File struct {
-	Path      string
-	SessionID string
-}
-
 // ImportState records the incremental import cursor for one JSONL file.
 type ImportState struct {
 	JSONLPath  string
@@ -85,6 +79,6 @@ type Adapter interface {
 	// non-fatal: unreadable directories are skipped and reported in errs
 	// alongside the files that could be discovered. A missing rootDir means
 	// the source is unused and yields no files and no errors.
-	ScanFiles(rootDir string) (files []File, errs []error)
-	ProcessFile(newTransaction NewImportTransaction, file File, offset, fileSize int64, importedAt string) (ProcessResult, error)
+	ScanFiles(rootDir string) (files []string, errs []error)
+	ProcessFile(newTransaction NewImportTransaction, path string, offset, fileSize int64, importedAt string) (ProcessResult, error)
 }

@@ -11,9 +11,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
 )
 
-type JSONLFile = ingest.File
-
-func scanJSONLFiles(projectsDir string) ([]JSONLFile, []error) {
+func scanJSONLFiles(projectsDir string) ([]string, []error) {
 	return claudecode.NewAdapter(ResolveRepoPath).ScanFiles(projectsDir)
 }
 
@@ -27,9 +25,9 @@ func newImportTransaction(db *DB) ingest.NewImportTransaction {
 	}
 }
 
-func processFile(db *DB, file JSONLFile, offset, fileSize int64, importedAt string) (int64, error) {
-	pr, err := claudecode.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db), file, offset, fileSize, importedAt)
-	return pr.NewOffset, err
+func processFile(db *DB, path string, offset, fileSize int64, importedAt string) error {
+	_, err := claudecode.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db), path, offset, fileSize, importedAt)
+	return err
 }
 
 func TestScanJSONLFiles(t *testing.T) {
@@ -62,12 +60,12 @@ func TestScanJSONLFiles(t *testing.T) {
 	}
 
 	found := map[string]bool{}
-	for _, f := range files {
-		found[f.SessionID] = true
+	for _, path := range files {
+		found[filepath.Base(path)] = true
 	}
-	for _, sid := range []string{"sess1", "sess2", "sess3"} {
-		if !found[sid] {
-			t.Errorf("missing session %s", sid)
+	for _, name := range []string{"sess1.jsonl", "sess2.jsonl", "sess3.jsonl"} {
+		if !found[name] {
+			t.Errorf("missing file %s", name)
 		}
 	}
 }
@@ -95,15 +93,10 @@ func TestProcessFile(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "s1"}
-	newOffset, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
+	err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
-	if newOffset != int64(len(jsonl)) {
-		t.Errorf("offset: got %d, want %d", newOffset, len(jsonl))
-	}
-
 	var title string
 	err = db.db.QueryRow("SELECT custom_title FROM sessions WHERE session_id='s1'").Scan(&title)
 	if err != nil {
@@ -131,8 +124,7 @@ func TestProcessFile_ResolvesRepoPath(t *testing.T) {
 	path := filepath.Join(dir, "s.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "s"}
-	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
 
@@ -340,13 +332,16 @@ func TestProcessFile_EmptyFile(t *testing.T) {
 	path := filepath.Join(dir, "empty.jsonl")
 	os.WriteFile(path, []byte(""), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "empty"}
-	newOffset, err := processFile(db, file, 0, 0, "2026-03-28T15:00:00Z")
+	err := processFile(db, path, 0, 0, "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
-	if newOffset != 0 {
-		t.Errorf("offset should be 0 for empty file, got %d", newOffset)
+	state, err := db.GetImportState(path)
+	if err != nil {
+		t.Fatalf("GetImportState failed: %v", err)
+	}
+	if state != nil {
+		t.Fatalf("empty file must not create import_state, got %+v", state)
 	}
 }
 
@@ -358,19 +353,21 @@ func TestProcessFile_NoTrailingNewline(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "s1"}
-	newOffset, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
+	err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
-	if newOffset != int64(len(jsonl)) {
-		t.Errorf("offset: got %d, want %d", newOffset, len(jsonl))
-	}
-
 	var count int
 	db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count)
 	if count != 1 {
 		t.Errorf("expected 1 message, got %d", count)
+	}
+	state, err := db.GetImportState(path)
+	if err != nil {
+		t.Fatalf("GetImportState failed: %v", err)
+	}
+	if state == nil || state.LastOffset != int64(len(jsonl)) {
+		t.Fatalf("import_state must include the unterminated final line, got %+v", state)
 	}
 }
 
@@ -385,8 +382,7 @@ func TestProcessFile_SkipsEmptyContent(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "s1"}
-	_, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
+	err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
@@ -416,8 +412,7 @@ func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "s1"}
-	_, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
+	err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
@@ -691,8 +686,8 @@ func TestScanJSONLFiles_UnreadableProjectDirIsNonFatal(t *testing.T) {
 	if len(files) != 1 {
 		t.Fatalf("got %d files, want 1: %+v", len(files), files)
 	}
-	if files[0].SessionID != "sess1" {
-		t.Errorf("SessionID: got %q, want sess1", files[0].SessionID)
+	if filepath.Base(files[0]) != "sess1.jsonl" {
+		t.Errorf("path: got %q, want sess1.jsonl", files[0])
 	}
 }
 
@@ -742,8 +737,7 @@ func TestProcessFile_MetaOnly_NoSessionRow(t *testing.T) {
 	path := filepath.Join(dir, "meta1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "meta1"}
-	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
 
@@ -765,8 +759,7 @@ func TestProcessFile_AgentNameOnly_NoSessionRow(t *testing.T) {
 	path := filepath.Join(dir, "meta1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "meta1"}
-	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
 
@@ -790,8 +783,7 @@ func TestProcessFile_MetaBeforeBody(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "s1"}
-	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
 
@@ -814,8 +806,7 @@ func TestProcessFile_AgentNameBeforeBody(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	file := JSONLFile{Path: path, SessionID: "s1"}
-	if _, err := processFile(db, file, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
 
