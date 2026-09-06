@@ -2,6 +2,12 @@
 
 English | [日本語](CHANGELOG.ja.md)
 
+## v0.9.1 — 2026-09-06
+
+### Fixed
+
+- CLI commands now propagate stdout write failures and exit with an error instead of silently succeeding. This applies to `import`, `backfill`, `outline`, `projects`, `search`, `sessions`, and `show`.
+
 ## v0.9.0 — 2026-07-24
 
 ### Fixed

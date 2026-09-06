@@ -2,6 +2,12 @@
 
 [English](CHANGELOG.md) | 日本語
 
+## v0.9.1 — 2026-09-06
+
+### 修正
+
+- CLI コマンドで標準出力への書き込み失敗を検出し、成功扱いせずエラー終了するようにした。対象は `import`、`backfill`、`outline`、`projects`、`search`、`sessions`、`show`。
+
 ## v0.9.0 — 2026-07-24
 
 ### 修正
