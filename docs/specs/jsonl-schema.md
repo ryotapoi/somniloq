@@ -101,3 +101,58 @@ id, timestamp, cwd, originator, cli_version, source, model_provider, git
 
 - Codex の message レコードには Claude Code の `uuid` 相当が無いため、`messages.uuid` は `(rollout_path, line_number)` から決定的に生成する
 - 差分取り込み時も、追記分を読む前にファイル先頭から offset 直前までの `session_meta` を読み直す。通常 `session_meta` はファイル先頭にあり、追記分だけを読むと session メタデータを失うため
+
+## Cursor Agent（次の実装の入力契約）
+
+この節は Cursor Agent を CLI や DB へ接続済みとするものではない。現在の CLI の `--source` 値は
+「source 値」に記載した `all|claude-code|codex` のままである。ここでは、次の Cursor Agent
+adapter 実装が従う入力契約を定める。
+
+### 観測事実と限界
+
+Cursor Agent `2026.09.10-fd3934a` のローカルログ 607 files / 9259 records を観測した。全件で
+次の path 構造、session directory と basename の一致、`role=user|assistant`、
+`message.content` の text / tool_use、および top-level `type=turn_ended` を確認した。既存 prefix を
+保った末尾追記も controlled follow-up で確認した。
+
+一方、独立した timestamp、cwd、repository、version、title、usage、parent は観測されなかった。
+project slug は全件を信頼して可逆復元できない。local format は公式契約ではなく version 依存であり、
+形式変化が観測されたときに再調査する。以下の fixture は観測ログのコピーではなく、無害な架空値だけで
+作った合成・匿名化済みの仕様検証例である。
+
+### 受理するファイルと session
+
+Cursor projects root からの相対 path が次と一致する JSONL だけを受理する。
+
+```
+<project-slug>/agent-transcripts/<session-id>/<session-id>.jsonl
+```
+
+- `<project-slug>` は session ID や repository metadata の代用にしない。
+- `<session-id>` は空であってはならず、session directory 名と basename（拡張子を除く）が一致しなければならない。UUID version の制限は設けない。
+- 任意の場所の `.jsonl`、空の session directory、directory と basename が不一致の path は受理しない。
+- `private-tmp` も特別除外しない。観測した事実ではなく、除外根拠がないため上の一般規則を適用する設計判断である。
+- session identity は Cursor source と path 内の `<session-id>` の組である。
+
+### レコードの取り込み
+
+各 JSONL の物理行を順に扱う。JSON object の既知 role `user` / `assistant` では、
+`message.content` 配列のうち `type` が `text` で `text` が文字列の block だけを配列順に取り出し、
+複数なら空行（`\n\n`）で結合する。同じ行の複数 text は 1 message とし、同じ本文でも別の物理行なら別 message とする。
+
+- `tool_use` など non-text block、`turn_ended`、未知の正常 record、空行は意図的無視であり、会話本文にしない。
+- 空または text のない既知 role の正常 content は session 登録を許すが、既存 `PersistMessage` 契約に従い message を作らない。
+- 壊れた JSON、既知 role の壊れた `message` / `content` envelope、または text が文字列でない block は unparsed とする。その行の部分的本文は保存しない。
+- `<timestamp>`、`<user_query>`、`<cwd>` を含む text は通常本文として保存する。tag を除去せず、metadata にも抽出しない。これらの頻度や追加構造を観測したとは主張しない。
+
+### metadata、順序、再処理
+
+ログにない timestamp、cwd、repository、version、title、usage、parent は埋めない。既存の正規化 string
+fields は空値、parent は nil とし、repository を保存するときの NULL 化は既存の永続化規則に従う。
+mtime、import 時刻、slug、本文内 tag から事実として補完してはならない。
+
+message identity は同一 source、path、物理行から決定的に導く。空行、無視行、unparsed 行も物理行番号に含める。
+同じ入力の再処理は session / message の重複を作らず、件数と会話順序を変えない。timestamp を合成して順序を作らない。
+hash algorithm と DB query の実装細部はこの契約では固定しない。
+
+`internal/ingest/testdata/cursor-agent/README.md` はこの契約に対応する合成 fixture の行ごとの期待結果を示す。

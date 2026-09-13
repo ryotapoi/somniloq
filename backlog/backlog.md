@@ -27,7 +27,7 @@
 
 ### Cursor Agent ログ契約を fixture と仕様へ固定する
 
-- [ ] 機密本文を除いた代表 fixture と `docs/specs/jsonl-schema.md` に観測事実を記録し、理由が将来制約になる場合は ADR を追加する。
+- [x] 機密本文を除いた代表 fixture と `docs/specs/jsonl-schema.md` に観測事実を記録し、理由が将来制約になる場合は ADR を追加する。
   - 受理対象 path と session 識別を固定する。user/assistant の text は順序を保って扱い、tool_use、turn_ended、未知の正常 record は会話本文にしない。壊れた JSON と既知 role の不正 content は既存の unparsed 契約で扱う。
   - 同じ入力を再処理しても session/message は重複せず、順序は安定する。ログにない metadata を事実として捏造しない。fixture と記録に機密本文を残さない。
   - `<timestamp>` / `<user_query>` / `<cwd>` の内部 tag を metadata 化または除去するか、private-tmp を含めるか、未知 metadata を内部でどう表すかは backlog で固定しない。実装時に調査事実と既存契約から Minimal Change を決める。これは追加のログ形式調査ではなく設計判断である。

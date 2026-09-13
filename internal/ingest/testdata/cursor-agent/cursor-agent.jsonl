@@ -1,0 +1,11 @@
+{"role":"user","message":{"content":[{"type":"text","text":"Plan a harmless sample."}]}}
+{"role":"assistant","message":{"content":[{"type":"text","text":"First answer paragraph."},{"type":"tool_use","name":"Read","input":{"path":"example.txt"}},{"type":"text","text":"Second answer paragraph."}]}}
+{"role":"user","message":{"content":[{"type":"tool_use","name":"Search","input":{"query":"sample"}}]}}
+{"type":"turn_ended"}
+{"role":"system","message":{"content":[]}}
+{"role":"assistant","message":{"content":[]}}
+{"role":"user","message":{"content":[{"type":"text","text":"Keep <timestamp>, <user_query>, and <cwd> as text."}]}}
+
+{"role":"assistant","message":{"content":[{"type":"text","text":"This prefix must not be saved."}]}
+{"role":"user","message":{"content":"not-an-array"}}
+{"role":"assistant","message":{"content":[{"type":"text","text":42}]}}
