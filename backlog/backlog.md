@@ -44,6 +44,11 @@
   - source を区別でき、同じ session ID の ambiguity は既存契約に従う。欠落 metadata を誤表示または誤 filter せず、既存 source を回帰させない。
   - `docs/rules/mission.md`、`docs/rules/scope.md`、README 英日、CLI help など、実際に影響する正本または派生文書だけを同期する。`docs/decisions/` と `llm-wiki/` は必要な場合に更新する。検証は `docs/rules/verification.md` に従う。
 
+### example skill を Cursor Agent 対応へ更新する
+
+- [ ] `examples/skills/somniloq/SKILL.md` の front matter description と概要文に Cursor Agent を追加する。
+  - Claude Code / Codex / Cursor Agent の履歴を対象と明記し、既存の `somniloq import` から sessions / search / outline / show へ進む導線が現行 CLI 挙動と矛盾しない。
+
 ### 既知の制約
 
 - local format は公式契約ではなく version 依存である。形式変化が観測された時に再調査する。
