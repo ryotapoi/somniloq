@@ -46,7 +46,7 @@
 
 ### example skill を Cursor Agent 対応へ更新する
 
-- [ ] `examples/skills/somniloq/SKILL.md` の front matter description と概要文に Cursor Agent を追加する。
+- [x] `examples/skills/somniloq/SKILL.md` の front matter description と概要文に Cursor Agent を追加する。
   - Claude Code / Codex / Cursor Agent の履歴を対象と明記し、既存の `somniloq import` から sessions / search / outline / show へ進む導線が現行 CLI 挙動と矛盾しない。
 
 ### 既知の制約
