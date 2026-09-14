@@ -4,8 +4,9 @@ package ingest
 type Source string
 
 const (
-	SourceClaudeCode Source = "claude_code"
-	SourceCodex      Source = "codex"
+	SourceClaudeCode  Source = "claude_code"
+	SourceCodex       Source = "codex"
+	SourceCursorAgent Source = "cursor_agent"
 )
 
 // ImportState records the incremental import cursor for one JSONL file.

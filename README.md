@@ -1,13 +1,13 @@
 # somniloq
 
-A CLI tool that imports Claude Code and Codex session logs (JSONL) into SQLite for searching and browsing.
-It parses JSONL files under `~/.claude/projects/` and `~/.codex/sessions/`, enabling cross-session search of past conversations.
+A CLI tool that imports Claude Code, Codex, and Cursor Agent session logs (JSONL) into SQLite for searching and browsing.
+It parses JSONL files under `~/.claude/projects/`, `~/.codex/sessions/`, and `~/.cursor/projects/`, enabling cross-session search of past conversations.
 
 [日本語版 README](README.ja.md)
 
 ## Features
 
-- **Differential import** — Auto-detects Claude Code and Codex JSONL files and imports only what's new
+- **Differential import** — Auto-detects Claude Code, Codex, and Cursor Agent JSONL files and imports only what's new
 - **Cross-session search** — Search message bodies and filter by project name and time range
 - **Long-session navigation** — Check session size, skim an outline, then read only the turns you need
 - **Markdown and JSON output** — Export readable Markdown or script-friendly JSON
@@ -23,7 +23,7 @@ go install github.com/ryotapoi/somniloq/cmd/somniloq@latest
 ## Quick Start
 
 ```bash
-# Import Claude Code and Codex session logs
+# Import Claude Code, Codex, and Cursor Agent session logs
 somniloq import
 
 # List sessions
@@ -50,7 +50,7 @@ somniloq show --since 7d
 
 | Command | Description |
 |---------|-------------|
-| `import` | Import Claude Code and Codex JSONL files into SQLite |
+| `import` | Import Claude Code, Codex, and Cursor Agent JSONL files into SQLite |
 | `backfill` | Migrate/repair existing DB rows |
 | `sessions` | List sessions |
 | `projects` | List projects with session counts |
@@ -64,11 +64,12 @@ somniloq show --since 7d
 somniloq import              # differential import (default)
 somniloq import --source claude-code
 somniloq import --source codex
+somniloq import --source cursor-agent
 somniloq import --full       # full re-import (with confirmation)
 somniloq import --full --yes # skip confirmation
 ```
 
-Imports Claude Code JSONL from `~/.claude/projects/` and Codex rollout JSONL from `~/.codex/sessions/`. Use `--source all|claude-code|codex` to limit the import target. The default is `all`.
+Imports Claude Code JSONL from `~/.claude/projects/`, Codex rollout JSONL from `~/.codex/sessions/`, and Cursor Agent transcripts from `~/.cursor/projects/`. Use `--source all|claude-code|codex|cursor-agent` to limit the import target. The default is `all`.
 
 `--full` always clears the whole somniloq DB before re-importing. If you run `somniloq import --source codex --full`, Claude Code rows are deleted too, then only Codex logs are imported.
 

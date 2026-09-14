@@ -1,11 +1,11 @@
 # somniloq
 
-Claude Code / Codex のセッションログ（JSONL）を SQLite に取り込み、検索・閲覧する CLI ツール。
-`~/.claude/projects/` と `~/.codex/sessions/` 配下の JSONL を解析し、セッション横断で過去の会話を探せるようにする。
+Claude Code / Codex / Cursor Agent のセッションログ（JSONL）を SQLite に取り込み、検索・閲覧する CLI ツール。
+`~/.claude/projects/`、`~/.codex/sessions/`、`~/.cursor/projects/` 配下の JSONL を解析し、セッション横断で過去の会話を探せるようにする。
 
 ## 特徴
 
-- **差分取り込み** — Claude Code / Codex の JSONL を自動検出し、前回からの差分だけを高速に取り込み
+- **差分取り込み** — Claude Code / Codex / Cursor Agent の JSONL を自動検出し、前回からの差分だけを高速に取り込み
 - **セッション横断検索** — メッセージ本文を検索し、プロジェクト名・期間で絞り込める
 - **長いセッションの部分読み** — サイズを見て、outline で構造を掴み、必要なターンだけ読む
 - **Markdown / JSON 出力** — 人が読む Markdown とスクリプト向け JSON を選べる
@@ -21,7 +21,7 @@ go install github.com/ryotapoi/somniloq/cmd/somniloq@latest
 ## クイックスタート
 
 ```bash
-# Claude Code / Codex のセッションログを取り込む
+# Claude Code / Codex / Cursor Agent のセッションログを取り込む
 somniloq import
 
 # セッション一覧を表示
@@ -48,7 +48,7 @@ somniloq show --since 7d
 
 | コマンド | 説明 |
 |---------|------|
-| `import` | Claude Code / Codex の JSONL ファイルを SQLite に取り込む |
+| `import` | Claude Code / Codex / Cursor Agent の JSONL ファイルを SQLite に取り込む |
 | `backfill` | 既存 DB の migration / 補正 |
 | `sessions` | セッション一覧を表示 |
 | `projects` | プロジェクト一覧を表示（セッション数付き） |
@@ -62,11 +62,12 @@ somniloq show --since 7d
 somniloq import              # 差分取り込み
 somniloq import --source claude-code
 somniloq import --source codex
+somniloq import --source cursor-agent
 somniloq import --full       # 全件再取り込み（確認プロンプトあり）
 somniloq import --full --yes # 確認なしで全件再取り込み
 ```
 
-Claude Code の JSONL を `~/.claude/projects/` から、Codex の rollout JSONL を `~/.codex/sessions/` から取り込む。対象を絞る場合は `--source all|claude-code|codex` を使う。デフォルトは `all`。
+Claude Code の JSONL を `~/.claude/projects/` から、Codex の rollout JSONL を `~/.codex/sessions/` から、Cursor Agent の transcript JSONL を `~/.cursor/projects/` から取り込む。対象を絞る場合は `--source all|claude-code|codex|cursor-agent` を使う。デフォルトは `all`。
 
 `--full` は再取り込み前に somniloq DB 全体を削除する。`somniloq import --source codex --full` を実行した場合も Claude Code の行は削除され、その後 Codex のログだけを取り込む。
 

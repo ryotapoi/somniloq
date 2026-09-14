@@ -21,23 +21,23 @@ const importHelpDetails = `Output:
 
 Notes:
   Default import is differential. Use --full to delete the whole somniloq DB and re-import from the selected source(s).
-  With --source codex --full, existing Claude Code rows are deleted too, then only Codex rows are imported.
+  With --source cursor-agent --full, existing rows are deleted too, then only Cursor Agent rows are imported.
   Non-fatal scan/file errors are printed to stderr; import continues and exits 1 if any occurred.
 
 Examples:
   somniloq import
-  somniloq import --source codex
+  somniloq import --source cursor-agent
   somniloq import --full --yes`
 
 // importCmd runs the import subcommand without calling os.Exit, so it can be
 // tested directly. openDB is invoked only after argument parsing and
 // confirmation succeed.
-func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, codexSessionsDir string, in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
+func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, codexSessionsDir, cursorProjectsDir string, in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
 	full := fs.Bool("full", false, "full re-import (delete all and re-import)")
 	yes := fs.Bool("yes", false, "skip confirmation prompt")
 	sourceValue := fs.String("source", string(core.ImportSourceAll), "source to import: "+importSourceCommaList())
-	setUsage(fs, "Import Claude Code and Codex session logs from JSONL files", "somniloq import [--source "+importSourcePipeList()+"] [flags]", importHelpDetails)
+	setUsage(fs, "Import Claude Code, Codex, and Cursor Agent session logs from JSONL files", "somniloq import [--source "+importSourcePipeList()+"] [flags]", importHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
@@ -63,10 +63,11 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 	defer db.Close()
 
 	result, err := core.Import(db, core.ImportOptions{
-		Full:             *full,
-		ProjectsDir:      projectsDir,
-		CodexSessionsDir: codexSessionsDir,
-		Source:           source,
+		Full:              *full,
+		ProjectsDir:       projectsDir,
+		CodexSessionsDir:  codexSessionsDir,
+		CursorProjectsDir: cursorProjectsDir,
+		Source:            source,
 	})
 	if err != nil {
 		return 1, err

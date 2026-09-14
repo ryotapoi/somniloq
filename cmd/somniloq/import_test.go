@@ -31,7 +31,7 @@ func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), dir, filepath.Join(dir, "codex"), strings.NewReader(""), &out, &errOut, false)
+	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), dir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &out, &errOut, false)
 	if err != nil {
 		t.Fatalf("importCmd: %v", err)
 	}
@@ -45,6 +45,33 @@ func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	wantErr := "  error: " + filepath.Join(projDir, "s1.jsonl") + ":2: invalid character 'b' looking for beginning of object key string\n"
 	if errOut.String() != wantErr {
 		t.Errorf("stderr = %q, want %q", errOut.String(), wantErr)
+	}
+}
+
+func TestImportCmd_CursorAgentRootWiring(t *testing.T) {
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer db.Close()
+
+	dir := t.TempDir()
+	cursorRoot := filepath.Join(dir, "cursor")
+	path := filepath.Join(cursorRoot, "project", "agent-transcripts", "session", "session.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"hello"}]}}`+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	var out, errOut bytes.Buffer
+	code, err := importCmd([]string{"--source", "cursor-agent"}, staticDB(db), filepath.Join(dir, "claude"), filepath.Join(dir, "codex"), cursorRoot, strings.NewReader(""), &out, &errOut, false)
+	if err != nil || code != 0 {
+		t.Fatalf("importCmd = %d, %v (stderr: %q)", code, err, errOut.String())
+	}
+	if got, want := out.String(), "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)\n"; got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
 	}
 }
 
@@ -80,7 +107,7 @@ func TestImportCmd_ScanErrorExitsNonZero(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(badDir, 0o755) })
 
 	var out, errOut bytes.Buffer
-	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), dir, filepath.Join(dir, "codex"), strings.NewReader(""), &out, &errOut, false)
+	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), dir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &out, &errOut, false)
 	if err != nil {
 		t.Fatalf("importCmd: %v", err)
 	}

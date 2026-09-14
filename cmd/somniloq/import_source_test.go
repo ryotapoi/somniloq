@@ -17,6 +17,7 @@ func TestParseImportSource(t *testing.T) {
 		{"all", core.ImportSourceAll},
 		{"claude-code", core.ImportSourceClaudeCode},
 		{"codex", core.ImportSourceCodex},
+		{"cursor-agent", core.ImportSourceCursorAgent},
 	} {
 		got, err := parseImportSource(c.value)
 		if err != nil {
@@ -33,7 +34,7 @@ func TestParseImportSourceRejectsUnknownValue(t *testing.T) {
 	if err == nil {
 		t.Fatal("parseImportSource should reject unknown values")
 	}
-	want := `invalid --source "claude" (want all, claude-code, or codex)`
+	want := `invalid --source "claude" (want all, claude-code, codex, or cursor-agent)`
 	if err.Error() != want {
 		t.Fatalf("error: got %q, want %q", err.Error(), want)
 	}
@@ -45,7 +46,7 @@ func TestImportHelpUsesCoreSourceChoices(t *testing.T) {
 	}
 
 	var errOut bytes.Buffer
-	code, err := importCmd([]string{"--help"}, openDB, "/claude", "/codex", strings.NewReader(""), &bytes.Buffer{}, &errOut, false)
+	code, err := importCmd([]string{"--help"}, openDB, "/claude", "/codex", "/cursor", strings.NewReader(""), &bytes.Buffer{}, &errOut, false)
 	if err != nil {
 		t.Fatalf("importCmd --help failed: %v", err)
 	}

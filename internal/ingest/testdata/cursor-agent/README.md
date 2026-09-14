@@ -26,4 +26,4 @@
 
 message identity は source、fixture path、物理行で決定的に導く。したがって、この入力を再処理しても lines 1、2、7 の message は重複せず、順序は 1、2、7 のまま安定する。空行・無視行・unparsed 行も line identity の番号をずらさない。
 
-この fixture は次の adapter 実装の契約を確認するためのものだが、fixture 専用 parser や Cursor production package をここで追加しない。現行 CLI は Cursor Agent をまだ import しない。
+この fixture は Cursor Agent adapter の契約を確認する。fixture 専用 parser は追加せず、`somniloq import --source cursor-agent` と default/all が同じ adapter を使う。

@@ -8,6 +8,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest"
 	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
+	"github.com/ryotapoi/somniloq/internal/ingest/cursoragent"
 )
 
 type ImportResult struct {
@@ -26,18 +27,20 @@ type ImportResult struct {
 }
 
 type ImportOptions struct {
-	Full             bool
-	ProjectsDir      string
-	CodexSessionsDir string
-	Source           ImportSource
+	Full              bool
+	ProjectsDir       string
+	CodexSessionsDir  string
+	CursorProjectsDir string
+	Source            ImportSource
 }
 
 type ImportSource string
 
 const (
-	ImportSourceAll        ImportSource = "all"
-	ImportSourceClaudeCode ImportSource = "claude-code"
-	ImportSourceCodex      ImportSource = "codex"
+	ImportSourceAll         ImportSource = "all"
+	ImportSourceClaudeCode  ImportSource = "claude-code"
+	ImportSourceCodex       ImportSource = "codex"
+	ImportSourceCursorAgent ImportSource = "cursor-agent"
 )
 
 // importSourceSpec ties a concrete ImportSource to its adapter constructor
@@ -62,6 +65,11 @@ var importSourceSpecs = []importSourceSpec{
 		source:     ImportSourceCodex,
 		newAdapter: func() ingest.Adapter { return codex.NewAdapter(ResolveRepoPath) },
 		rootDir:    func(opts ImportOptions) string { return opts.CodexSessionsDir },
+	},
+	{
+		source:     ImportSourceCursorAgent,
+		newAdapter: func() ingest.Adapter { return cursoragent.NewAdapter() },
+		rootDir:    func(opts ImportOptions) string { return opts.CursorProjectsDir },
 	},
 }
 

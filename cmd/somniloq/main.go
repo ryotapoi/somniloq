@@ -11,13 +11,13 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const topLevelUsage = `Session log viewer for Claude Code and Codex
+const topLevelUsage = `Session log viewer for Claude Code, Codex, and Cursor Agent
 
 Usage:
   somniloq [flags] <command>
 
 Commands:
-  import    Import Claude Code and Codex session logs from JSONL files
+  import    Import Claude Code, Codex, and Cursor Agent session logs from JSONL files
   backfill  Correct legacy session data
   sessions  List sessions
   show      Show session content in Markdown
@@ -39,6 +39,7 @@ func main() {
 	defaultConfig := filepath.Join(homeDir, ".somniloq", "config.json")
 	defaultProjectsDir := filepath.Join(homeDir, ".claude", "projects")
 	defaultCodexSessionsDir := filepath.Join(homeDir, ".codex", "sessions")
+	defaultCursorProjectsDir := filepath.Join(homeDir, ".cursor", "projects")
 
 	dbPath := flag.String("db", defaultDB, "path to SQLite database")
 	configPath := flag.String("config", defaultConfig, "path to config file (JSON)")
@@ -78,7 +79,7 @@ func main() {
 	var cmdErr error
 	switch args[0] {
 	case "import":
-		code, cmdErr = importCmd(args[1:], open, defaultProjectsDir, defaultCodexSessionsDir, os.Stdin, os.Stdout, os.Stderr, isTTY)
+		code, cmdErr = importCmd(args[1:], open, defaultProjectsDir, defaultCodexSessionsDir, defaultCursorProjectsDir, os.Stdin, os.Stdout, os.Stderr, isTTY)
 	case "backfill":
 		code, cmdErr = backfillCmd(args[1:], open, os.Stdin, os.Stdout, os.Stderr, isTTY)
 	case "sessions":

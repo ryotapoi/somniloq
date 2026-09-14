@@ -551,6 +551,7 @@ func TestImport_AllSources(t *testing.T) {
 	db := testDB(t)
 	claudeRoot := t.TempDir()
 	codexRoot := t.TempDir()
+	cursorRoot := t.TempDir()
 
 	claudeProjectDir := filepath.Join(claudeRoot, "-test-claude")
 	if err := os.MkdirAll(claudeProjectDir, 0o755); err != nil {
@@ -572,16 +573,26 @@ func TestImport_AllSources(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(codexDir, "rollout-codex-s1.jsonl"), []byte(codexJSONL), 0o644); err != nil {
 		t.Fatalf("WriteFile Codex JSONL failed: %v", err)
 	}
+	cursorDir := filepath.Join(cursorRoot, "project", "agent-transcripts", "cursor-s1")
+	if err := os.MkdirAll(cursorDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll Cursor dir failed: %v", err)
+	}
+	cursorJSONL := `{"role":"user","message":{"content":[{"type":"text","text":"hello cursor"}]}}
+`
+	if err := os.WriteFile(filepath.Join(cursorDir, "cursor-s1.jsonl"), []byte(cursorJSONL), 0o644); err != nil {
+		t.Fatalf("WriteFile Cursor JSONL failed: %v", err)
+	}
 
 	result, err := Import(db, ImportOptions{
-		ProjectsDir:      claudeRoot,
-		CodexSessionsDir: codexRoot,
-		Source:           ImportSourceAll,
+		ProjectsDir:       claudeRoot,
+		CodexSessionsDir:  codexRoot,
+		CursorProjectsDir: cursorRoot,
+		Source:            ImportSourceAll,
 	})
 	if err != nil {
 		t.Fatalf("Import failed: %v", err)
 	}
-	if result.FilesImported != 2 || result.FilesScanned != 2 || len(result.Errors) != 0 {
+	if result.FilesImported != 3 || result.FilesScanned != 3 || len(result.Errors) != 0 {
 		t.Fatalf("Import result: %+v", result)
 	}
 
@@ -591,6 +602,7 @@ func TestImport_AllSources(t *testing.T) {
 	}{
 		{SourceClaudeCode, "claude-s1"},
 		{SourceCodex, "codex-s1"},
+		{SourceCursorAgent, "cursor-s1"},
 	} {
 		var count int
 		if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE source=? AND session_id=?", c.source, c.sessionID).Scan(&count); err != nil {

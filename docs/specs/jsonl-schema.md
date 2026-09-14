@@ -1,10 +1,10 @@
 # JSONL データソース仕様
 
-Claude Code / Codex のセッション履歴ファイルの構造。
+Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造。
 
 ## source 値
 
-CLI の `--source` はユーザー向け表記として `all|claude-code|codex` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex` を保存する。
+CLI の `--source` はユーザー向け表記として `all|claude-code|codex|cursor-agent` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex|cursor_agent` を保存する。
 
 ## Claude Code
 
@@ -102,11 +102,10 @@ id, timestamp, cwd, originator, cli_version, source, model_provider, git
 - Codex の message レコードには Claude Code の `uuid` 相当が無いため、`messages.uuid` は `(rollout_path, line_number)` から決定的に生成する
 - 差分取り込み時も、追記分を読む前にファイル先頭から offset 直前までの `session_meta` を読み直す。通常 `session_meta` はファイル先頭にあり、追記分だけを読むと session メタデータを失うため
 
-## Cursor Agent（次の実装の入力契約）
+## Cursor Agent
 
-この節は Cursor Agent を CLI や DB へ接続済みとするものではない。現在の CLI の `--source` 値は
-「source 値」に記載した `all|claude-code|codex` のままである。ここでは、次の Cursor Agent
-adapter 実装が従う入力契約を定める。
+Cursor Agent は CLI の `--source cursor-agent` で取り込む。source 未指定または `--source all` では
+Claude Code と Codex とともに取り込む。ここでは Cursor Agent adapter が従う入力契約を定める。
 
 ### 観測事実と限界
 

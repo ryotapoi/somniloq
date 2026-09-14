@@ -34,7 +34,7 @@
 
 ### Cursor Agent を既存 import に統合する
 
-- [ ] ユーザー向け `--source cursor-agent` と default all で Cursor Agent を取り込めるようにする。
+- [x] ユーザー向け `--source cursor-agent` と default all で Cursor Agent を取り込めるようにする。
   - source 単独と all で保存でき、root 不存在は既存の未使用 source として扱う。malformed を含んでも既存の import error / unparsed 契約に従う。
   - 追記後の再 import は新規会話だけを追加し、既存データを重複させない。縮小と `--full` は既存契約を維持し、Claude Code / Codex import を回帰させない。
 

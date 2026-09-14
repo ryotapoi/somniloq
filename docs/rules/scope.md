@@ -6,9 +6,9 @@
 
 ### 取り込み（import）
 
-source（DB 内部値は `claude_code` / `codex`）ごとに専用の adapter で取り込む。共通の正規化スキーマ（`sessions` / `messages`）に保存する点は両者で一致するが、ファイル配置・レコード形式・差分検出キーは source ごとに異なる。
+source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専用の adapter で取り込む。共通の正規化スキーマ（`sessions` / `messages`）に保存する点は共通だが、ファイル配置・レコード形式・差分検出キーは source ごとに異なる。
 
-`somniloq import` はデフォルトで Claude Code と Codex の両方を同じ SQLite DB に取り込む。対象を絞る場合は CLI 表記の `--source all|claude-code|codex` を使う。
+`somniloq import` はデフォルトで Claude Code、Codex、Cursor Agent を同じ SQLite DB に取り込む。対象を絞る場合は CLI 表記の `--source all|claude-code|codex|cursor-agent` を使う。
 
 #### エラー処理と取り込みサマリ（source 共通）
 
@@ -46,6 +46,14 @@ source（DB 内部値は `claude_code` / `codex`）ごとに専用の adapter �
 - `git_branch` は `session_meta.payload.git.branch`、`version` は `session_meta.payload.cli_version` から保存する
 - `messages.uuid` の一意性は `(rollout_path, line_number)` ベースで判定（Codex のレコードは Claude Code のような UUID を持たないため）
 - 差分取り込みで追記分だけを読む場合も、offset 直前までの `session_meta` を先に読み直して session メタデータを復元する
+- 差分取り込み・`--full` 等のオプション体系は `import` と揃える
+
+#### Cursor Agent 用（`somniloq import --source cursor-agent`）
+
+- `~/.cursor/projects/` 配下の `<project-slug>/agent-transcripts/<session-id>/<session-id>.jsonl` だけを取り込む
+- `user` / `assistant` の `message.content` から `text` block だけを配列順に空行で連結し、tool、turn、未知正常 record、空行は保存しない
+- ログにない timestamp、cwd、repository、version、title、usage、parent は補完しない
+- `messages.uuid` の一意性は source、path、物理行に基づく。差分取り込み時も空行・無視行・unparsed 行を含む物理行番号を維持する
 - 差分取り込み・`--full` 等のオプション体系は `import` と揃える
 
 ### バックフィル（backfill）
@@ -181,9 +189,10 @@ source（DB 内部値は `claude_code` / `codex`）ごとに専用の adapter �
 ## CLI インターフェース
 
 ```bash
-somniloq import                          # Claude Code / Codex の JSONL を差分取り込み
+somniloq import                          # Claude Code / Codex / Cursor Agent の JSONL を差分取り込み
 somniloq import --source claude-code     # Claude Code の JSONL だけを差分取り込み
 somniloq import --source codex           # Codex の rollout JSONL だけを差分取り込み
+somniloq import --source cursor-agent    # Cursor Agent の transcript JSONL だけを差分取り込み
 somniloq import --full                   # 全件再取り込み（確認あり）
 somniloq import --full --yes             # 確認なしで全件再取り込み
 somniloq backfill                        # 既存セッションの補正（DELETE 対象があれば確認）
@@ -258,8 +267,8 @@ CREATE TABLE messages (
     FOREIGN KEY (source, session_id) REFERENCES sessions(source, session_id)
 );
 
--- 取り込み状態の追跡。主キーは jsonl_path 単独。Claude Code と Codex は
--- ベースディレクトリ（~/.claude/projects/ と ~/.codex/sessions/）が分離して
+-- 取り込み状態の追跡。主キーは jsonl_path 単独。Claude Code、Codex、Cursor Agent は
+-- ベースディレクトリ（~/.claude/projects/、~/.codex/sessions/、~/.cursor/projects/）が分離して
 -- いるため絶対パスだけで一意に特定でき、source は補助情報として保持する。
 CREATE TABLE import_state (
     jsonl_path TEXT PRIMARY KEY,  -- JSONL ファイルの絶対パス
