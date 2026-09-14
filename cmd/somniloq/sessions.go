@@ -19,6 +19,7 @@ const sessionsHelpDetails = `Columns (TSV, in order):
   body_size: UTF-8 byte size of non-sidechain message bodies; use this to choose outline/show ranges.
   non_command_user_turn_count: user turns from outline numbering after excluding slash commands and config commandPatterns.
   first_non_command_user_line: first line of the first non-command user turn.
+  source: internal source identifier: claude_code, codex, or cursor_agent.
 
 JSON fields:
   source, sessionId, project, title, startedAt, endedAt, logicalDay, messageCount, bodySize, nonCommandUserTurnCount, firstNonCommandUserLine
@@ -87,9 +88,9 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	for i, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
 		proj := resolveProjectDisplayName(r.RepoPath, *flags.short, cfg)
-		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n",
+		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\n",
 			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
-			derived[i].NonCommandUserTurnCount, sanitizeTSV(derived[i].FirstNonCommandUserLine)); err != nil {
+			derived[i].NonCommandUserTurnCount, sanitizeTSV(derived[i].FirstNonCommandUserLine), r.Source); err != nil {
 			return 1, err
 		}
 	}

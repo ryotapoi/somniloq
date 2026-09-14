@@ -40,7 +40,7 @@
 
 ### 横断参照と利用者向け文書を同期する
 
-- [ ] sessions / projects / search / show / outline で Cursor を他 source と同じ DB から扱えるようにする。
+- [x] sessions / projects / search / show / outline で Cursor を他 source と同じ DB から扱えるようにする。
   - source を区別でき、同じ session ID の ambiguity は既存契約に従う。欠落 metadata を誤表示または誤 filter せず、既存 source を回帰させない。
   - `docs/rules/mission.md`、`docs/rules/scope.md`、README 英日、CLI help など、実際に影響する正本または派生文書だけを同期する。`docs/decisions/` と `llm-wiki/` は必要な場合に更新する。検証は `docs/rules/verification.md` に従う。
 

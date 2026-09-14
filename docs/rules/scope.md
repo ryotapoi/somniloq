@@ -77,12 +77,13 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 
 - セッション一覧を表示
 - `--since`/`--until` で時刻フィルタ（相対: `24h`, `7d`、絶対: `2026-03-28`, `2026-03-28T15:00`）。絶対日付はローカルタイム。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と絶対日時は `dayBoundary` の影響を受けない。出力のタイムスタンプもローカルタイム（`2006-01-02 15:04` 形式）
-- 時刻は `started_at ~ ended_at` の範囲形式で表示。ended_at がない場合は `started_at ~`
-- `--project` は `repo_path` への substring マッチ（LIKE メタ文字の扱いは Known limitations 参照）。値が config の alias グループに完全一致する場合はグループ全名に展開する（「設定ファイル」節参照）
+- 時刻は `started_at ~ ended_at` の範囲形式で表示。ended_at がない場合は `started_at ~`。両方未知なら空欄
+- `--since` または `--until` を指定した時は、NULL / 空の started_at を一致させない。指定しない一覧では未知 timestamp も表示する
+- `--project` は空でない `repo_path` への substring マッチ（LIKE メタ文字の扱いは Known limitations 参照）。値が config の alias グループに完全一致する場合はグループ全名に展開する（「設定ファイル」節参照）。NULL / 空の repository は条件に一致させない
 - `repo_path` は絶対パスのため、`/` セグメントを跨いだ部分一致（例: `--project Sources/ryot`）も可能
 - 表示は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合、デフォルト表示は `repo_path` をそのまま
 - `--short` は alias 非一致時に `filepath.Base(repo_path)`（ハイフン保持）
-- 出力 TSV の列: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`
+- 出力 TSV の列: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`, `source`。source は `claude_code` / `codex` / `cursor_agent`
 - `logical_day` は `ended_at`（無ければ `started_at`）をローカルタイムに変換し、`dayBoundary` を引いた日付（`YYYY-MM-DD`）として出す。セッションを途中で分割せず、表示時に計算する
 - `body_size` は非 sidechain メッセージの本文合計サイズ（UTF-8 バイト数）。show が出力する量の予測値として使う（show 前に大きいセッションかを判定する用途）。文字数でなくバイト数なのは、コンテキスト量の感覚と一致させるため。`message_count` は従来どおり sidechain を含む全行数
 - `non_command_user_turn_count` は outline と同じ user turn 母集団（`GetMessages` の sidechain 除外済み全メッセージ列に `assignTurns` を適用し、user メッセージだけを拾う）から、コマンド扱いの user turn を除いた件数。コマンド扱いは、本文を trim した文字列が `/` で始まる場合、または config の `commandPatterns` のいずれかに正規表現一致する場合。CLI はこの値でセッションを除外せず、一覧を読む側がスキップ判断に使う
@@ -92,7 +93,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 ### プロジェクト一覧（projects）
 
 - プロジェクト一覧をセッション数とともに表示
-- `--since`/`--until` で時刻フィルタ（`started_at` 基準）。date-only は従来どおりローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
+- `--since`/`--until` で時刻フィルタ（`started_at` 基準）。NULL / 空の started_at は時刻条件に一致しない。date-only は従来どおりローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
 - SQL 側の集約キーは `repo_path` 一本。worktree とサブディレクトリ起動は SQL 側で本体リポジトリの行に集約される
 - 出力 1 列目は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` そのもの
 - alias により同じ canonical 名になる行は cmd 層で session count を合算する
@@ -103,9 +104,9 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 ### 内容表示（show）
 
 - セッション内容を Markdown で出力
-- `show <session-id>` は Claude Code / Codex を横断検索する。同じ `session_id` が複数 source に存在する場合は曖昧エラーとして候補を表示する
-- Started 行に `started_at ~ ended_at` の時刻範囲を表示。ended_at がない場合は `started_at ~`
-- `--since`/`--until` で期間指定して一括表示（`started_at` 基準）。date-only は `projects` と同じくローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
+- `show <session-id>` は全 source を横断検索する。同じ `session_id` が複数 source に存在する場合は曖昧エラーとして候補を表示する
+- Markdown metadata は Session、Source、Project、Started。Started 行は `started_at ~ ended_at` の時刻範囲で、ended_at がない場合は `started_at ~`、両方未知なら空欄
+- `--since`/`--until` で期間指定して一括表示（`started_at` 基準）。NULL / 空の started_at は時刻条件に一致しない。date-only は `projects` と同じくローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
 - `--summary N` で各セッションの user メッセージ先頭 N 件を表示（`/clear` と `<local-command-caveat>` はスキップ）。`0` または未指定で従来の全文表示
 - `--include-clear` で `/clear`・caveat のスキップを無効化（`--summary >= 1` が前提）
 - `--turn N` / `--turn N..M` で指定ターンだけ表示（両端含む）。1 ターンは user メッセージとそれに続く非 user メッセージ（assistant 応答等）。ターン番号は outline と同一の採番（GetMessages の全メッセージ列に対する採番）を共有する。範囲がセッションのターン数を超える場合は本文なしでセッションヘッダのみ出力し exit 0（エラーにしない）。`--turn ""`（空文字）は不正値としてエラー
@@ -136,12 +137,12 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - 実装は LIKE 全走査。FTS5 は日本語だと trigram 必須で索引が本文の 2〜3 倍に膨らみ、3 文字未満のクエリが索引で引けないため、LIKE で困るスケールになるまで見送り（本文 42 MB の DB で実測 0.1 秒前後）
 - マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして素通し（Known limitations 参照）
 - sidechain メッセージは除外（show と同じ扱い）
-- 出力 TSV の列: `session_id`, `turn`, `time`, `project`, `snippet`。新しい順（メッセージ `timestamp` 降順、同値は rowid 降順）
+- 出力 TSV の列: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順（メッセージ `timestamp` 降順、同値は rowid 降順）
 - `turn` は outline / show --turn と同じ採番。ヒットしたメッセージが属する turn 番号を出すため、`session_id` が source 間で一意な場合は検索結果から `somniloq show --turn <N>` または `--turn <N..M> <session_id>` に繋げられる。source 間で同じ `session_id` がある場合は show の既存の曖昧エラーに従う
 - `time` はローカルタイム `2006-01-02 15:04` 形式
 - `project` は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` をそのまま
 - snippet はマッチの前後各 40 文字（rune 単位）。前後が切れている場合は `...` を付加。前後の空白は trim し、タブ・改行は空白に置換（TSV 保全）
-- `--since`/`--until` は**メッセージの timestamp 基準**。sessions / show のセッション開始基準とは異なる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と絶対日時は `dayBoundary` の影響を受けない
+- `--since`/`--until` は**メッセージの timestamp 基準**。NULL / 空の timestamp は時刻条件に一致しない。sessions / show のセッション開始基準とは異なる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と絶対日時は `dayBoundary` の影響を受けない
 - `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ、alias 展開含む）
 
 ### JSON 出力（--format json）
@@ -240,7 +241,7 @@ somniloq --version                          # バージョン表示
 ```sql
 -- セッション単位のメタデータ
 CREATE TABLE sessions (
-    source TEXT NOT NULL,         -- 'claude_code' or 'codex'
+    source TEXT NOT NULL,         -- 'claude_code', 'codex', or 'cursor_agent'
     session_id TEXT NOT NULL,     -- Claude Code は UUID、Codex は session_meta.payload.id
     cwd TEXT,                     -- 作業ディレクトリ。会話レコードでは通常非空
     repo_path TEXT,               -- ResolveRepoPath（internal/core/repo_path.go）で解決したリポジトリパス。会話セッションでは通常非空
@@ -272,7 +273,7 @@ CREATE TABLE messages (
 -- いるため絶対パスだけで一意に特定でき、source は補助情報として保持する。
 CREATE TABLE import_state (
     jsonl_path TEXT PRIMARY KEY,  -- JSONL ファイルの絶対パス
-    source TEXT NOT NULL,         -- 'claude_code' or 'codex'
+    source TEXT NOT NULL,         -- 'claude_code', 'codex', or 'cursor_agent'
     file_size INTEGER,            -- 最終取り込み時のファイルサイズ
     last_offset INTEGER,          -- 最終取り込み行のバイトオフセット
     imported_at TEXT NOT NULL

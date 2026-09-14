@@ -19,6 +19,7 @@ const searchHelpDetails = `Columns (TSV, in order):
   time: local timestamp of the matching message.
   project: canonical alias name when configured, otherwise repo_path.
   snippet: first match with about 40 runes of context on each side; tabs/newlines flattened for TSV.
+  source: internal source identifier: claude_code, codex, or cursor_agent.
 
 Notes:
   Search scans non-sidechain message bodies using SQLite LIKE.
@@ -39,7 +40,7 @@ const snippetContext = 40
 // tested directly.
 func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs, flags := newSearchFlagSet()
-	setUsage(fs, "Search message content across sessions and print TSV with session_id, turn, time, project, snippet", searchUsageLine, searchHelpDetails)
+	setUsage(fs, "Search message content across sessions and print TSV with session_id, turn, time, project, snippet, source", searchUsageLine, searchHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
@@ -87,12 +88,12 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 		if !ok {
 			return 1, fmt.Errorf("turn not found for search hit %s/%s/%s", r.Source, r.SessionID, r.UUID)
 		}
-		if _, err := fmt.Fprintf(out, "%s\t%d\t%s\t%s\t%s\n",
+		if _, err := fmt.Fprintf(out, "%s\t%d\t%s\t%s\t%s\t%s\n",
 			r.SessionID,
 			turn,
 			sanitizeTSV(formatLocalTime(r.Timestamp, time.Local)),
 			sanitizeTSV(resolveProjectDisplayName(r.RepoPath, false, cfg)),
-			sanitizeTSV(searchSnippet(r.Content, query))); err != nil {
+			sanitizeTSV(searchSnippet(r.Content, query)), r.Source); err != nil {
 			return 1, err
 		}
 	}

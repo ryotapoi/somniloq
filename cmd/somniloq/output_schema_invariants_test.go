@@ -23,16 +23,16 @@ func TestOutputSchemaInvariant_Sessions(t *testing.T) {
 	})
 
 	columns := strings.Split(strings.TrimSuffix(tsv, "\n"), "\t")
-	if len(columns) != 9 {
-		t.Fatalf("TSV columns = %d, want 9: %q", len(columns), tsv)
+	if len(columns) != 10 {
+		t.Fatalf("TSV columns = %d, want 10: %q", len(columns), tsv)
 	}
 	entry := singleSchemaInvariantEntry(t, jsonOut)
 	assertSchemaInvariantKeys(t, entry, []string{
 		"source", "sessionId", "project", "title", "startedAt", "endedAt", "logicalDay", "messageCount", "bodySize", "nonCommandUserTurnCount", "firstNonCommandUserLine",
 	})
 
-	// source is JSON-only. The other fields correspond to the TSV columns in
-	// this order; time_range deliberately expands into raw startedAt/endedAt.
+	// The TSV source is last; time_range deliberately expands into raw
+	// startedAt/endedAt.
 	want := []string{
 		entry["sessionId"].(string),
 		formatTimeRange(entry["startedAt"].(string), entry["endedAt"].(string), time.Local),
@@ -43,6 +43,7 @@ func TestOutputSchemaInvariant_Sessions(t *testing.T) {
 		fmt.Sprint(entry["bodySize"]),
 		fmt.Sprint(entry["nonCommandUserTurnCount"]),
 		sanitizeTSV(entry["firstNonCommandUserLine"].(string)),
+		entry["source"].(string),
 	}
 	assertSchemaInvariantValues(t, columns, want)
 }
@@ -110,12 +111,13 @@ func TestOutputSchemaInvariant_Show(t *testing.T) {
 		t.Errorf("messages[1].timestamp = %#v, want raw RFC3339 fixture value", got)
 	}
 
-	// source and messages[].timestamp are JSON-only. Markdown represents
-	// sessionId, project and the two session timestamps as metadata; title is
+	// messages[].timestamp is JSON-only. Markdown represents source, sessionId,
+	// project and the two session timestamps as metadata; title is
 	// display-sanitized and message role becomes a heading while content stays raw.
-	want := fmt.Sprintf("## %s\n\n- **Session**: `%s`\n- **Project**: `%s`\n- **Started**: `%s`\n\n### User\n\n%s\n\n### Assistant\n\n%s\n",
+	want := fmt.Sprintf("## %s\n\n- **Session**: `%s`\n- **Source**: `%s`\n- **Project**: `%s`\n- **Started**: `%s`\n\n### User\n\n%s\n\n### Assistant\n\n%s\n",
 		titleSanitizer.Replace(entry["title"].(string)),
 		entry["sessionId"].(string),
+		entry["source"].(string),
 		entry["project"].(string),
 		formatTimeRange(entry["startedAt"].(string), entry["endedAt"].(string), time.Local),
 		messages[0].(map[string]any)["content"].(string),

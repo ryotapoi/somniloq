@@ -30,7 +30,7 @@ sources:
 - config 読み込みは `cmd/somniloq/config.go`。missing file は空 config、invalid JSON は error。
 - alias 展開は `config.expandProject`。完全一致したときだけ canonical + old names に展開する。
 - `cmd/somniloq/filter.go` の `buildSessionFilter` が time flag と project alias をまとめて `core.SessionFilter` にする。`sessions` / `search` は date-only filter に `dayBoundary` を渡し、`show` / `projects` は従来どおり 00:00 境界で呼ぶ。
-- SQL 条件は `internal/core/db_sessions_projects.go` の `projectsCondition`。repo_path substring LIKE を OR でつなぐ。
+- SQL 条件は `internal/core/db_sessions_projects.go` の `projectsCondition`。空でない repo_path の substring LIKE を OR でつなぎ、NULL / 空 repo_path は `%` を含む条件にも一致させない。
 
 ## commandPatterns
 
@@ -48,7 +48,7 @@ sources:
 ## 集約と表示
 
 - `sessions`, `show`, `search` は `--project` filter の対象。
-- `internal/core.DB.ListProjects` は raw `repo_path` ごとの行を返す。`--project` filter は受けず、DB の保存事実は書き換えない。
+- `internal/core.DB.ListProjects` は raw `repo_path` ごとの行を返す。`--project` filter は受けず、DB の保存事実は書き換えない。時刻条件があると NULL / 空 started_at は対象外、条件なしでは空 repo_path も 1 グループとして残る。
 - 表示名は `cmd/somniloq/shorten.go` の `resolveProjectDisplayName`。alias の canonical / old names が `repo_path` 全体または basename に一致したら canonical 名のみを出す。
 - alias 非一致時だけ、`--short` は従来どおり `resolveDisplayName` で basename にする。
 - `projects` は `cmd/somniloq/projects.go` で表示名ごとに session count を合算する。alias で同じ canonical 名になる raw `repo_path` 行を重複表示しない。

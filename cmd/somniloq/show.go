@@ -14,7 +14,7 @@ const showUsageLine = "somniloq show [--turn <N|N..M>] [--tail <N>] [--summary <
 	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>]"
 
 const showHelpDetails = `Output (markdown):
-  One or more sessions. Each session has a title, Session, Project, Started metadata, then message sections headed by role.
+  One or more sessions. Each session has a title, Session, Source, Project, Started metadata, then message sections headed by role.
   Multiple sessions in time-range mode are separated by ---.
 
 JSON fields:

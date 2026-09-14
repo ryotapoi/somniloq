@@ -35,8 +35,8 @@ func TestSessionsCmd_OutputColumns(t *testing.T) {
 
 	line := strings.TrimSuffix(out.String(), "\n")
 	fields := strings.Split(line, "\t")
-	if len(fields) != 9 {
-		t.Fatalf("fields = %d, want 9 (SessionID, TimeRange, LogicalDay, Project, Title, MessageCount, BodySize, NonCommandUserTurnCount, FirstNonCommandUserLine): %q", len(fields), line)
+	if len(fields) != 10 {
+		t.Fatalf("fields = %d, want 10 (SessionID, TimeRange, LogicalDay, Project, Title, MessageCount, BodySize, NonCommandUserTurnCount, FirstNonCommandUserLine, Source): %q", len(fields), line)
 	}
 	if want := sessionLogicalDay(rows[0], dayBoundary{}, time.Local); fields[2] != want {
 		t.Errorf("LogicalDay column = %s, want %s", fields[2], want)
@@ -52,6 +52,9 @@ func TestSessionsCmd_OutputColumns(t *testing.T) {
 	}
 	if fields[8] != "first question" {
 		t.Errorf("FirstNonCommandUserLine column = %q, want first question", fields[8])
+	}
+	if fields[9] != string(rows[0].Source) {
+		t.Errorf("Source column = %q, want %q", fields[9], rows[0].Source)
 	}
 	if rows[0].BodySize == 0 {
 		t.Error("fixture BodySize should be non-zero")
@@ -238,8 +241,8 @@ func TestSessionsCmd_SkipHintColumnsExcludeCommands(t *testing.T) {
 
 	line := strings.TrimSuffix(out.String(), "\n")
 	fields := strings.Split(line, "\t")
-	if len(fields) != 9 {
-		t.Fatalf("fields = %d, want 9: %q", len(fields), line)
+	if len(fields) != 10 {
+		t.Fatalf("fields = %d, want 10: %q", len(fields), line)
 	}
 	if fields[7] != "2" {
 		t.Errorf("NonCommandUserTurnCount column = %s, want 2", fields[7])

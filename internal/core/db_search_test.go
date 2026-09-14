@@ -79,6 +79,37 @@ func TestSearchMessages_TimeFilterUsesMessageTimestamp(t *testing.T) {
 	}
 }
 
+func TestSearchMessages_FiltersExcludeUnknownTimestampAndRepoPath(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceCursorAgent, SessionID: "unknown", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCursorAgent, UUID: "unknown-time", SessionID: "unknown", Role: "user", Content: "needle", Timestamp: ""}))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCursorAgent, UUID: "known-time", SessionID: "unknown", Role: "user", Content: "needle", Timestamp: "2026-03-28T10:00:00Z"}))
+
+	rows, err := db.SearchMessages(SessionFilter{}, "needle")
+	if err != nil {
+		t.Fatalf("SearchMessages without filter: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("unfiltered rows = %d, want 2", len(rows))
+	}
+
+	rows, err = db.SearchMessages(SessionFilter{Until: "2026-03-29T00:00:00.000Z"}, "needle")
+	if err != nil {
+		t.Fatalf("SearchMessages with time filter: %v", err)
+	}
+	if len(rows) != 1 || rows[0].UUID != "known-time" {
+		t.Fatalf("time-filtered rows = %+v, want only known timestamp", rows)
+	}
+
+	rows, err = db.SearchMessages(SessionFilter{Projects: []string{"%"}}, "needle")
+	if err != nil {
+		t.Fatalf("SearchMessages with project filter: %v", err)
+	}
+	if len(rows) != 0 {
+		t.Fatalf("project-filtered rows = %+v, want no unknown repo path", rows)
+	}
+}
+
 func TestSearchMessages_ProjectFilter(t *testing.T) {
 	db := newSearchTestDB(t)
 

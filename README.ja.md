@@ -103,9 +103,11 @@ somniloq sessions --short                # alias 非一致時に repo_path の b
 somniloq sessions --format json          # TSV の代わりに JSON 配列
 ```
 
-出力は TSV 形式: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`
+出力は TSV 形式: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`, `source`。source は `claude_code` / `codex` / `cursor_agent`。
 
 `logical_day` はクエリ時に `ended_at`（無ければ `started_at`）から計算する。ローカルタイムの `dayBoundary` を基準にした日付で、セッションを途中で分割しない。
+
+timestamp が未知のセッションは時刻 filter なしでは表示するが、`--since` / `--until` には一致しない。両方の timestamp が未知なら TSV の時刻範囲と Markdown の Started は空欄。
 
 `projectAliases` に一致する repo path / basename は canonical 名のみで表示する。
 
@@ -126,6 +128,8 @@ somniloq projects --format json
 
 出力は TSV 形式: `project`, `session_count`。`--format json` では `project`, `sessionCount`。alias グループは canonical 名で表示・集計する。
 
+repository が未知のセッションは filter なしでは空 project グループに残る。`%` wildcard を含め、`--project` には一致しない。
+
 ### show
 
 ```bash
@@ -142,6 +146,8 @@ somniloq show --format json <session-id>                # Markdown の代わり�
 ```
 
 `--turn` / `--tail` のターン番号は `outline` と同じ採番（user メッセージごとに 1 増える 1 始まり）。`outline` で目星を付けた範囲だけを読む用途。1 ターンには user メッセージとそれに続く応答が含まれる。`--turn` と `--tail` は互いに排他で、`--summary` とも併用できない。一括表示モード（`--since`/`--until`）では各セッションに個別に適用される。
+
+Markdown metadata には `Source` を出す。同じ session ID が複数 source にある場合、`show` と `outline` は片方を選ばず source/session の候補を曖昧エラーとして表示する。
 
 `--format json` はセッションの JSON 配列を出力する（単一セッション指定でも要素 1 の配列）。各要素は `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messages`（`role`, `content`, `timestamp` の配列）を持つ。`--summary` / `--turn` / `--tail` のフィルタは `messages` にそのまま反映される。
 
@@ -163,7 +169,7 @@ somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # その日の 0
 somniloq search --since 7d --project myapp "auth"    # プロジェクトで絞り込み
 ```
 
-出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`（最初のマッチ前後の本文）。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、`session_id` が一意なら検索結果からそのまま `somniloq show --turn <N> <session_id>` に繋げられる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。
+出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、`session_id` が一意なら検索結果からそのまま `somniloq show --turn <N> <session_id>` に繋げられる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。
 
 ### JSON 出力
 
@@ -188,7 +194,7 @@ somniloq search --since 7d --project myapp "auth"    # プロジェクトで絞�
 }
 ```
 
-`projectAliases` は、時期によって名前が変わった同一プロジェクト（リネームしたリポジトリ等）をグループ化する: 現行名 → 旧名の配列。`--project` の値がグループ内のいずれかの名前に完全一致すると、フィルタがグループ全体に展開され、どちらの名前で記録されたセッションも見つかる。一致しない値は従来どおり。フィルタ展開の対象は `sessions` / `show` / `search`。`sessions` / `show` / `projects` / `search` の project 表示は、保存された `repo_path` または basename が alias グループに一致する場合に canonical 名のみを出し、`projects` は canonical 名で合算する。
+`projectAliases` は、時期によって名前が変わった同一プロジェクト（リネームしたリポジトリ等）をグループ化する: 現行名 → 旧名の配列。`--project` の値がグループ内のいずれかの名前に完全一致すると、フィルタがグループ全体に展開され、どちらの名前で記録されたセッションも見つかる。一致しない値は従来どおり。空または未知の `repo_path` は wildcard を含む project filter にも一致せず、filter を付けなければ空 project グループに残る。フィルタ展開の対象は `sessions` / `show` / `search`。`sessions` / `show` / `projects` / `search` の project 表示は、保存された `repo_path` または basename が alias グループに一致する場合に canonical 名のみを出し、`projects` は canonical 名で合算する。
 
 `commandPatterns` は `sessions` のスキップ判定用列だけで使う Go 正規表現のリスト。各 pattern は trim 済みの user message 本文全体に対して評価する。不正な正規表現は壊れた JSON と同じく config 読み込みエラーになり、typo を黙って無効化しない。
 

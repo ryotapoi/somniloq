@@ -29,12 +29,12 @@ sources:
 
 ## 表示 path
 
-- Show: `cmd/somniloq/show.go` が ID 解決または一覧取得後、各 session の message 取得、filter、JSON または Markdown 出力を順に行う。Markdown の session 本文は `cmd/somniloq/format.go` の `formatSession` が整形する。
+- Show: `cmd/somniloq/show.go` が ID 解決または一覧取得後、各 session の message 取得、filter、JSON または Markdown 出力を順に行う。Markdown の session 本文は `cmd/somniloq/format.go` の `formatSession` が整形し、Session / Source / Project / Started metadata を出す。両方の時刻が未知なら Started は空欄。
 - Summary show: `show.go` が `GetSummaryMessages` に差し替える。`/clear` / `<local-command-caveat>` skip は core query 側。
 - Outline: `outline.go` が `GetMessages` と `assignTurns` を使い、user message だけ出す。`body_size` / `bodySize` は各 turn に属する非 sidechain message content の UTF-8 byte 合計で、`show --turn` の読み取り量の目安になる。
 - Sessions skip hints: `sessions.go` が `ListSessions` 後に各 session の `GetMessages` を読み、`userTurnMessages` と `config.go` の `commandMatcher` で非コマンド user turn 数と最初の非コマンド行を出す。DB schema / core の session 集約 SQL には持ち込まない。
 - Sessions logical day: `sessions.go` が `sessionLogicalDay` で表示時に計算する。`ended_at` 優先、無ければ `started_at`。`dayBoundary` は config または `--day-boundary` で決まり、DB schema / import には持ち込まない。
-- Search: `search.go` が `SearchMessages` の結果に `searchSnippet` をかけ、同じ session の `GetMessages` に `assignTurns` を適用して hit message UUID の `turn` 列を出す。検索結果から `show --turn` に繋げる導線は `session_id` が source 間で一意な場合に成立し、同じ `session_id` が複数 source にある場合は show の既存の曖昧エラーに従う。検索の time filter は message timestamp 基準。
+- Search: `search.go` が `SearchMessages` の結果に `searchSnippet` をかけ、同じ session の `GetMessages` に `assignTurns` を適用して hit message UUID の `turn` 列を出す。TSV の末尾 source 列で source-local session ID を識別する。検索結果から `show --turn` に繋げる導線は `session_id` が source 間で一意な場合に成立し、同じ `session_id` が複数 source にある場合は show の既存の曖昧エラーに従う。検索の time filter は message timestamp 基準で、空値は条件に一致しない。
 - JSON: `cmd/somniloq/jsonout.go`。単一 show も配列で返す。`sessions` JSON には `logicalDay` があるが、show JSON にはない。判断は `docs/decisions/0012-json-output-schema.md`。
 
 ## 変更時のテスト入口

@@ -105,9 +105,11 @@ somniloq sessions --short                # basename of repo_path for unaliased p
 somniloq sessions --format json          # JSON array instead of TSV
 ```
 
-Output is TSV: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`
+Output is TSV: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`, `source` (`claude_code`, `codex`, or `cursor_agent`).
 
 `logical_day` is derived at query time from `ended_at` (or `started_at` when `ended_at` is empty), using the local `dayBoundary`. Sessions are not split across days.
+
+Sessions with an unknown timestamp remain visible without a time filter, but do not match `--since` or `--until`. When both timestamps are unknown, the TSV time range and Markdown Started value are empty.
 
 When `projectAliases` matches a repo path or basename, project output uses only the canonical name.
 
@@ -128,6 +130,8 @@ somniloq projects --format json
 
 Output is TSV: `project`, `session_count`. With `--format json`: `project`, `sessionCount`. Alias groups are displayed and counted under the canonical project name.
 
+Sessions with an unknown repository remain in the empty project group without a filter; they never match `--project`, including a `%` wildcard.
+
 ### show
 
 ```bash
@@ -144,6 +148,8 @@ somniloq show --format json <session-id>                # JSON instead of Markdo
 ```
 
 `--turn` / `--tail` use the same turn numbering as `outline` (1-based, incremented on each user message), so you can skim the outline first and read only the range you need. A turn includes the user message and the replies that follow it. `--turn` and `--tail` are mutually exclusive, cannot be combined with `--summary`, and in bulk mode (`--since`/`--until`) apply to each listed session independently.
+
+Markdown metadata includes `Source`. If a session ID exists in multiple sources, `show` and `outline` report the source/session candidates as an ambiguity error rather than selecting one.
 
 `--format json` emits a JSON array of sessions — always an array, even for a single session ID — where each element has `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, and `messages` (`role`, `content`, `timestamp`). `--summary` / `--turn` / `--tail` filtering applies to `messages` as-is.
 
@@ -165,7 +171,7 @@ somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # messages since
 somniloq search --since 7d --project myapp "auth"   # narrowed by project
 ```
 
-Output is TSV: `session_id`, `turn`, `time`, `project`, `snippet` (the text around the first match), newest first. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --turn <N> <session_id>` when the session ID is unambiguous. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
+Output is TSV: `session_id`, `turn`, `time`, `project`, `snippet`, `source` (the internal identifier: `claude_code`, `codex`, or `cursor_agent`), newest first. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --turn <N> <session_id>` when the session ID is unambiguous. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
 
 ### JSON output
 
@@ -190,7 +196,7 @@ Optional config file at `~/.somniloq/config.json` (override with the global `--c
 }
 ```
 
-`projectAliases` groups project names that refer to the same project over time (e.g. a renamed repository): current name → old names. When a `--project` value exactly matches any name in a group, the filter expands to the whole group, so sessions recorded under either name are found. Non-matching values behave as before. Filtering applies to `sessions`, `show`, and `search`. Project display in `sessions`, `show`, `projects`, and `search` uses only the canonical name when the stored `repo_path` or basename matches an alias group; `projects` also aggregates those rows under the canonical name.
+`projectAliases` groups project names that refer to the same project over time (e.g. a renamed repository): current name → old names. When a `--project` value exactly matches any name in a group, the filter expands to the whole group, so sessions recorded under either name are found. Non-matching values behave as before. Empty or unknown `repo_path` values never match a project filter, including wildcard patterns; without a filter they remain in the empty project group. Filtering applies to `sessions`, `show`, and `search`. Project display in `sessions`, `show`, `projects`, and `search` uses only the canonical name when the stored `repo_path` or basename matches an alias group; `projects` also aggregates those rows under the canonical name.
 
 `commandPatterns` is a list of Go regular expressions used only by `sessions` skip-hint columns. Each pattern matches against the trimmed full user message. Invalid regular expressions make config loading fail, the same as broken JSON, so typos do not silently disable the setting.
 

@@ -132,6 +132,28 @@ func TestListSessions_NullStartedAt(t *testing.T) {
 	}
 }
 
+func TestListSessions_TimeFilterExcludesUnknownTimestamp(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "known", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{Source: SourceCursorAgent, SessionID: "unknown"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions without filter: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("unfiltered rows = %d, want 2", len(rows))
+	}
+
+	rows, err = db.ListSessions(SessionFilter{Until: "2026-03-29T00:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListSessions with until filter: %v", err)
+	}
+	if len(rows) != 1 || rows[0].SessionID != "known" {
+		t.Fatalf("filtered rows = %+v, want only known timestamp", rows)
+	}
+}
+
 func TestListSessions_SinceFilter(t *testing.T) {
 	db := testDB(t)
 
@@ -181,6 +203,20 @@ func TestListSessions_ProjectFilter(t *testing.T) {
 	}
 	if rows[0].SessionID != "s1" {
 		t.Errorf("expected s1, got %s", rows[0].SessionID)
+	}
+}
+
+func TestListSessions_ProjectFilterExcludesUnknownRepoPath(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "known", RepoPath: "/Users/test/project", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{Source: SourceCursorAgent, SessionID: "unknown", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListSessions(SessionFilter{Projects: []string{"%"}})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(rows) != 1 || rows[0].SessionID != "known" {
+		t.Fatalf("project wildcard rows = %+v, want only known repo path", rows)
 	}
 }
 
@@ -757,6 +793,20 @@ func TestListProjects_UntilFilter(t *testing.T) {
 	}
 	if rows[0].RepoPath != "/Users/test/early" {
 		t.Errorf("expected /Users/test/early, got %s", rows[0].RepoPath)
+	}
+}
+
+func TestListProjects_TimeFilterExcludesUnknownTimestamp(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "known", RepoPath: "/Users/test/known", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{Source: SourceCursorAgent, SessionID: "unknown", RepoPath: "/Users/test/unknown"}, "2026-03-28T15:00:00Z"))
+
+	rows, err := db.ListProjects(SessionFilter{Until: "2026-03-29T00:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(rows) != 1 || rows[0].RepoPath != "/Users/test/known" {
+		t.Fatalf("filtered projects = %+v, want only known timestamp", rows)
 	}
 }
 

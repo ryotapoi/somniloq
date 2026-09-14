@@ -56,7 +56,7 @@ func TestFormatTimeRange(t *testing.T) {
 		{"ended empty", "2026-03-28T10:00:00Z", "", "2026-03-28 10:00 ~"},
 		{"ended invalid", "2026-03-28T10:00:00Z", "invalid", "2026-03-28 10:00 ~ invalid"},
 		{"started empty", "", "2026-03-28T10:30:00Z", " ~ 2026-03-28 10:30"},
-		{"both empty", "", "", " ~"},
+		{"both empty", "", "", ""},
 	}
 
 	for _, tt := range tests {
@@ -73,6 +73,7 @@ func TestFormatSession_WithTitle(t *testing.T) {
 	var buf bytes.Buffer
 
 	session := core.SessionRow{
+		Source:       core.SourceClaudeCode,
 		SessionID:    "abc-123",
 		StartedAt:    "2026-03-28T10:00:00Z",
 		CustomTitle:  "Fix login bug",
@@ -94,6 +95,9 @@ func TestFormatSession_WithTitle(t *testing.T) {
 	}
 	if !strings.Contains(got, "- **Session**: `abc-123`") {
 		t.Errorf("expected session ID in metadata, got:\n%s", got)
+	}
+	if !strings.Contains(got, "- **Source**: `claude_code`") {
+		t.Errorf("expected source in metadata, got:\n%s", got)
 	}
 	if !strings.Contains(got, "- **Project**: `-Users-test-proj`") {
 		t.Errorf("expected project in metadata, got:\n%s", got)

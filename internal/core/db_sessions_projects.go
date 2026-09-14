@@ -117,6 +117,11 @@ const (
 // sessions.started_at and messages.timestamp at RFC3339 second-or-finer
 // precision (for example, …:05Z >= …:05.000Z).
 func timeFilterConditions(filter SessionFilter, column timestampColumn) (conditions []string, args []any) {
+	if filter.Since != "" || filter.Until != "" {
+		// Unknown source timestamps are stored as NULL or empty strings. They
+		// remain visible without a time filter, but must not match a range.
+		conditions = append(conditions, string(column)+" <> ''")
+	}
 	if filter.Since != "" {
 		conditions = append(conditions, string(column)+" >= ?")
 		args = append(args, filter.Since)
@@ -137,10 +142,10 @@ func projectsCondition(projects []string) (condition string, args []any) {
 	}
 	likes := make([]string, len(projects))
 	for i, p := range projects {
-		likes[i] = "COALESCE(s.repo_path, '') LIKE '%' || ? || '%'"
+		likes[i] = "s.repo_path LIKE '%' || ? || '%'"
 		args = append(args, p)
 	}
-	return "(" + strings.Join(likes, " OR ") + ")", args
+	return "s.repo_path <> '' AND (" + strings.Join(likes, " OR ") + ")", args
 }
 
 // sessionFilterConditions composes the supported SessionFilter conditions in

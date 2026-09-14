@@ -18,6 +18,9 @@ func formatLocalTime(utcStr string, loc *time.Location) string {
 }
 
 func formatTimeRange(startedAt, endedAt string, loc *time.Location) string {
+	if startedAt == "" && endedAt == "" {
+		return ""
+	}
 	s := formatLocalTime(startedAt, loc)
 	if endedAt == "" {
 		return s + " ~"
@@ -52,6 +55,9 @@ func formatSession(w io.Writer, session core.SessionRow, displayName string, mes
 		return err
 	}
 	if _, err := fmt.Fprintf(w, "- **Session**: `%s`\n", session.SessionID); err != nil {
+		return err
+	}
+	if _, err := fmt.Fprintf(w, "- **Source**: `%s`\n", session.Source); err != nil {
 		return err
 	}
 	if _, err := fmt.Fprintf(w, "- **Project**: `%s`\n", displayName); err != nil {
