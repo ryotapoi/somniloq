@@ -245,7 +245,7 @@ v0.4 では Codex 対応に伴い、セッションキーに `source` を含め�
 - `--project` は `repo_path` への substring マッチ一本になった。旧来の `project_dir` フォールバックは廃止。`repo_path` が `NULL` のままの古い行は `somniloq backfill` を実行するまで `--project` にヒットしない。
 - `sessions` / `projects` の TSV 出力は `repo_path` 由来の `project` を出す（`project_dir` フォールバック表記なし）。設定された project alias は canonical 名で表示する。
 - `--short` は alias 非一致時に `filepath.Base(repo_path)` を出す。
-- `import` はデフォルトで Claude Code / Codex の両方を取り込む。片方だけ取り込む場合は `--source claude-code` または `--source codex` を使う。
+- `import` はデフォルトで Claude Code、Codex、Cursor Agent のログを取り込む。1 source だけ選ぶ場合は `--source claude-code|codex|cursor-agent` を使う。
 
 ## ドキュメント
 

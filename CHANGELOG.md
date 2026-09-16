@@ -2,6 +2,17 @@
 
 English | [日本語](CHANGELOG.ja.md)
 
+## v0.10.0 — 2026-09-16
+
+### Added
+
+- Cursor Agent transcripts under `~/.cursor/projects/` can now be imported by default or with `--source cursor-agent`.
+
+### Changed
+
+- `sessions` and `search` TSV output and `show` Markdown now identify each session's source. `show` and `outline` also report candidate sources when a session ID exists in multiple sources.
+- Sessions without timestamp or repository metadata remain visible without filters, but do not match time or project filters; their time range is empty when both timestamps are unknown.
+
 ## v0.9.1 — 2026-09-06
 
 ### Fixed

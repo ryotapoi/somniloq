@@ -2,6 +2,17 @@
 
 [English](CHANGELOG.md) | 日本語
 
+## v0.10.0 — 2026-09-16
+
+### 追加
+
+- `~/.cursor/projects/` 配下の Cursor Agent transcript を、デフォルトまたは `--source cursor-agent` で取り込めるようにした。
+
+### 変更
+
+- `sessions` / `search` の TSV 出力と `show` の Markdown 出力で、各セッションの source を識別できるようにした。`show` / `outline` は、同じ session ID が複数 source に存在する場合に候補 source も表示する。
+- timestamp または repository metadata がないセッションも、フィルタなしでは表示するようにした。time / project filter には一致せず、両方の timestamp が不明な場合は time range を空で表示する。
+
 ## v0.9.1 — 2026-09-06
 
 ### 修正

@@ -247,7 +247,7 @@ v0.4 adds Codex support and changes the session key to include `source`. Existin
 - `--project` now matches `repo_path` only. The previous fallback to a `project_dir` column is gone, so older sessions whose `repo_path` is still `NULL` will not match `--project` until you run `somniloq backfill`.
 - `sessions` / `projects` TSV output shows `project` from `repo_path` (no `project_dir` fallback column). Configured project aliases display as the canonical name.
 - `--short` shows `filepath.Base(repo_path)` for unaliased projects.
-- `import` now imports both Claude Code and Codex logs by default. Use `--source claude-code` or `--source codex` to import only one source.
+- `import` now imports Claude Code, Codex, and Cursor Agent logs by default. Select one source with `--source claude-code|codex|cursor-agent`.
 
 ## Documentation
 
