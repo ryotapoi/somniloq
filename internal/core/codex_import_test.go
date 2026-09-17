@@ -198,7 +198,8 @@ func TestCodexProcessFile_ImportsConversationMessages(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
 
-	jsonl := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-session","timestamp":"2026-05-01T00:00:00.000Z","cwd":"/nonexistent/codex-project","cli_version":"0.128.0","git":{"branch":"main"}}}
+	jsonl := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"before metadata"}]}}
+{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-session","timestamp":"2026-05-01T00:00:00.000Z","cwd":"/nonexistent/codex-project","cli_version":"0.128.0","git":{"branch":"main"}}}
 {"timestamp":"2026-05-01T00:00:01.000Z","type":"event_msg","payload":{"type":"token_count"}}
 {"timestamp":"2026-05-01T00:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
 {"timestamp":"2026-05-01T00:00:03.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{}"}}
@@ -268,7 +269,9 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	path := filepath.Join(nested, "rollout-incremental.jsonl")
 
 	first := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-incremental","timestamp":"2026-05-01T00:00:00.000Z","cwd":"/nonexistent/codex-incremental","cli_version":"0.128.0","git":{"branch":"main"}}}
+
 {"timestamp":"2026-05-01T00:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"first"}]}}
+{"type":"session_meta","payload":[]}
 `
 	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
@@ -282,8 +285,12 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	if err := os.WriteFile(path, []byte(second), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
-	if _, err := importWithAdapter(db, root, codex.NewAdapter(ResolveRepoPath)); err != nil {
+	result, err := importWithAdapter(db, root, codex.NewAdapter(ResolveRepoPath))
+	if err != nil {
 		t.Fatalf("second import failed: %v", err)
+	}
+	if result.UnparsedLines != 0 {
+		t.Errorf("second import unparsed lines = %d, want 0", result.UnparsedLines)
 	}
 
 	// Pin the UUIDs, not just the count: they are derived from path + line
@@ -305,7 +312,7 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	if err := rows.Err(); err != nil {
 		t.Fatalf("Rows failed: %v", err)
 	}
-	want := []string{codexMessageUUID(path, 2), codexMessageUUID(path, 3)}
+	want := []string{codexMessageUUID(path, 3), codexMessageUUID(path, 5)}
 	if strings.Join(got, "\n") != strings.Join(want, "\n") {
 		t.Errorf("uuids:\ngot  %q\nwant %q", got, want)
 	}

@@ -14,8 +14,7 @@ func TestFileHandler_HandleLineReturnsIgnoredOutcomeOnPersistError(t *testing.T)
 	h := &fileHandler{
 		importedAt: "2026-07-12T00:00:00Z",
 		path:       "/tmp/rollout.jsonl",
-		hasMeta:    true,
-		meta: sessionMetaCursor{
+		meta: &sessionMetaCursor{
 			SessionID: "s1",
 			CWD:       "/repo",
 			RepoPath:  "/repo",

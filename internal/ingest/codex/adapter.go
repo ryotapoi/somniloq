@@ -64,8 +64,7 @@ type fileHandler struct {
 	resolveRepoPath ingest.RepoResolver
 	importedAt      string
 	path            string
-	meta            sessionMetaCursor
-	hasMeta         bool
+	meta            *sessionMetaCursor
 	lineNumber      int
 	diagnostic      error
 }
@@ -97,16 +96,8 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 	}
 	defer f.Close()
 
-	lineNumber, err := ingest.CountLineFeeds(f, offset)
-	if err != nil {
-		return err
-	}
-	h.lineNumber = lineNumber
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
-		return err
-	}
-
 	_, err = ingest.ForEachLine(io.LimitReader(f, offset), -1, func(line []byte) error {
+		h.lineNumber += bytes.Count(line, []byte{'\n'})
 		trimmed := bytes.TrimSpace(line)
 		if len(trimmed) == 0 {
 			return nil
@@ -115,9 +106,7 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 		if perr != nil || rec.Type != "session_meta" {
 			return nil
 		}
-		if err := h.applySessionMeta(rec); err != nil {
-			return nil
-		}
+		_ = h.applySessionMeta(rec)
 		return nil
 	})
 	return err
@@ -157,11 +146,11 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 	// parses fine, we just cannot attribute it to a session yet. Counting it as
 	// unparsed would put a non-zero number on structurally valid rollouts and
 	// drown out the real signal.
-	if !isConversationMessage(payload) || !h.hasMeta {
+	if !isConversationMessage(payload) || h.meta == nil {
 		return ingest.LineIgnored, nil
 	}
 
-	normalized, err := normalizeMessage(rec, payload, h.meta, h.path, h.lineNumber)
+	normalized, err := normalizeMessage(rec, payload, *h.meta, h.path, h.lineNumber)
 	if err != nil {
 		h.setUnparsedDiagnostic(err)
 		return ingest.LineUnparsed, nil
@@ -189,7 +178,6 @@ func (h *fileHandler) applySessionMeta(rec *RawRecord) error {
 	if err != nil {
 		return err
 	}
-	h.meta = *meta
-	h.hasMeta = true
+	h.meta = meta
 	return nil
 }
