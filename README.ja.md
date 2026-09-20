@@ -134,6 +134,7 @@ repository が未知のセッションは filter なしでは空 project グル�
 
 ```bash
 somniloq show <session-id>                              # 特定セッション
+somniloq show --source codex <session-id>               # source を指定したセッション
 somniloq show --since 24h                               # 直近24時間の全セッション
 somniloq show --since 2026-03-28 --until 2026-03-29     # 特定期間
 somniloq show --since 7d --project myapp                # プロジェクト絞り込み
@@ -147,7 +148,7 @@ somniloq show --format json <session-id>                # Markdown の代わり�
 
 `--turn` / `--tail` のターン番号は `outline` と同じ採番（user メッセージごとに 1 増える 1 始まり）。`outline` で目星を付けた範囲だけを読む用途。1 ターンには user メッセージとそれに続く応答が含まれる。`--turn` と `--tail` は互いに排他で、`--summary` とも併用できない。一括表示モード（`--since`/`--until`）では各セッションに個別に適用される。
 
-Markdown metadata には `Source` を出す。同じ session ID が複数 source にある場合、`show` と `outline` は片方を選ばず source/session の候補を曖昧エラーとして表示する。
+Markdown metadata には `Source` を出す。`show` と `outline` は session ID とともに `--source claude_code|claude-code|codex|cursor_agent|cursor-agent` を受け取り、検索結果の `source` を指定して対象セッションを選べる。`--source` を省略して同じ session ID が複数 source にある場合は、片方を選ばず source/session の候補を曖昧エラーとして表示する。`show --since` / `--until` と `--source` は併用できず、`all`、空値、未知の source は不正。
 
 `--format json` はセッションの JSON 配列を出力する（単一セッション指定でも要素 1 の配列）。各要素は `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messages`（`role`, `content`, `timestamp` の配列）を持つ。`--summary` / `--turn` / `--tail` のフィルタは `messages` にそのまま反映される。
 
@@ -155,6 +156,7 @@ Markdown metadata には `Source` を出す。同じ session ID が複数 source
 
 ```bash
 somniloq outline <session-id>                 # user メッセージをターン番号・時刻・本文サイズ・先頭1行で一覧
+somniloq outline --source cursor_agent <session-id> # source を指定したセッションを一覧
 somniloq outline --format json <session-id>  # TSV の代わりに JSON
 ```
 
@@ -169,7 +171,7 @@ somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # その日の 0
 somniloq search --since 7d --project myapp "auth"    # プロジェクトで絞り込み
 ```
 
-出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、`session_id` が一意なら検索結果からそのまま `somniloq show --turn <N> <session_id>` に繋げられる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。
+出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、検索結果の `source` とともに `somniloq show --source <source> --turn <N> <session_id>` または `somniloq outline --source <source> <session_id>` に渡して再参照できる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。
 
 ### JSON 出力
 

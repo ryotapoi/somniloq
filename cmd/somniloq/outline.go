@@ -9,7 +9,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const outlineUsageLine = "somniloq outline [--format <fmt>] <session-id>"
+const outlineUsageLine = "somniloq outline [--source <source>] [--format <fmt>] <session-id>"
 
 const outlineHelpDetails = `Columns (TSV, in order):
   turn: 1-based user turn number shared with show --turn and search results.
@@ -24,9 +24,11 @@ Notes:
   A turn is a user message plus following non-user messages until the next user message.
   Sidechain messages are excluded. Synthetic user messages such as /clear still count, so numbering stays aligned with show --turn.
   Recommended long-session flow: outline -> choose turn numbers -> show --turn N..M <session-id>.
+  --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent to select a session ID from search results.
 
 Examples:
   somniloq outline <session-id>
+  somniloq outline --source cursor_agent <session-id>
   somniloq outline --format json <session-id>
   somniloq show --turn 12..18 <session-id>`
 
@@ -35,6 +37,7 @@ Examples:
 func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.Writer) (int, error) {
 	fs := flag.NewFlagSet("outline", flag.ContinueOnError)
 	format := fs.String("format", "tsv", "output format (tsv, json)")
+	sourceValue := fs.String("source", "", "source for session-id (claude_code, claude-code, codex, cursor_agent, cursor-agent)")
 	setUsage(fs, "List a session's user messages as turn number, time, body size, and first line", outlineUsageLine, outlineHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
@@ -56,6 +59,20 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 		fmt.Fprintln(errOut, outlineUsage)
 		return 1, nil
 	}
+	sourceSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "source" {
+			sourceSet = true
+		}
+	})
+	var source *core.Source
+	if sourceSet {
+		parsed, err := parseSessionSource(*sourceValue)
+		if err != nil {
+			return 1, err
+		}
+		source = &parsed
+	}
 
 	db, err := openDB()
 	if err != nil {
@@ -63,7 +80,7 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 	}
 	defer db.Close()
 
-	session, code, err := resolveSessionByID(db, sessionID, errOut)
+	session, code, err := resolveSessionByID(db, sessionID, source, errOut)
 	if code != 0 {
 		return code, err
 	}

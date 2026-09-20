@@ -136,6 +136,7 @@ Sessions with an unknown repository remain in the empty project group without a 
 
 ```bash
 somniloq show <session-id>                              # single session
+somniloq show --source codex <session-id>               # select a source-qualified session
 somniloq show --since 24h                               # last 24 hours
 somniloq show --since 2026-03-28 --until 2026-03-29     # date range
 somniloq show --since 7d --project myapp                # filter by project
@@ -149,7 +150,7 @@ somniloq show --format json <session-id>                # JSON instead of Markdo
 
 `--turn` / `--tail` use the same turn numbering as `outline` (1-based, incremented on each user message), so you can skim the outline first and read only the range you need. A turn includes the user message and the replies that follow it. `--turn` and `--tail` are mutually exclusive, cannot be combined with `--summary`, and in bulk mode (`--since`/`--until`) apply to each listed session independently.
 
-Markdown metadata includes `Source`. If a session ID exists in multiple sources, `show` and `outline` report the source/session candidates as an ambiguity error rather than selecting one.
+Markdown metadata includes `Source`. `show` and `outline` accept `--source claude_code|claude-code|codex|cursor_agent|cursor-agent` with a session ID, so use the `source` value from a search result to select the matching session. If `--source` is omitted and a session ID exists in multiple sources, they report the source/session candidates as an ambiguity error rather than selecting one. `--source` cannot be used with `show --since`/`--until`; `all`, an empty value, and unknown sources are rejected.
 
 `--format json` emits a JSON array of sessions — always an array, even for a single session ID — where each element has `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, and `messages` (`role`, `content`, `timestamp`). `--summary` / `--turn` / `--tail` filtering applies to `messages` as-is.
 
@@ -157,6 +158,7 @@ Markdown metadata includes `Source`. If a session ID exists in multiple sources,
 
 ```bash
 somniloq outline <session-id>                 # user messages as turn number, time, body size, and first line
+somniloq outline --source cursor_agent <session-id> # select a source-qualified session
 somniloq outline --format json <session-id>  # JSON instead of TSV
 ```
 
@@ -171,7 +173,7 @@ somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # messages since
 somniloq search --since 7d --project myapp "auth"   # narrowed by project
 ```
 
-Output is TSV: `session_id`, `turn`, `time`, `project`, `snippet`, `source` (the internal identifier: `claude_code`, `codex`, or `cursor_agent`), newest first. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --turn <N> <session_id>` when the session ID is unambiguous. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
+Output is TSV: `session_id`, `turn`, `time`, `project`, `snippet`, `source` (the internal identifier: `claude_code`, `codex`, or `cursor_agent`), newest first. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --source <source> --turn <N> <session_id>` or `somniloq outline --source <source> <session_id>`. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
 
 ### JSON output
 

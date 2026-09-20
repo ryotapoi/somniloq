@@ -10,7 +10,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const showUsageLine = "somniloq show [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>] <session-id>\n" +
+const showUsageLine = "somniloq show [--source <source>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>] <session-id>\n" +
 	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>]"
 
 const showHelpDetails = `Output (markdown):
@@ -24,14 +24,16 @@ JSON fields:
 Notes:
   Flags must come before <session-id>.
   Use either <session-id> or --since/--until. --project only applies in time-range mode.
+  --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent with <session-id>; it cannot be used with --since/--until.
   --summary N shows first N user messages per session, skipping /clear and local-command-caveat unless --include-clear is set.
   --turn N or --turn N..M shows inclusive turn ranges; --tail N shows the last N turns.
   --turn and --tail share outline numbering and cannot be combined with --summary.
-  If a session_id exists in multiple sources, show prints an ambiguity error with source/session candidates.
+  If a session_id exists in multiple sources, use --source with the source shown by search; without it, show prints an ambiguity error with source/session candidates.
 
 Examples:
   somniloq show --summary 1 --since 24h --short
   somniloq show --turn 40..60 <session-id>
+  somniloq show --source codex <session-id>
   somniloq show --format json --tail 3 <session-id>`
 
 // showCmd runs the show subcommand without calling os.Exit, so it can be
@@ -90,9 +92,26 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	}
 
 	sessionID := fs.Arg(0)
+	sourceSet := false
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "source" {
+			sourceSet = true
+		}
+	})
+	var source *core.Source
+	if sourceSet {
+		parsed, err := parseSessionSource(*flags.source)
+		if err != nil {
+			return 1, err
+		}
+		source = &parsed
+	}
 
 	if sessionID != "" && (*flags.since != "" || *flags.until != "") {
 		return 1, errors.New("specify either session-id or --since/--until, not both")
+	}
+	if source != nil && sessionID == "" {
+		return 1, errors.New("--source requires session-id and cannot be combined with --since/--until")
 	}
 	if sessionID == "" && *flags.since == "" && *flags.until == "" {
 		fmt.Fprintln(errOut, showUsage)
@@ -107,7 +126,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 	var sessions []core.SessionRow
 	if sessionID != "" {
-		session, code, err := resolveSessionByID(db, sessionID, errOut)
+		session, code, err := resolveSessionByID(db, sessionID, source, errOut)
 		if code != 0 {
 			return code, err
 		}
@@ -173,9 +192,9 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 }
 
 type showFlags struct {
-	since, until, project, turnRange, format *string
-	short, includeClear                      *bool
-	summary, tail                            *int
+	since, until, project, turnRange, format, source *string
+	short, includeClear                              *bool
+	summary, tail                                    *int
 }
 
 func newShowFlagSet() (*flag.FlagSet, showFlags) {
@@ -190,5 +209,6 @@ func newShowFlagSet() (*flag.FlagSet, showFlags) {
 		turnRange:    fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)"),
 		tail:         fs.Int("tail", 0, "show only the last N turns (0 disables)"),
 		format:       fs.String("format", "markdown", "output format (markdown, json)"),
+		source:       fs.String("source", "", "source for session-id (claude_code, claude-code, codex, cursor_agent, cursor-agent)"),
 	}
 }

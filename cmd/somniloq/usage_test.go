@@ -105,14 +105,14 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return showCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Output (markdown):", "messages fields: role, content, timestamp", "somniloq show --turn 40..60 <session-id>"},
+			want: []string{"Examples:", "Output (markdown):", "messages fields: role, content, timestamp", "--source accepts", "somniloq show --turn 40..60 <session-id>"},
 		},
 		{
 			name: "outline",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return outlineCmd([]string{"--help"}, openDB, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "body_size", "Recommended long-session flow", "somniloq show --turn 12..18 <session-id>"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "body_size", "Recommended long-session flow", "--source accepts", "somniloq show --turn 12..18 <session-id>"},
 		},
 		{
 			name: "search",

@@ -104,7 +104,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 ### 内容表示（show）
 
 - セッション内容を Markdown で出力
-- `show <session-id>` は全 source を横断検索する。同じ `session_id` が複数 source に存在する場合は曖昧エラーとして候補を表示する
+- `show [--source <source>] <session-id>` は全 source を横断検索する。`--source` には search が出力する内部値 `claude_code` / `codex` / `cursor_agent` または CLI 表記 `claude-code` / `codex` / `cursor-agent` を指定でき、同じ `session_id` が複数 source に存在する場合に対象を選ぶ。未指定時は曖昧エラーとして候補を表示する。`all`、空値、未知値は不正で、`--source` は `--since` / `--until` の一括表示とは併用できない
 - Markdown metadata は Session、Source、Project、Started。Started 行は `started_at ~ ended_at` の時刻範囲で、ended_at がない場合は `started_at ~`、両方未知なら空欄
 - `--since`/`--until` で期間指定して一括表示（`started_at` 基準）。NULL / 空の started_at は時刻条件に一致しない。date-only は `projects` と同じくローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
 - `--summary N` で各セッションの user メッセージ先頭 N 件を表示（`/clear` と `<local-command-caveat>` はスキップ）。`0` または未指定で従来の全文表示
@@ -124,7 +124,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - ターン番号は 1 始まり。sidechain を除いたメッセージ列を時系列に走査し、user メッセージごとに 1 増える（sidechain 除外は show と同じで、採番にも含めない）。最初の user メッセージより前のメッセージはターン 1 に畳み込む
 - `/clear` エコーや `<local-command-caveat>` などの合成 user メッセージも 1 ターンとして数え、そのまま表示する（`show --summary` のスキップとは異なる扱い。採番をメッセージ列と 1:1 に保つことを優先する）
 - メッセージの時系列順は `timestamp` 昇順、同値は挿入順（rowid）で決定的に並べる（旧形式 Codex rollout は全レコードが同一 timestamp になるため、タイブレーカーがないと採番が実行ごとに揺れる）
-- セッション ID の解決は show と同じ（複数 source に一致する場合は曖昧エラーで候補を表示）
+- セッション ID の解決は show と同じ（`--source` で選択可能。未指定で複数 source に一致する場合は曖昧エラーで候補を表示）
 - 時刻はローカルタイム `2006-01-02 15:04` 形式
 - 出力 TSV の列: `turn`, `time`, `body_size`, `first_line`
 - `body_size` はその turn に属する非 sidechain メッセージ本文の合計サイズ（UTF-8 バイト数）。`show --turn` で読む範囲の重さを見積もるため、user メッセージだけでなくその turn の assistant 応答等も含む。スキーマや import 結果には保存せず、表示時に `GetMessages` 結果から計算する
@@ -138,7 +138,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして素通し（Known limitations 参照）
 - sidechain メッセージは除外（show と同じ扱い）
 - 出力 TSV の列: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順（メッセージ `timestamp` 降順、同値は rowid 降順）
-- `turn` は outline / show --turn と同じ採番。ヒットしたメッセージが属する turn 番号を出すため、`session_id` が source 間で一意な場合は検索結果から `somniloq show --turn <N>` または `--turn <N..M> <session_id>` に繋げられる。source 間で同じ `session_id` がある場合は show の既存の曖昧エラーに従う
+- `turn` は outline / show --turn と同じ採番。ヒットしたメッセージが属する turn 番号を出すため、検索結果の `source` と `session_id` を `somniloq show --source <source> --turn <N> <session_id>` または `somniloq outline --source <source> <session_id>` に渡して再参照できる。source を省略して同じ `session_id` が複数 source にある場合は show の曖昧エラーに従う
 - `time` はローカルタイム `2006-01-02 15:04` 形式
 - `project` は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` をそのまま
 - snippet はマッチの前後各 40 文字（rune 単位）。前後が切れている場合は `...` を付加。前後の空白は trim し、タブ・改行は空白に置換（TSV 保全）
@@ -207,6 +207,7 @@ somniloq sessions --since 7d --until 2h  # 直近7日間から最新2時間を�
 somniloq sessions --project Brimday      # プロジェクト名フィルタ
 somniloq sessions --short                # プロジェクト名を短縮表示
 somniloq show <session-id>               # セッション内容を Markdown で出力
+somniloq show --source codex <session-id> # source を指定してセッション内容を出力
 somniloq show --since 24h                # 直近24時間の全セッション
 somniloq show --since 2026-03-28 --until 2026-03-29  # 3/28 の全セッション
 somniloq show --summary 1 --since 24h                # 直近24時間の各セッションの冒頭 1 件
@@ -216,6 +217,7 @@ somniloq show --since 24h --short                    # プロジェクト名を�
 somniloq show --turn 40..60 <session-id>             # ターン 40〜60 だけ表示
 somniloq show --tail 3 <session-id>                  # 末尾 3 ターンだけ表示
 somniloq outline <session-id>            # user メッセージをターン番号・時刻・本文サイズ・先頭1行で一覧
+somniloq outline --source cursor_agent <session-id> # search の source で対象を選択
 somniloq sessions --format json          # セッション一覧を JSON で出力
 somniloq show --format json <session-id> # セッション内容を JSON で出力（outline / projects も --format json 対応）
 somniloq search "auth bug"               # 全メッセージ本文を横断検索

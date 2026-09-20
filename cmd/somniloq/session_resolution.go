@@ -11,12 +11,20 @@ import (
 // to a single session. On failure it returns exit code 1, reporting an
 // ambiguous match to errOut directly and a lookup failure via the returned
 // error (matching how main prints command errors).
-func resolveSessionByID(db *core.DB, sessionID string, errOut io.Writer) (core.SessionRow, int, error) {
+func resolveSessionByID(db *core.DB, sessionID string, source *core.Source, errOut io.Writer) (core.SessionRow, int, error) {
 	sessions, err := db.LookupSessionsByID(sessionID)
 	if err != nil {
 		return core.SessionRow{}, 1, err
 	}
 	if len(sessions) == 0 {
+		return core.SessionRow{}, 1, fmt.Errorf("session not found: %s", sessionID)
+	}
+	if source != nil {
+		for _, session := range sessions {
+			if session.Source == *source {
+				return session, 0, nil
+			}
+		}
 		return core.SessionRow{}, 1, fmt.Errorf("session not found: %s", sessionID)
 	}
 	if len(sessions) > 1 {

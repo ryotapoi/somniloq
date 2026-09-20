@@ -58,7 +58,7 @@ func TestResolveSessionByID_AmbiguousCrossSourceSessionID(t *testing.T) {
 	db := newCrossSourceSessionTestDB(t)
 
 	var errOut bytes.Buffer
-	_, code, err := resolveSessionByID(db, "same-id", &errOut)
+	_, code, err := resolveSessionByID(db, "same-id", nil, &errOut)
 	if err != nil {
 		t.Fatalf("resolveSessionByID: %v", err)
 	}
@@ -77,7 +77,7 @@ func TestResolveSessionByID_NotFound(t *testing.T) {
 	db := newCrossSourceSessionTestDB(t)
 
 	var errOut bytes.Buffer
-	_, code, err := resolveSessionByID(db, "no-such", &errOut)
+	_, code, err := resolveSessionByID(db, "no-such", nil, &errOut)
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}

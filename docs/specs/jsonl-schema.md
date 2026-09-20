@@ -4,7 +4,7 @@ Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造
 
 ## source 値
 
-CLI の `--source` はユーザー向け表記として `all|claude-code|codex|cursor-agent` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex|cursor_agent` を保存する。
+`import` の CLI `--source` はユーザー向け表記として `all|claude-code|codex|cursor-agent` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex|cursor_agent` を保存する。`show` / `outline` の session 選択用 `--source` は、DB 内部値または `claude-code` / `codex` / `cursor-agent` を受け取り、`all` は受け取らない。
 
 ## Claude Code
 
