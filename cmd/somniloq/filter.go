@@ -10,7 +10,11 @@ import (
 // buildSessionFilter resolves the time flags and expands the --project value
 // through the config's alias groups, so callers cannot forget the expansion.
 func buildSessionFilter(since, until, project string, cfg config, boundary dayBoundary) (core.SessionFilter, error) {
-	now := time.Now().UTC()
+	return buildSessionFilterAt(time.Now().UTC(), since, until, project, cfg, boundary)
+}
+
+// buildSessionFilterAt resolves the time flags using the supplied current time.
+func buildSessionFilterAt(now time.Time, since, until, project string, cfg config, boundary dayBoundary) (core.SessionFilter, error) {
 	var filter core.SessionFilter
 	if since != "" {
 		s, err := resolveTimeFlag(since, now, false, time.Local, boundary)
@@ -50,6 +54,21 @@ func resolveTimeFlag(value string, now time.Time, isUntil bool, loc *time.Locati
 	// second-or-finer precision, so an equal seconds-precision value (…:05Z)
 	// remains >= this boundary (…:05.000Z).
 	return t.UTC().Format("2006-01-02T15:04:05.000Z"), nil
+}
+
+// resolveImportedSince resolves an imported_at lower bound. imported_at is
+// stored at whole-second precision, so a boundary between seconds must advance
+// to the next stored second instead of admitting the preceding one lexically.
+func resolveImportedSince(value string, now time.Time, loc *time.Location) (string, error) {
+	t, _, err := core.ParseTimeRef(value, now, loc)
+	if err != nil {
+		return "", err
+	}
+	t = t.UTC()
+	if t.Nanosecond() != 0 {
+		t = t.Truncate(time.Second).Add(time.Second)
+	}
+	return t.Format("2006-01-02T15:04:05.000Z"), nil
 }
 
 func sessionLogicalDay(session core.SessionRow, boundary dayBoundary, loc *time.Location) string {

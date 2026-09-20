@@ -9,6 +9,63 @@ import (
 	"testing"
 )
 
+func TestImport_CursorAgentAppendUpdatesImportedSinceCandidates(t *testing.T) {
+	db := testDB(t)
+	root := t.TempDir()
+	path := filepath.Join(root, "project", "agent-transcripts", "session", "session.jsonl")
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	initial := []byte(`{"role":"user","message":{"content":[{"type":"text","text":"first"}]}}` + "\n")
+	if err := os.WriteFile(path, initial, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	originalTimeNow := timeNow
+	t.Cleanup(func() { timeNow = originalTimeNow })
+	importTimes := []string{"2026-03-28T15:00:00Z", "2026-03-28T15:01:00Z", "2026-03-28T15:02:00Z"}
+	timeNow = func() string {
+		next := importTimes[0]
+		importTimes = importTimes[1:]
+		return next
+	}
+	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
+		t.Fatalf("initial Import: %v", err)
+	}
+	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
+		t.Fatalf("unchanged Import: %v", err)
+	}
+	rows, err := db.ListSessions(SessionFilter{ImportedSince: "2026-03-28T15:00:01.000Z"})
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("unchanged imported-since candidates = %+v, %v; want none", rows, err)
+	}
+	if err := os.WriteFile(path, append(initial, []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"second"}]}}`+"\n")...), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
+		t.Fatalf("append Import: %v", err)
+	}
+
+	rows, err = db.ListSessions(SessionFilter{ImportedSince: "2026-03-28T15:01:00.000Z"})
+	if err != nil || len(rows) != 1 || rows[0].SessionID != "session" {
+		t.Fatalf("imported-since candidates = %+v, %v; want appended session", rows, err)
+	}
+	if err := os.WriteFile(path, initial, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
+		t.Fatalf("same-body reprocess Import: %v", err)
+	}
+	rows, err = db.ListSessions(SessionFilter{ImportedSince: "2026-03-28T15:02:00.000Z"})
+	if err != nil || len(rows) != 1 || rows[0].SessionID != "session" {
+		t.Fatalf("same-body reprocess candidates = %+v, %v; want session", rows, err)
+	}
+	var messageCount int
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE source = ? AND session_id = ?", SourceCursorAgent, "session").Scan(&messageCount); err != nil || messageCount != 2 {
+		t.Fatalf("message count after same-body reprocess = %d, %v; want 2", messageCount, err)
+	}
+}
+
 func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 	db := testDB(t)
 	root := t.TempDir()

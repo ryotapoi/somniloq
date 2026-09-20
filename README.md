@@ -32,6 +32,9 @@ somniloq sessions
 # Sessions from the last 24 hours
 somniloq sessions --since 24h
 
+# Sessions saved or updated in the last 24 hours
+somniloq sessions --imported-since 24h
+
 # Search message bodies
 somniloq search --since 7d "auth bug"
 
@@ -95,6 +98,7 @@ Run `backfill` once after upgrading to v0.4 before importing. When there are ses
 ```bash
 somniloq sessions                        # all sessions
 somniloq sessions --since 24h            # last 24 hours
+somniloq sessions --imported-since 24h   # sessions saved or updated in the last 24 hours
 somniloq sessions --since 7d             # last 7 days
 somniloq sessions --since 2026-03-28     # after a date (local time)
 somniloq sessions --until 2026-03-28     # before a date (local time)
@@ -110,6 +114,8 @@ Output is TSV: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, 
 `logical_day` is derived at query time from `ended_at` (or `started_at` when `ended_at` is empty), using the local `dayBoundary`. Sessions are not split across days.
 
 Sessions with an unknown timestamp remain visible without a time filter, but do not match `--since` or `--until`. When both timestamps are unknown, the TSV time range and Markdown Started value are empty.
+
+`sessions --imported-since <time>` filters by the inclusive `imported_at` lower bound. It accepts the same relative, local-date, and minute-precision forms as `--since`, but a date starts at local midnight and ignores `--day-boundary`. It combines with `--since`, `--until`, and `--project` using AND. `imported_at` is the UTC, whole-second start time of the import pass that last saved the session; it is not a message-change timestamp, commit time, or exactly-once consumption watermark. Pass the output `source` and `session_id` to `somniloq show --source <source> <session-id>` to read the session.
 
 When `projectAliases` matches a repo path or basename, project output uses only the canonical name.
 

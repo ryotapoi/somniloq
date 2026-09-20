@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"strconv"
 	"strings"
 	"testing"
@@ -178,6 +179,89 @@ func TestSessionsCmd_TimeFilterBoundaryWithSecondsPrecisionStartedAt(t *testing.
 	})
 }
 
+func TestSessionsCmd_ImportedSinceFiltersUnknownStartedAt(t *testing.T) {
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceCursorAgent, SessionID: "unknown-start"}, "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
+	}
+
+	var out, errOut bytes.Buffer
+	code, err := sessionsCmd([]string{"--imported-since", "2026-03-28T15:00"}, staticDB(db), config{}, &out, &errOut)
+	if err != nil || code != 0 {
+		t.Fatalf("sessionsCmd = %d, %v (stderr: %q)", code, err, errOut.String())
+	}
+	if !strings.HasPrefix(out.String(), "unknown-start\t") || !strings.HasSuffix(out.String(), "\tcursor_agent\n") {
+		t.Fatalf("output = %q, want source/session pair for the unknown-started session", out.String())
+	}
+}
+
+func TestSessionsCmd_ImportedSinceJSONPreservesSourceAndSessionID(t *testing.T) {
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceCursorAgent, SessionID: "unknown-start"}, "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
+	}
+
+	var out, errOut bytes.Buffer
+	code, err := sessionsCmd([]string{"--imported-since", "2026-03-28T15:00", "--format", "json"}, staticDB(db), config{}, &out, &errOut)
+	if err != nil || code != 0 {
+		t.Fatalf("sessionsCmd = %d, %v (stderr: %q)", code, err, errOut.String())
+	}
+	var rows []sessionJSON
+	if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
+		t.Fatalf("JSON output: %v", err)
+	}
+	if len(rows) != 1 || rows[0].Source != string(core.SourceCursorAgent) || rows[0].SessionID != "unknown-start" {
+		t.Fatalf("JSON rows = %+v, want cursor_agent/unknown-start", rows)
+	}
+}
+
+func TestSessionsCmdAt_RelativeFiltersShareSubsecondNow(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.UTC
+	defer func() { time.Local = oldLocal }()
+
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	for _, session := range []struct {
+		id, startedAt, importedAt string
+	}{
+		{"included", "2026-03-29T11:59:00.600Z", "2026-03-29T12:00:01Z"},
+		{"before-since", "2026-03-29T11:59:00.499Z", "2026-03-29T12:00:01Z"},
+		{"at-until", "2026-03-29T12:00:00.500Z", "2026-03-29T12:00:01Z"},
+		{"before-imported-since", "2026-03-29T11:59:00.600Z", "2026-03-29T12:00:00Z"},
+	} {
+		if err := db.UpsertSession(core.SessionMeta{
+			Source:    core.SourceClaudeCode,
+			SessionID: session.id,
+			StartedAt: session.startedAt,
+		}, session.importedAt); err != nil {
+			t.Fatalf("UpsertSession(%s): %v", session.id, err)
+		}
+	}
+
+	var out, errOut bytes.Buffer
+	now := time.Date(2026, 3, 29, 12, 0, 0, 500_000_000, time.UTC)
+	code, err := sessionsCmdAt(now, []string{"--since", "1m", "--until", "0m", "--imported-since", "0m"}, staticDB(db), config{}, &out, &errOut)
+	if err != nil || code != 0 {
+		t.Fatalf("sessionsCmdAt = %d, %v (stderr: %q)", code, err, errOut.String())
+	}
+	if got, want := out.String(), "included\t2026-03-29 11:59 ~\t2026-03-29\t\t\t0\t0\t0\t\tclaude_code\n"; got != want {
+		t.Errorf("output = %q, want %q", got, want)
+	}
+}
+
 func newSessionSkipHintsDB(t *testing.T) *core.DB {
 	t.Helper()
 	db, err := core.OpenDB(":memory:")
@@ -281,5 +365,20 @@ func TestSessionsCmd_InvalidDayBoundaryFailsBeforeOpeningDB(t *testing.T) {
 	}
 	if err == nil || !strings.Contains(err.Error(), "invalid dayBoundary") {
 		t.Errorf("err = %v, want invalid dayBoundary", err)
+	}
+}
+
+func TestSessionsCmd_InvalidImportedSinceFailsBeforeOpeningDB(t *testing.T) {
+	openDB := func() (*core.DB, error) {
+		t.Fatal("openDB must not be called for invalid imported-since")
+		return nil, nil
+	}
+
+	for _, args := range [][]string{{"--imported-since", ""}, {"--imported-since", "not-a-time"}} {
+		var out, errOut bytes.Buffer
+		code, err := sessionsCmd(args, openDB, config{}, &out, &errOut)
+		if code != 1 || err == nil || out.Len() != 0 {
+			t.Errorf("sessionsCmd(%v) = (%d, %v, stdout %q), want validation error before DB open", args, code, err, out.String())
+		}
 	}
 }

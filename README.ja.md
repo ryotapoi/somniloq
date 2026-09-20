@@ -30,6 +30,9 @@ somniloq sessions
 # 直近24時間のセッション
 somniloq sessions --since 24h
 
+# 直近24時間に保存更新されたセッション
+somniloq sessions --imported-since 24h
+
 # メッセージ本文を検索
 somniloq search --since 7d "auth バグ"
 
@@ -93,6 +96,7 @@ v0.4 へアップグレードしたら、取り込み前に `backfill` を 1 回
 ```bash
 somniloq sessions                        # 全セッション
 somniloq sessions --since 24h            # 直近24時間
+somniloq sessions --imported-since 24h   # 直近24時間に保存更新されたセッション
 somniloq sessions --since 7d             # 直近7日間
 somniloq sessions --since 2026-03-28     # 特定日以降（ローカルタイム）
 somniloq sessions --until 2026-03-28     # 特定日まで（ローカルタイム）
@@ -108,6 +112,8 @@ somniloq sessions --format json          # TSV の代わりに JSON 配列
 `logical_day` はクエリ時に `ended_at`（無ければ `started_at`）から計算する。ローカルタイムの `dayBoundary` を基準にした日付で、セッションを途中で分割しない。
 
 timestamp が未知のセッションは時刻 filter なしでは表示するが、`--since` / `--until` には一致しない。両方の timestamp が未知なら TSV の時刻範囲と Markdown の Started は空欄。
+
+`sessions --imported-since <time>` は `imported_at` の包含下限で絞り込む。`--since` と同じ相対時刻・ローカル日付・分精度日時を受け付けるが、date-only はローカル時刻の 00:00 とし `--day-boundary` を適用しない。`--since` / `--until` / `--project` とは AND で結合する。`imported_at` は session を最後に保存した import pass の開始時刻（UTC・秒精度）であり、本文差分時刻・commit 完了時刻・exactly-once の消費 watermark ではない。出力の `source` と `session_id` を `somniloq show --source <source> <session-id>` に渡すと会話全体を読める。
 
 `projectAliases` に一致する repo path / basename は canonical 名のみで表示する。
 

@@ -26,6 +26,8 @@ JSON fields:
 
 Notes:
   Date-only --since/--until values use --day-boundary or config dayBoundary. Relative times and datetimes do not.
+  --imported-since filters sessions imported at or after a time; date-only values start at local midnight and ignore --day-boundary.
+  Use the resulting source and session_id with somniloq show --source <source> <session-id> to read the session.
   --project expands exact projectAliases matches, then filters repo_path by substring.
 
 Examples:
@@ -36,11 +38,21 @@ Examples:
 // sessionsCmd runs the sessions subcommand without calling os.Exit, so it can
 // be tested directly.
 func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
+	return sessionsCmdAt(time.Now().UTC(), args, openDB, cfg, out, errOut)
+}
+
+// sessionsCmdAt runs the sessions subcommand using the supplied current time.
+func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs, flags := newSessionsFlagSet()
 	setUsage(fs, "List sessions", "somniloq sessions [flags]", sessionsHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
+	fs.Visit(func(f *flag.Flag) {
+		if f.Name == "imported-since" {
+			flags.importedSinceSet = true
+		}
+	})
 
 	if err := validateFormat(*flags.format, "tsv", "json"); err != nil {
 		return 1, err
@@ -54,9 +66,16 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 		return 1, err
 	}
 
-	filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, boundary)
+	filter, err := buildSessionFilterAt(now, *flags.since, *flags.until, *flags.project, cfg, boundary)
 	if err != nil {
 		return 1, err
+	}
+	if flags.importedSinceSet {
+		importedSince, err := resolveImportedSince(*flags.importedSince, now, time.Local)
+		if err != nil {
+			return 1, err
+		}
+		filter.ImportedSince = importedSince
 	}
 
 	db, err := openDB()
@@ -98,20 +117,23 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 }
 
 type sessionsFlags struct {
-	since, until, dayBoundary, project, format *string
-	short                                      *bool
+	since, until, importedSince, dayBoundary, project, format *string
+	short                                                     *bool
+	importedSinceSet                                          bool
 }
 
 func newSessionsFlagSet() (*flag.FlagSet, sessionsFlags) {
 	fs := flag.NewFlagSet("sessions", flag.ContinueOnError)
-	return fs, sessionsFlags{
-		since:       fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
-		until:       fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
-		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters and display (HH:MM, overrides config dayBoundary)"),
-		project:     fs.String("project", "", "filter by repo path (substring match)"),
-		short:       fs.Bool("short", false, "shorten unaliased projects to repo basename"),
-		format:      fs.String("format", "tsv", "output format (tsv, json)"),
+	flags := sessionsFlags{
+		since:         fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		until:         fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		importedSince: fs.String("imported-since", "", "filter by import time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates start at local midnight"),
+		dayBoundary:   fs.String("day-boundary", "", "logical day boundary for date filters and display (HH:MM, overrides config dayBoundary)"),
+		project:       fs.String("project", "", "filter by repo path (substring match)"),
+		short:         fs.Bool("short", false, "shorten unaliased projects to repo basename"),
+		format:        fs.String("format", "tsv", "output format (tsv, json)"),
 	}
+	return fs, flags
 }
 
 type sessionUserTurnSummary struct {

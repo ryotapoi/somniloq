@@ -77,6 +77,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 
 - セッション一覧を表示
 - `--since`/`--until` で時刻フィルタ（相対: `24h`, `7d`、絶対: `2026-03-28`, `2026-03-28T15:00`）。絶対日付はローカルタイム。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と絶対日時は `dayBoundary` の影響を受けない。出力のタイムスタンプもローカルタイム（`2006-01-02 15:04` 形式）
+- `--imported-since` は session の `imported_at` を基準にした包含下限。相対時刻、ローカル日付、分精度日時は `--since` と同じ形式で指定できるが、date-only はローカル時刻の 00:00 とし `dayBoundary` を適用しない。`--since` / `--until` / `--project` と併用した場合は AND。`imported_at` は session を保存更新した import pass の開始時刻（UTC・秒精度）であり、本文差分時刻・commit 完了時刻・無重複消費を保証する watermark ではない。出力された `source` と `session_id` は `show --source` に渡して会話全体を再参照できる
 - 時刻は `started_at ~ ended_at` の範囲形式で表示。ended_at がない場合は `started_at ~`。両方未知なら空欄
 - `--since` または `--until` を指定した時は、NULL / 空の started_at を一致させない。指定しない一覧では未知 timestamp も表示する
 - `--project` は空でない `repo_path` への substring マッチ（LIKE メタ文字の扱いは Known limitations 参照）。値が config の alias グループに完全一致する場合はグループ全名に展開する（「設定ファイル」節参照）。NULL / 空の repository は条件に一致させない
@@ -203,6 +204,7 @@ somniloq backfill                        # 既存セッションの補正（DELE
 somniloq backfill --yes                  # 確認なしで補正
 somniloq sessions                        # セッション一覧
 somniloq sessions --since 24h            # 直近24時間
+somniloq sessions --imported-since 24h   # 直近24時間に保存更新されたセッション
 somniloq sessions --since 2026-03-28     # 3/28 以降
 somniloq sessions --until 2026-03-28     # 3/28 終わりまで
 somniloq sessions --since 2026-03-28 --day-boundary 04:00  # 3/28 04:00 以降

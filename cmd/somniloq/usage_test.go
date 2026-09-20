@@ -98,7 +98,7 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return sessionsCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "logical_day", "non_command_user_turn_count", "firstNonCommandUserLine"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "logical_day", "non_command_user_turn_count", "firstNonCommandUserLine", "-imported-since", "show --source <source> <session-id>"},
 		},
 		{
 			name: "show",

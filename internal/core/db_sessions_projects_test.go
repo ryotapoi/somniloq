@@ -188,6 +188,29 @@ func TestListSessions_SinceFilter_MillisecondTimestamp(t *testing.T) {
 	}
 }
 
+func TestListSessions_ImportedSinceFilter(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "before", StartedAt: "2026-03-01T10:00:00Z", RepoPath: "/project/old"}, "2026-03-28T14:59:59Z"))
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "same", StartedAt: "2026-03-01T10:00:00Z", RepoPath: "/project/current"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{Source: SourceCursorAgent, SessionID: "same"}, "2026-03-28T15:00:01Z"))
+
+	rows, err := db.ListSessions(SessionFilter{ImportedSince: "2026-03-28T15:00:00.000Z", Projects: []string{"current"}})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(rows) != 1 || rows[0].SessionID != "same" || rows[0].Source != SourceClaudeCode {
+		t.Fatalf("filtered rows = %+v, want only claude_code/same", rows)
+	}
+
+	rows, err = db.ListSessions(SessionFilter{ImportedSince: "2026-03-28T15:00:00.000Z"})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	if len(rows) != 2 {
+		t.Fatalf("filtered rows = %+v, want same boundary and later rows", rows)
+	}
+}
+
 func TestListSessions_ProjectFilter(t *testing.T) {
 	db := testDB(t)
 

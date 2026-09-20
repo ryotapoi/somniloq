@@ -71,6 +71,30 @@ func TestResolveTimeFlag_DayBoundaryAppliesOnlyToDateOnly(t *testing.T) {
 	}
 }
 
+func TestResolveImportedSince(t *testing.T) {
+	now := time.Date(2026, 3, 29, 12, 0, 0, 500_000_000, time.UTC)
+	jst := time.FixedZone("JST", 9*60*60)
+
+	tests := []struct {
+		name, value, want string
+	}{
+		{"relative rounds up to stored second", "0m", "2026-03-29T12:00:01.000Z"},
+		{"date starts at local midnight", "2026-03-28", "2026-03-27T15:00:00.000Z"},
+		{"datetime ignores day boundary", "2026-03-28T15:00", "2026-03-28T06:00:00.000Z"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := resolveImportedSince(tt.value, now, jst)
+			if err != nil {
+				t.Fatalf("resolveImportedSince(%q): %v", tt.value, err)
+			}
+			if got != tt.want {
+				t.Errorf("resolveImportedSince(%q) = %q, want %q", tt.value, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSessionLogicalDay_UsesEndedAtThenStartedAt(t *testing.T) {
 	jst := time.FixedZone("JST", 9*60*60)
 	boundary := dayBoundary{offset: 4 * time.Hour}

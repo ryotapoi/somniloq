@@ -23,8 +23,9 @@ type SessionRow struct {
 }
 
 type SessionFilter struct {
-	Since string // RFC3339 UTC string. Empty = no filter.
-	Until string // RFC3339 UTC string. Empty = no filter. Exclusive upper bound.
+	Since         string // RFC3339 UTC string. Empty = no filter.
+	Until         string // RFC3339 UTC string. Empty = no filter. Exclusive upper bound.
+	ImportedSince string // RFC3339 UTC string. Empty = no filter. Inclusive lower bound.
 	// Projects holds repo_path substring patterns; a row matches when ANY
 	// pattern matches (project aliases expand one --project value into the
 	// whole alias group). Empty = no filter.
@@ -154,6 +155,10 @@ func projectsCondition(projects []string) (condition string, args []any) {
 // 0013).
 func sessionFilterConditions(filter SessionFilter, column timestampColumn) (conditions []string, args []any) {
 	conditions, args = timeFilterConditions(filter, column)
+	if filter.ImportedSince != "" {
+		conditions = append(conditions, "s.imported_at >= ?")
+		args = append(args, filter.ImportedSince)
+	}
 	if cond, condArgs := projectsCondition(filter.Projects); cond != "" {
 		conditions = append(conditions, cond)
 		args = append(args, condArgs...)
