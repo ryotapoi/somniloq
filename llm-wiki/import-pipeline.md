@@ -13,6 +13,13 @@ sources:
   - internal/ingest/claudecode/jsonl.go
   - internal/ingest/codex/adapter.go
   - internal/ingest/codex/jsonl.go
+  - internal/ingest/cursoragent/adapter.go
+  - internal/ingest/cursoragent/jsonl.go
+  - internal/ingest/cursoragent/adapter_test.go
+  - internal/ingest/cursoragent/jsonl_test.go
+  - internal/core/cursor_agent_import_test.go
+  - internal/ingest/testdata/cursor-agent/README.md
+  - internal/ingest/testdata/cursor-agent/cursor-agent.jsonl
 ---
 
 # Import pipeline
@@ -34,6 +41,7 @@ JSONL 取り込みを変えるときの読む順序。仕様そのものは `doc
 - Claude Code: `internal/ingest/claudecode/adapter.go` が `custom-title` / `agent-name` を buffer し、body record があるファイルだけ `Flush` で反映する。拡張 interface は `claudecode.SessionMetaWriter`。
 - Codex: `internal/ingest/codex/adapter.go` の `Begin` が offset 前の prefix から `session_meta` を復元する。差分取り込みで追記分だけ読むと meta を失うため。
 - Codex の message UUID は `internal/ingest/codex/jsonl.go` の path + line number。line number は blank line も数える。
+- Cursor Agent: `internal/ingest/cursoragent/adapter.go` が transcript path から session を導出し、offset 前の改行数を `Begin` で復元する。未知 metadata、path と物理行に基づく identity、再処理時の重複・順序は `docs/specs/jsonl-schema.md` の Cursor Agent 節を先に確認し、`internal/ingest/cursoragent/jsonl.go` を読む。
 - `LineUnparsed` は壊れた JSON / malformed payload の計上用。adapter は物理行番号付きの原因を添え、`ProcessResult` と `ImportResult` は import run ごとに encounter order の先頭 5 件だけを保持する。CLI は既存の非致命 import error と同じ stderr へ出すが、parse/normalize 診断だけでは exit code を変えない。未知 type や意図的に無視する record は `LineIgnored`。
 
 ## 変更時のテスト入口
@@ -41,4 +49,6 @@ JSONL 取り込みを変えるときの読む順序。仕様そのものは `doc
 - source 共通の import 制御: `internal/core/import_test.go`
 - Claude Code JSONL 形式: `internal/ingest/claudecode/jsonl_test.go`
 - Codex JSONL 形式・差分 meta 復元: `internal/ingest/codex/jsonl_test.go`, `internal/core/codex_import_test.go`
+- Cursor Agent の path / parser: `internal/ingest/cursoragent/adapter_test.go`, `internal/ingest/cursoragent/jsonl_test.go`
+- Cursor Agent の fixture、差分取り込み・再処理: `internal/ingest/testdata/cursor-agent/README.md`, `internal/ingest/testdata/cursor-agent/cursor-agent.jsonl`, `internal/core/cursor_agent_import_test.go`
 - CLI の確認プロンプトや summary: `cmd/somniloq/import_test.go`, `cmd/somniloq/import_source_test.go`

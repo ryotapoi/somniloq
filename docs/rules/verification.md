@@ -26,7 +26,7 @@ mdhop diagnose --vault llm-wiki --fields basename_conflicts,asset_basename_confl
 |---|---|
 | `.go` ファイル | `goimports` で整形と import 整理を行い、共通 gate の format check が空であることを確認する。 |
 | CLI のフラグ、入出力、表示形式、確認プロンプト、終了コード | build した `bin/somniloq` を一時 DB と小さい JSONL または対象 testdata で実行し、成功系・失敗系の stdout、stderr、終了コードを確認する。 |
-| JSONL のパース、フィルタ、正規化、import の保存境界 | 影響する Claude Code / Codex の入力例で取り込みを確認する。既存 DB と新規取り込みの意味がずれないか、`backfill` や `--full` による再取り込みの案内が必要かも確認する。 |
+| JSONL のパース、フィルタ、正規化、import の保存境界 | 影響する Claude Code / Codex / Cursor Agent の入力例で取り込みを確認する。Cursor Agent を含む共通 ingest の変更では、[JSONL schema](../specs/jsonl-schema.md) の Cursor Agent 節に従い、未知 timestamp を補完しないこと、path 由来の session / message identity、物理行を保持する差分取り込み・再処理で重複や順序ずれを生まないことも確認する。既存 DB と新規取り込みの意味がずれないか、`backfill` や `--full` による再取り込みの案内が必要かも確認する。 |
 | SQLite schema、migration、`backfill`、DELETE を伴う処理 | 旧形式 DB と空 DB、再実行性、DELETE 対象あり・なしを確認する。確認を伴う処理では TTY での承認・拒否、`--yes`、非対話時の拒否について、データ、stdout、stderr、終了コードを確認する。 |
 
 ## 制約と例外
