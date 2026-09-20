@@ -9,6 +9,112 @@ import (
 	"testing"
 )
 
+func TestCountLineFeeds_LimitAndUnterminatedInput(t *testing.T) {
+	tests := []struct {
+		name          string
+		input         string
+		limit         int64
+		wantLines     int
+		wantRemaining string
+	}{
+		{
+			name:          "negative limit",
+			input:         "a\nb\n",
+			limit:         -1,
+			wantLines:     0,
+			wantRemaining: "a\nb\n",
+		},
+		{
+			name:          "zero limit",
+			input:         "a\nb\n",
+			limit:         0,
+			wantLines:     0,
+			wantRemaining: "a\nb\n",
+		},
+		{
+			name:          "unterminated prefix",
+			input:         "a\nb\n",
+			limit:         3,
+			wantLines:     1,
+			wantRemaining: "\n",
+		},
+		{
+			name:          "newline at limit",
+			input:         "a\nb\n",
+			limit:         4,
+			wantLines:     2,
+			wantRemaining: "",
+		},
+		{
+			name:          "unterminated input at EOF",
+			input:         "a\nb",
+			limit:         int64(len("a\nb") + 1),
+			wantLines:     1,
+			wantRemaining: "",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			reader := strings.NewReader(tt.input)
+			gotLines, err := CountLineFeeds(reader, tt.limit)
+			if err != nil {
+				t.Fatalf("CountLineFeeds() error = %v, want nil", err)
+			}
+			if gotLines != tt.wantLines {
+				t.Errorf("CountLineFeeds() = %d, want %d", gotLines, tt.wantLines)
+			}
+
+			remaining, err := io.ReadAll(reader)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(remaining) != tt.wantRemaining {
+				t.Errorf("remaining input = %q, want %q", remaining, tt.wantRemaining)
+			}
+		})
+	}
+}
+
+func TestCountLineFeeds_MultipleBuffers(t *testing.T) {
+	input := strings.Repeat("a", readBufferSize-1) + "\n\n" + strings.Repeat("b", readBufferSize) + "\ntrailing"
+
+	gotLines, err := CountLineFeeds(strings.NewReader(input), int64(len(input)))
+	if err != nil {
+		t.Fatalf("CountLineFeeds() error = %v, want nil", err)
+	}
+	if gotLines != 3 {
+		t.Errorf("CountLineFeeds() = %d, want 3", gotLines)
+	}
+}
+
+func TestCountLineFeeds_ReaderErrorAfterBytes(t *testing.T) {
+	wantErr := errors.New("read failed")
+	reader := &bytesAndErrorReader{data: []byte("a\nb\nc"), err: wantErr}
+
+	gotLines, err := CountLineFeeds(reader, int64(len(reader.data)+1))
+	if gotLines != 2 {
+		t.Errorf("CountLineFeeds() = %d, want 2", gotLines)
+	}
+	if !errors.Is(err, wantErr) {
+		t.Errorf("CountLineFeeds() error = %v, want wrapping %v", err, wantErr)
+	}
+}
+
+type bytesAndErrorReader struct {
+	data []byte
+	err  error
+	done bool
+}
+
+func (r *bytesAndErrorReader) Read(p []byte) (int, error) {
+	if r.done {
+		return 0, r.err
+	}
+	r.done = true
+	return copy(p, r.data), r.err
+}
+
 func TestProcessJSONL_NoBodyDoesNotAdvanceOffsetOrCommit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "session.jsonl")
 	if err := os.WriteFile(path, []byte("metadata\\n"), 0o600); err != nil {
