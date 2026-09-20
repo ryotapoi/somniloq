@@ -5,9 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
@@ -22,39 +20,9 @@ func NewAdapter(resolveRepoPath ingest.RepoResolver) Adapter {
 }
 
 func (a Adapter) ScanFiles(rootDir string) ([]string, []error) {
-	var files []string
-	var errs []error
-	walkErr := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if path == rootDir {
-				return err
-			}
-			errs = append(errs, fmt.Errorf("scan %s: %w", path, err))
-			return nil
-		}
-		if d.IsDir() {
-			return nil
-		}
-		name := d.Name()
-		if !strings.HasSuffix(name, ".jsonl") {
-			return nil
-		}
-		files = append(files, path)
-		return nil
+	return ingest.ScanFilesRecursive(rootDir, func(path string) bool {
+		return strings.HasSuffix(path, ".jsonl")
 	})
-	if walkErr != nil {
-		// A missing rootDir means the source is unused.
-		if errors.Is(walkErr, os.ErrNotExist) {
-			return nil, nil
-		}
-		// Root scan failures are fatal for that source, matching the Claude
-		// Code adapter. Descendant failures stay non-fatal via errs above.
-		return nil, []error{fmt.Errorf("scan %s: %w", rootDir, walkErr)}
-	}
-	if len(files) == 0 && len(errs) == 0 {
-		return nil, nil
-	}
-	return files, errs
 }
 
 // fileHandler holds the per-file state of one ProcessFile pass. Line numbers

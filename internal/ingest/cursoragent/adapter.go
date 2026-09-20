@@ -2,9 +2,7 @@ package cursoragent
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,28 +15,9 @@ type Adapter struct{}
 func NewAdapter() Adapter { return Adapter{} }
 
 func (Adapter) ScanFiles(rootDir string) ([]string, []error) {
-	var files []string
-	var errs []error
-	walkErr := filepath.WalkDir(rootDir, func(path string, d fs.DirEntry, err error) error {
-		if err != nil {
-			if path == rootDir {
-				return err
-			}
-			errs = append(errs, fmt.Errorf("scan %s: %w", path, err))
-			return nil
-		}
-		if !d.IsDir() && acceptedPath(rootDir, path) {
-			files = append(files, path)
-		}
-		return nil
+	return ingest.ScanFilesRecursive(rootDir, func(path string) bool {
+		return acceptedPath(rootDir, path)
 	})
-	if walkErr != nil {
-		if errors.Is(walkErr, os.ErrNotExist) {
-			return nil, nil
-		}
-		return nil, []error{fmt.Errorf("scan %s: %w", rootDir, walkErr)}
-	}
-	return files, errs
 }
 
 func acceptedPath(rootDir, path string) bool {
