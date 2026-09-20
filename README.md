@@ -171,13 +171,14 @@ somniloq search "auth bug"                          # search all message bodies
 somniloq search --since 7d "auth"                   # messages written in the last 7 days
 somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # messages since 04:00 on that local day
 somniloq search --since 7d --project myapp "auth"   # narrowed by project
+somniloq search --format json "auth bug"            # JSON search results
 ```
 
-Output is TSV: `session_id`, `turn`, `time`, `project`, `snippet`, `source` (the internal identifier: `claude_code`, `codex`, or `cursor_agent`), newest first. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --source <source> --turn <N> <session_id>` or `somniloq outline --source <source> <session_id>`. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
+Default output is TSV: `session_id`, `turn`, `time`, `project`, `snippet`, `source` (the internal identifier: `claude_code`, `codex`, or `cursor_agent`), newest first. `--format json` emits an array with `source`, `sessionId`, `turn`, `timestamp`, `project`, and `snippet`; timestamps and snippets retain their stored/raw values. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --source <source> --turn <N> <session_id>` or `somniloq outline --source <source> <session_id>`. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
 
 ### JSON output
 
-`sessions`, `projects`, `outline` (`--format tsv|json`) and `show` (`--format markdown|json`) support JSON output for scripts. Rules common to all commands:
+`sessions`, `projects`, `outline`, `search` (`--format tsv|json`) and `show` (`--format markdown|json`) support JSON output for scripts. Rules common to all commands:
 
 - Always a JSON array; empty results print `[]`.
 - Timestamps are the stored RFC3339 UTC values, not the local-time display format.

@@ -169,13 +169,14 @@ somniloq search "auth バグ"                          # 全メッセージ本�
 somniloq search --since 7d "auth"                    # 直近 7 日間に書かれたメッセージ
 somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # その日の 04:00 以降
 somniloq search --since 7d --project myapp "auth"    # プロジェクトで絞り込み
+somniloq search --format json "auth バグ"             # JSON で検索結果を出力
 ```
 
-出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、検索結果の `source` とともに `somniloq show --source <source> --turn <N> <session_id>` または `somniloq outline --source <source> <session_id>` に渡して再参照できる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。
+デフォルト出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。`--format json` は `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet` を持つ配列を出力し、timestamp と snippet は保存値・生値のまま。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、検索結果の `source` とともに `somniloq show --source <source> --turn <N> <session_id>` または `somniloq outline --source <source> <session_id>` に渡して再参照できる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。
 
 ### JSON 出力
 
-`sessions` / `projects` / `outline`（`--format tsv|json`）と `show`（`--format markdown|json`）はスクリプト向けの JSON 出力に対応している。全コマンド共通の規則:
+`sessions` / `projects` / `outline` / `search`（`--format tsv|json`）と `show`（`--format markdown|json`）はスクリプト向けの JSON 出力に対応している。全コマンド共通の規則:
 
 - 常に JSON 配列。結果 0 件は `[]`
 - タイムスタンプは保存値（RFC3339 UTC）のまま。ローカルタイム整形は行わない

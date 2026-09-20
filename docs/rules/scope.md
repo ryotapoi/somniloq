@@ -133,7 +133,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 
 ### 検索（search）
 
-- `search <query> [--since] [--until] [--day-boundary] [--project]` で全メッセージ本文を横断検索する
+- `search <query> [--since] [--until] [--day-boundary] [--project] [--format tsv|json]` で全メッセージ本文を横断検索する。デフォルトは `tsv`
 - 実装は LIKE 全走査。FTS5 は日本語だと trigram 必須で索引が本文の 2〜3 倍に膨らみ、3 文字未満のクエリが索引で引けないため、LIKE で困るスケールになるまで見送り（本文 42 MB の DB で実測 0.1 秒前後）
 - マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして素通し（Known limitations 参照）
 - sidechain メッセージは除外（show と同じ扱い）
@@ -142,6 +142,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - `time` はローカルタイム `2006-01-02 15:04` 形式
 - `project` は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` をそのまま
 - snippet はマッチの前後各 40 文字（rune 単位）。前後が切れている場合は `...` を付加。前後の空白は trim し、タブ・改行は空白に置換（TSV 保全）
+- JSON のフィールドは `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet`。`timestamp` は DB 保存値、`snippet` はタブ・改行を置換しない生値（共通仕様は「JSON 出力」節参照）
 - `--since`/`--until` は**メッセージの timestamp 基準**。NULL / 空の timestamp は時刻条件に一致しない。sessions / show のセッション開始基準とは異なる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と絶対日時は `dayBoundary` の影響を受けない
 - `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ、alias 展開含む）
 
@@ -149,7 +150,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 
 機械消費（スクリプト・skill からの利用）向けの構造化出力。判断の経緯は `docs/decisions/0012-json-output-schema.md` 参照。
 
-- 対象コマンド: `sessions` / `projects` / `outline`（`--format tsv|json`、デフォルト `tsv`）、`show`（`--format markdown|json`、デフォルト `markdown`）
+- 対象コマンド: `sessions` / `projects` / `outline` / `search`（`--format tsv|json`、デフォルト `tsv`）、`show`（`--format markdown|json`、デフォルト `markdown`）
 - 常に JSON 配列を出力する。結果 0 件は `[]`（show の単一セッション指定も要素 1 の配列）
 - フィールド名は camelCase
 - タイムスタンプは DB 保存値（RFC3339 UTC）をそのまま出す。ローカルタイム整形は TSV / Markdown 側だけの表示都合とする（タイムゾーン情報を失わないため）
@@ -221,6 +222,7 @@ somniloq outline --source cursor_agent <session-id> # search の source で対�
 somniloq sessions --format json          # セッション一覧を JSON で出力
 somniloq show --format json <session-id> # セッション内容を JSON で出力（outline / projects も --format json 対応）
 somniloq search "auth bug"               # 全メッセージ本文を横断検索
+somniloq search --format json "auth bug" # JSON で検索結果を出力
 somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # 3/28 04:00 以降のメッセージ
 somniloq search --since 7d --project myapp "auth"  # 期間・プロジェクトで絞り込み
 somniloq projects                        # プロジェクト一覧

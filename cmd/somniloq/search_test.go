@@ -29,6 +29,22 @@ func TestSearchCmd_OutputColumns(t *testing.T) {
 	}
 }
 
+func TestSearchCmd_ExplicitTSVMatchesDefault(t *testing.T) {
+	run := func(args []string) string {
+		t.Helper()
+		var out, errOut bytes.Buffer
+		code, err := searchCmd(args, staticDB(newOutlineTestDB(t)), config{}, &out, &errOut)
+		if err != nil || code != 0 {
+			t.Fatalf("searchCmd(%v) = %d, %v (stderr: %q)", args, code, err, errOut.String())
+		}
+		return out.String()
+	}
+
+	if got, want := run([]string{"second"}), run([]string{"--format", "tsv", "second"}); got != want {
+		t.Errorf("explicit TSV = %q, default = %q", want, got)
+	}
+}
+
 func TestSearchCmd_AssistantHitUsesOwningTurn(t *testing.T) {
 	db := newOutlineTestDB(t)
 

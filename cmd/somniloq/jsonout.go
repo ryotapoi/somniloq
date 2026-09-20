@@ -50,6 +50,15 @@ type outlineEntryJSON struct {
 	FirstLine string `json:"firstLine"`
 }
 
+type searchJSON struct {
+	Source    string `json:"source"`
+	SessionID string `json:"sessionId"`
+	Turn      int    `json:"turn"`
+	Timestamp string `json:"timestamp"`
+	Project   string `json:"project"`
+	Snippet   string `json:"snippet"`
+}
+
 type messageJSON struct {
 	Role      string `json:"role"`
 	Content   string `json:"content"`

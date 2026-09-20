@@ -200,6 +200,103 @@ func TestShowCmd_FormatJSON_EmptyBulk(t *testing.T) {
 	}
 }
 
+func TestSearchCmd_FormatJSON(t *testing.T) {
+	db := newOutlineTestDB(t)
+
+	var out, errOut bytes.Buffer
+	code, err := searchCmd([]string{"--format", "json", "second"}, staticDB(db), config{}, &out, &errOut)
+	if err != nil {
+		t.Fatalf("searchCmd: %v", err)
+	}
+	if code != 0 {
+		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
+	}
+
+	got := decodeJSONArray(t, out.Bytes())
+	if len(got) != 1 {
+		t.Fatalf("entries = %d, want 1: %v", len(got), got)
+	}
+	want := map[string]any{
+		"source":    "claude_code",
+		"sessionId": "sess-1",
+		"turn":      float64(2),
+		"timestamp": "2026-03-28T15:03:00Z",
+		"project":   "/Users/test/proj",
+		"snippet":   "second\tquestion after blank lines",
+	}
+	for k, v := range want {
+		if got[0][k] != v {
+			t.Errorf("%s = %#v, want %#v", k, got[0][k], v)
+		}
+	}
+	if len(got[0]) != len(want) {
+		t.Errorf("fields = %d, want %d: %v", len(got[0]), len(want), got[0])
+	}
+}
+
+func TestSearchCmd_FormatJSON_Empty(t *testing.T) {
+	db := newOutlineTestDB(t)
+
+	var out, errOut bytes.Buffer
+	code, err := searchCmd([]string{"--format", "json", "no-such-text"}, staticDB(db), config{}, &out, &errOut)
+	if err != nil || code != 0 {
+		t.Fatalf("searchCmd = %d, %v (stderr: %q)", code, err, errOut.String())
+	}
+	if strings.TrimSpace(out.String()) != "[]" {
+		t.Errorf("output = %q, want []", out.String())
+	}
+}
+
+func TestSearchCmd_FormatJSON_PreservesOrderSourceTurnsAndUnknownTimestamp(t *testing.T) {
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+
+	for _, session := range []core.SessionMeta{
+		{Source: core.SourceClaudeCode, SessionID: "shared", RepoPath: "/Users/test/claude", StartedAt: "2026-03-28T10:00:00Z"},
+		{Source: core.SourceCursorAgent, SessionID: "shared", RepoPath: "/Users/test/cursor"},
+	} {
+		if err := db.UpsertSession(session, "2026-03-28T12:00:00Z"); err != nil {
+			t.Fatalf("UpsertSession(%s): %v", session.Source, err)
+		}
+	}
+	for _, message := range []core.NormalizedMessage{
+		{Source: core.SourceClaudeCode, UUID: "claude-1", SessionID: "shared", Role: "user", Content: "needle first", Timestamp: "2026-03-28T10:00:00Z"},
+		{Source: core.SourceClaudeCode, UUID: "claude-2", SessionID: "shared", Role: "user", Content: "needle second", Timestamp: "2026-03-28T11:00:00Z"},
+		{Source: core.SourceCursorAgent, UUID: "cursor-1", SessionID: "shared", Role: "user", Content: "needle unknown time", Timestamp: ""},
+	} {
+		if err := db.InsertMessage(message); err != nil {
+			t.Fatalf("InsertMessage(%s): %v", message.UUID, err)
+		}
+	}
+
+	var out, errOut bytes.Buffer
+	code, err := searchCmd([]string{"--format", "json", "needle"}, staticDB(db), config{}, &out, &errOut)
+	if err != nil || code != 0 {
+		t.Fatalf("searchCmd = %d, %v (stderr: %q)", code, err, errOut.String())
+	}
+
+	got := decodeJSONArray(t, out.Bytes())
+	want := []struct {
+		source, timestamp string
+		turn              float64
+	}{
+		{"claude_code", "2026-03-28T11:00:00Z", 2},
+		{"claude_code", "2026-03-28T10:00:00Z", 1},
+		{"cursor_agent", "", 1},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("entries = %d, want %d: %v", len(got), len(want), got)
+	}
+	for i, entry := range want {
+		if got[i]["source"] != entry.source || got[i]["sessionId"] != "shared" || got[i]["timestamp"] != entry.timestamp || got[i]["turn"] != entry.turn {
+			t.Errorf("entry %d = %v, want source=%q sessionId=shared timestamp=%q turn=%v", i, got[i], entry.source, entry.timestamp, entry.turn)
+		}
+	}
+}
+
 func TestFormatFlag_Unknown(t *testing.T) {
 	openDB := func() (*core.DB, error) {
 		t.Fatal("openDB must not be called for an unknown format")
@@ -225,6 +322,10 @@ func TestFormatFlag_Unknown(t *testing.T) {
 		{"show", func() (int, error) {
 			var out, errOut bytes.Buffer
 			return showCmd([]string{"--format", "xml", "sess-1"}, openDB, config{}, &out, &errOut)
+		}},
+		{"search", func() (int, error) {
+			var out, errOut bytes.Buffer
+			return searchCmd([]string{"--format", "xml", "query"}, openDB, config{}, &out, &errOut)
 		}},
 	}
 	for _, tt := range tests {

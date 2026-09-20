@@ -11,7 +11,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const searchUsageLine = "somniloq search [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] <query>"
+const searchUsageLine = "somniloq search [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--format <fmt>] <query>"
 
 const searchHelpDetails = `Columns (TSV, in order):
   session_id: source-local session identifier containing the matching message.
@@ -20,6 +20,9 @@ const searchHelpDetails = `Columns (TSV, in order):
   project: canonical alias name when configured, otherwise repo_path.
   snippet: first match with about 40 runes of context on each side; tabs/newlines flattened for TSV.
   source: internal source identifier: claude_code, codex, or cursor_agent.
+
+JSON fields:
+  source, sessionId, turn, timestamp, project, snippet
 
 Notes:
   Search scans non-sidechain message bodies using SQLite LIKE.
@@ -31,6 +34,7 @@ Notes:
 Examples:
   somniloq search "auth bug"
   somniloq search --since 7d --project somniloq "migration"
+  somniloq search --format json "auth bug"
   somniloq show --turn 42 <session-id>`
 
 // snippetContext is the number of runes kept on each side of the match.
@@ -40,7 +44,7 @@ const snippetContext = 40
 // tested directly.
 func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs, flags := newSearchFlagSet()
-	setUsage(fs, "Search message content across sessions and print TSV with session_id, turn, time, project, snippet, source", searchUsageLine, searchHelpDetails)
+	setUsage(fs, "Search message content across sessions", searchUsageLine, searchHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
@@ -56,6 +60,9 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	if query == "" {
 		fmt.Fprintln(errOut, searchUsage)
 		return 1, nil
+	}
+	if err := validateFormat(*flags.format, "tsv", "json"); err != nil {
+		return 1, err
 	}
 
 	boundary, err := resolveDayBoundary(*flags.dayBoundary, cfg)
@@ -79,6 +86,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	}
 
 	turnCache := map[searchSessionKey]map[string]int{}
+	entries := make([]searchJSON, 0, len(rows))
 	for _, r := range rows {
 		turns, err := searchTurnsByUUID(db, turnCache, r.Source, r.SessionID)
 		if err != nil {
@@ -88,12 +96,30 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 		if !ok {
 			return 1, fmt.Errorf("turn not found for search hit %s/%s/%s", r.Source, r.SessionID, r.UUID)
 		}
+		project := resolveProjectDisplayName(r.RepoPath, false, cfg)
+		snippet := searchSnippet(r.Content, query)
+		if *flags.format == "json" {
+			entries = append(entries, searchJSON{
+				Source:    string(r.Source),
+				SessionID: r.SessionID,
+				Turn:      turn,
+				Timestamp: r.Timestamp,
+				Project:   project,
+				Snippet:   snippet,
+			})
+			continue
+		}
 		if _, err := fmt.Fprintf(out, "%s\t%d\t%s\t%s\t%s\t%s\n",
 			r.SessionID,
 			turn,
 			sanitizeTSV(formatLocalTime(r.Timestamp, time.Local)),
-			sanitizeTSV(resolveProjectDisplayName(r.RepoPath, false, cfg)),
-			sanitizeTSV(searchSnippet(r.Content, query)), r.Source); err != nil {
+			sanitizeTSV(project),
+			sanitizeTSV(snippet), r.Source); err != nil {
+			return 1, err
+		}
+	}
+	if *flags.format == "json" {
+		if err := writeJSON(out, entries); err != nil {
 			return 1, err
 		}
 	}
@@ -101,7 +127,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 }
 
 type searchFlags struct {
-	since, until, dayBoundary, project *string
+	since, until, dayBoundary, project, format *string
 }
 
 func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
@@ -111,6 +137,7 @@ func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 		until:       fs.String("until", "", "filter messages before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
 		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)"),
 		project:     fs.String("project", "", "filter by repo path (substring match)"),
+		format:      fs.String("format", "tsv", "output format (tsv, json)"),
 	}
 }
 
