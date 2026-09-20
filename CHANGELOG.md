@@ -2,6 +2,12 @@
 
 English | [日本語](CHANGELOG.ja.md)
 
+## v0.10.1 — 2026-09-20
+
+### Fixed
+
+- `import --full` and `backfill` now treat confirmation-prompt read or write failures as command errors and stop before destructive work, rather than treating them as declined confirmations.
+
 ## v0.10.0 — 2026-09-16
 
 ### Added
