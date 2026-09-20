@@ -172,6 +172,84 @@ func TestSearchCmd_TooManyArguments(t *testing.T) {
 	}
 }
 
+func TestSearchCmd_PaginationTSVJSONAndTurns(t *testing.T) {
+	var tsvOut, errOut bytes.Buffer
+	code, err := searchCmd([]string{"--limit", "2", "--offset", "1", "needle"}, staticDB(newSearchPaginationTestDB(t)), config{}, &tsvOut, &errOut)
+	if err != nil || code != 0 {
+		t.Fatalf("TSV search = %d, %v (stderr: %q)", code, err, errOut.String())
+	}
+	if got := tsvOut.String(); !strings.Contains(got, "page\t2\t") || !strings.Contains(got, "needle second") || !strings.Contains(got, "page\t1\t") || !strings.Contains(got, "needle first") || strings.Contains(got, "needle third") {
+		t.Errorf("TSV page = %q, want the second and first hits with original turns", got)
+	}
+
+	var jsonOut bytes.Buffer
+	code, err = searchCmd([]string{"--format", "json", "--limit", "1", "--offset", "1", "needle"}, staticDB(newSearchPaginationTestDB(t)), config{}, &jsonOut, &errOut)
+	if err != nil || code != 0 {
+		t.Fatalf("JSON search = %d, %v (stderr: %q)", code, err, errOut.String())
+	}
+	entries := decodeJSONArray(t, jsonOut.Bytes())
+	if len(entries) != 1 || entries[0]["snippet"] != "needle second" || entries[0]["turn"] != float64(2) {
+		t.Errorf("JSON page = %v, want second hit with turn 2", entries)
+	}
+
+	jsonOut.Reset()
+	code, err = searchCmd([]string{"--format", "json", "--offset", "3", "needle"}, staticDB(newSearchPaginationTestDB(t)), config{}, &jsonOut, &errOut)
+	if err != nil || code != 0 {
+		t.Fatalf("empty JSON search = %d, %v (stderr: %q)", code, err, errOut.String())
+	}
+	if strings.TrimSpace(jsonOut.String()) != "[]" {
+		t.Errorf("empty JSON page = %q, want []", jsonOut.String())
+	}
+}
+
+func newSearchPaginationTestDB(t *testing.T) *core.DB {
+	t.Helper()
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	if err := db.UpsertSession(core.SessionMeta{
+		Source: core.SourceClaudeCode, SessionID: "page", RepoPath: "/Users/test/proj",
+	}, "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
+	}
+	for i, message := range []core.NormalizedMessage{
+		{UUID: "page-1", Role: "user", Content: "needle first", Timestamp: "2026-03-28T10:00:00Z"},
+		{UUID: "page-2", Role: "user", Content: "needle second", Timestamp: "2026-03-28T10:01:00Z"},
+		{UUID: "page-3", Role: "user", Content: "needle third", Timestamp: "2026-03-28T10:02:00Z"},
+	} {
+		message.Source = core.SourceClaudeCode
+		message.SessionID = "page"
+		if err := db.InsertMessage(message); err != nil {
+			t.Fatalf("InsertMessage(%d): %v", i, err)
+		}
+	}
+	return db
+}
+
+func TestSearchCmd_InvalidPaginationDoesNotOpenDBOrWriteStdout(t *testing.T) {
+	openDB := func() (*core.DB, error) {
+		t.Fatal("openDB must not be called for invalid pagination")
+		return nil, nil
+	}
+	for _, args := range [][]string{
+		{"--limit", "0", "needle"},
+		{"--limit", "-1", "needle"},
+		{"--offset", "-1", "needle"},
+	} {
+		t.Run(strings.Join(args, " "), func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			code, err := searchCmd(args, openDB, config{}, &out, &errOut)
+			if code != 1 || err == nil {
+				t.Errorf("searchCmd(%v) = %d, %v, want validation error", args, code, err)
+			}
+			if out.Len() != 0 {
+				t.Errorf("stdout = %q, want empty", out.String())
+			}
+		})
+	}
+}
+
 func TestSearchSnippet(t *testing.T) {
 	long := strings.Repeat("a", 60) + "NEEDLE" + strings.Repeat("b", 60)
 

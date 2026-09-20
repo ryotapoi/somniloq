@@ -133,7 +133,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 
 ### 検索（search）
 
-- `search <query> [--since] [--until] [--day-boundary] [--project] [--format tsv|json]` で全メッセージ本文を横断検索する。デフォルトは `tsv`
+- `search <query> [--since] [--until] [--day-boundary] [--project] [--limit N] [--offset M] [--format tsv|json]` で全メッセージ本文を横断検索する。デフォルトは `tsv`
 - 実装は LIKE 全走査。FTS5 は日本語だと trigram 必須で索引が本文の 2〜3 倍に膨らみ、3 文字未満のクエリが索引で引けないため、LIKE で困るスケールになるまで見送り（本文 42 MB の DB で実測 0.1 秒前後）
 - マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして素通し（Known limitations 参照）
 - sidechain メッセージは除外（show と同じ扱い）
@@ -145,6 +145,8 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - JSON のフィールドは `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet`。`timestamp` は DB 保存値、`snippet` はタブ・改行を置換しない生値（共通仕様は「JSON 出力」節参照）
 - `--since`/`--until` は**メッセージの timestamp 基準**。NULL / 空の timestamp は時刻条件に一致しない。sessions / show のセッション開始基準とは異なる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と絶対日時は `dayBoundary` の影響を受けない
 - `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ、alias 展開含む）
+- `--limit N` は最大 N 件を返す。未指定時は無制限、N は 1 以上。`--offset M` は順序付け済みの先頭 M 件を飛ばす。未指定時は 0、M は 0 以上。すべての既存 filter と新しい順（timestamp 降順、同値は rowid 降順）を適用した後にページ化する
+- 同じ query・filter・`--limit` で `--offset` を増やせば続きのページを取得できる。ただし、この保証は DB が固定で、相対時刻 filter を含む場合は解決済みの時刻条件も固定である場合だけ。DB の変更や snapshot はサポートしない
 
 ### JSON 出力（--format json）
 
@@ -223,6 +225,7 @@ somniloq sessions --format json          # セッション一覧を JSON で出�
 somniloq show --format json <session-id> # セッション内容を JSON で出力（outline / projects も --format json 対応）
 somniloq search "auth bug"               # 全メッセージ本文を横断検索
 somniloq search --format json "auth bug" # JSON で検索結果を出力
+somniloq search --limit 50 --offset 50 "auth bug" # 51 件目から次の 50 件
 somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # 3/28 04:00 以降のメッセージ
 somniloq search --since 7d --project myapp "auth"  # 期間・プロジェクトで絞り込み
 somniloq projects                        # プロジェクト一覧

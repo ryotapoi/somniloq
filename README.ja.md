@@ -169,10 +169,11 @@ somniloq search "auth バグ"                          # 全メッセージ本�
 somniloq search --since 7d "auth"                    # 直近 7 日間に書かれたメッセージ
 somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # その日の 04:00 以降
 somniloq search --since 7d --project myapp "auth"    # プロジェクトで絞り込み
+somniloq search --limit 50 --offset 50 "auth バグ"    # 51 件目から次の 50 件
 somniloq search --format json "auth バグ"             # JSON で検索結果を出力
 ```
 
-デフォルト出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。`--format json` は `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet` を持つ配列を出力し、timestamp と snippet は保存値・生値のまま。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、検索結果の `source` とともに `somniloq show --source <source> --turn <N> <session_id>` または `somniloq outline --source <source> <session_id>` に渡して再参照できる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。
+デフォルト出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。`--format json` は `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet` を持つ配列を出力し、timestamp と snippet は保存値・生値のまま。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、検索結果の `source` とともに `somniloq show --source <source> --turn <N> <session_id>` または `somniloq outline --source <source> <session_id>` に渡して再参照できる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。`--limit N` は最大 N 件を返す（N は 1 以上。未指定は無制限）。`--offset M` は filter とソート後の先頭 M 件を飛ばす（M は 0 以上。デフォルトは 0）。同じ query/filter で `--offset` を増やせば続きのページを取得できるが、ページの安定性は DB と解決済みの時刻条件が固定の場合だけ保証する。DB 変更時や snapshot はサポートしない。
 
 ### JSON 出力
 

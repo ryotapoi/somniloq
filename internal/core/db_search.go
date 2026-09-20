@@ -15,6 +15,13 @@ type SearchRow struct {
 	Content   string
 }
 
+// SearchPagination narrows an ordered search result. A zero Limit leaves the
+// result unlimited; Offset skips that many ordered rows.
+type SearchPagination struct {
+	Limit  int
+	Offset int
+}
+
 // SearchMessages returns non-sidechain messages whose content contains the
 // query, newest first. Matching uses SQLite LIKE: ASCII-only
 // case-insensitivity, and `%`/`_` in the query act as wildcards (the same
@@ -22,7 +29,7 @@ type SearchRow struct {
 // message timestamp, not the session start, because the search target is the
 // message. rowid breaks timestamp ties like GetMessages, inverted to follow
 // the DESC order.
-func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, error) {
+func (d *DB) SearchMessages(filter SessionFilter, query string, pagination SearchPagination) ([]SearchRow, error) {
 	q := `
 		SELECT m.source, m.uuid, m.session_id, COALESCE(s.repo_path, ''), m.timestamp, m.content
 		FROM messages m
@@ -36,6 +43,14 @@ func (d *DB) SearchMessages(filter SessionFilter, query string) ([]SearchRow, er
 		args = append(args, filterArgs...)
 	}
 	q += " ORDER BY m.timestamp DESC, m.rowid DESC"
+	if pagination.Limit > 0 {
+		q += " LIMIT ? OFFSET ?"
+		args = append(args, pagination.Limit, pagination.Offset)
+	} else if pagination.Offset > 0 {
+		// SQLite requires LIMIT when OFFSET is present. -1 means no limit.
+		q += " LIMIT -1 OFFSET ?"
+		args = append(args, pagination.Offset)
+	}
 
 	rows, err := d.execer().Query(q, args...)
 	if err != nil {

@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -10,7 +11,7 @@ func TestSearchMessages_ClosedDatabaseErrorIncludesOperationAndCause(t *testing.
 	db := testDB(t)
 	must(t, db.Close())
 
-	_, err := db.SearchMessages(SessionFilter{}, "query")
+	_, err := db.SearchMessages(SessionFilter{}, "query", SearchPagination{})
 	if err == nil {
 		t.Fatal("expected query error from closed database")
 	}
@@ -40,7 +41,7 @@ func newSearchTestDB(t *testing.T) *DB {
 func TestSearchMessages_MatchesNewestFirstExcludingSidechain(t *testing.T) {
 	db := newSearchTestDB(t)
 
-	rows, err := db.SearchMessages(SessionFilter{}, "auth")
+	rows, err := db.SearchMessages(SessionFilter{}, "auth", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -62,7 +63,7 @@ func TestSearchMessages_MatchesNewestFirstExcludingSidechain(t *testing.T) {
 func TestSearchMessages_TimeFilterUsesMessageTimestamp(t *testing.T) {
 	db := newSearchTestDB(t)
 
-	rows, err := db.SearchMessages(SessionFilter{Since: "2026-03-29T00:00:00.000Z"}, "auth")
+	rows, err := db.SearchMessages(SessionFilter{Since: "2026-03-29T00:00:00.000Z"}, "auth", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -70,7 +71,7 @@ func TestSearchMessages_TimeFilterUsesMessageTimestamp(t *testing.T) {
 		t.Fatalf("rows = %+v, want only the 03-29 message", rows)
 	}
 
-	rows, err = db.SearchMessages(SessionFilter{Until: "2026-03-29T00:00:00.000Z"}, "auth")
+	rows, err = db.SearchMessages(SessionFilter{Until: "2026-03-29T00:00:00.000Z"}, "auth", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -85,7 +86,7 @@ func TestSearchMessages_FiltersExcludeUnknownTimestampAndRepoPath(t *testing.T) 
 	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCursorAgent, UUID: "unknown-time", SessionID: "unknown", Role: "user", Content: "needle", Timestamp: ""}))
 	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCursorAgent, UUID: "known-time", SessionID: "unknown", Role: "user", Content: "needle", Timestamp: "2026-03-28T10:00:00Z"}))
 
-	rows, err := db.SearchMessages(SessionFilter{}, "needle")
+	rows, err := db.SearchMessages(SessionFilter{}, "needle", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages without filter: %v", err)
 	}
@@ -93,7 +94,7 @@ func TestSearchMessages_FiltersExcludeUnknownTimestampAndRepoPath(t *testing.T) 
 		t.Fatalf("unfiltered rows = %d, want 2", len(rows))
 	}
 
-	rows, err = db.SearchMessages(SessionFilter{Until: "2026-03-29T00:00:00.000Z"}, "needle")
+	rows, err = db.SearchMessages(SessionFilter{Until: "2026-03-29T00:00:00.000Z"}, "needle", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages with time filter: %v", err)
 	}
@@ -101,7 +102,7 @@ func TestSearchMessages_FiltersExcludeUnknownTimestampAndRepoPath(t *testing.T) 
 		t.Fatalf("time-filtered rows = %+v, want only known timestamp", rows)
 	}
 
-	rows, err = db.SearchMessages(SessionFilter{Projects: []string{"%"}}, "needle")
+	rows, err = db.SearchMessages(SessionFilter{Projects: []string{"%"}}, "needle", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages with project filter: %v", err)
 	}
@@ -113,7 +114,7 @@ func TestSearchMessages_FiltersExcludeUnknownTimestampAndRepoPath(t *testing.T) 
 func TestSearchMessages_ProjectFilter(t *testing.T) {
 	db := newSearchTestDB(t)
 
-	rows, err := db.SearchMessages(SessionFilter{Projects: []string{"Brimday"}}, "auth")
+	rows, err := db.SearchMessages(SessionFilter{Projects: []string{"Brimday"}}, "auth", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -132,7 +133,7 @@ func TestSearchMessages_ProjectFilter(t *testing.T) {
 func TestSearchMessages_MultipleProjectsMatchAny(t *testing.T) {
 	db := newSearchTestDB(t)
 
-	rows, err := db.SearchMessages(SessionFilter{Projects: []string{"Brimday", "somniloq"}}, "auth")
+	rows, err := db.SearchMessages(SessionFilter{Projects: []string{"Brimday", "somniloq"}}, "auth", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -153,7 +154,7 @@ func TestSearchMessages_CombinedFiltersUseMessageTimestamp(t *testing.T) {
 		Since:    "2026-03-28T11:00:00.000Z",
 		Until:    "2026-03-28T13:00:00.000Z",
 		Projects: []string{"Brimday"},
-	}, "auth")
+	}, "auth", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -171,7 +172,7 @@ func TestSearchMessages_SinceFilter_MillisecondTimestamp(t *testing.T) {
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "ms", StartedAt: "2026-03-28T14:10:45.977Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "ms1", SessionID: "ms", Role: "user", Content: "millisecond auth", Timestamp: "2026-03-28T14:10:45.977Z"}))
 
-	rows, err := db.SearchMessages(SessionFilter{Since: "2026-03-28T14:10:45.000Z"}, "auth")
+	rows, err := db.SearchMessages(SessionFilter{Since: "2026-03-28T14:10:45.000Z"}, "auth", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -179,7 +180,7 @@ func TestSearchMessages_SinceFilter_MillisecondTimestamp(t *testing.T) {
 		t.Fatalf("rows = %d, want 1 (same-second millisecond timestamp must match)", len(rows))
 	}
 
-	rows, err = db.SearchMessages(SessionFilter{Until: "2026-03-28T14:10:45.000Z"}, "auth")
+	rows, err = db.SearchMessages(SessionFilter{Until: "2026-03-28T14:10:45.000Z"}, "auth", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -191,7 +192,7 @@ func TestSearchMessages_SinceFilter_MillisecondTimestamp(t *testing.T) {
 func TestSearchMessages_NoMatch(t *testing.T) {
 	db := newSearchTestDB(t)
 
-	rows, err := db.SearchMessages(SessionFilter{}, "no-such-text")
+	rows, err := db.SearchMessages(SessionFilter{}, "no-such-text", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -209,7 +210,7 @@ func TestSearchMessages_TimestampTieBrokenByRowid(t *testing.T) {
 		must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: uuid, SessionID: "tie", Role: "user", Content: "tied " + uuid, Timestamp: "2026-03-28T10:00:00Z"}))
 	}
 
-	rows, err := db.SearchMessages(SessionFilter{}, "tied")
+	rows, err := db.SearchMessages(SessionFilter{}, "tied", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
@@ -222,4 +223,76 @@ func TestSearchMessages_TimestampTieBrokenByRowid(t *testing.T) {
 			t.Errorf("rows[%d].Content = %q, want %q", i, rows[i].Content, w)
 		}
 	}
+}
+
+func TestSearchMessages_PaginationPreservesOrderedPages(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "page-a", RepoPath: "/Users/test/Brimday"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(SessionMeta{Source: SourceCodex, SessionID: "page-b", RepoPath: "/Users/test/other"}, "2026-03-28T15:00:00Z"))
+	for _, message := range []NormalizedMessage{
+		{Source: SourceClaudeCode, UUID: "old", SessionID: "page-a", Role: "user", Content: "page needle old", Timestamp: "2026-03-28T10:00:00Z"},
+		{Source: SourceClaudeCode, UUID: "tie-a", SessionID: "page-a", Role: "user", Content: "page needle tie a", Timestamp: "2026-03-28T11:00:00Z"},
+		{Source: SourceClaudeCode, UUID: "tie-b", SessionID: "page-a", Role: "user", Content: "page needle tie b", Timestamp: "2026-03-28T11:00:00Z"},
+		{Source: SourceCodex, UUID: "new", SessionID: "page-b", Role: "user", Content: "page needle new", Timestamp: "2026-03-28T12:00:00Z"},
+	} {
+		must(t, db.InsertMessage(message))
+	}
+
+	all, err := db.SearchMessages(SessionFilter{}, "page needle", SearchPagination{})
+	if err != nil {
+		t.Fatalf("SearchMessages full: %v", err)
+	}
+	if got, want := searchUUIDs(all), []string{"new", "tie-b", "tie-a", "old"}; !slices.Equal(got, want) {
+		t.Fatalf("full order = %v, want %v", got, want)
+	}
+
+	first, err := db.SearchMessages(SessionFilter{}, "page needle", SearchPagination{Limit: 2})
+	if err != nil {
+		t.Fatalf("SearchMessages first page: %v", err)
+	}
+	second, err := db.SearchMessages(SessionFilter{}, "page needle", SearchPagination{Limit: 2, Offset: 2})
+	if err != nil {
+		t.Fatalf("SearchMessages second page: %v", err)
+	}
+	if got := append(searchUUIDs(first), searchUUIDs(second)...); !slices.Equal(got, searchUUIDs(all)) {
+		t.Errorf("concatenated pages = %v, want %v", got, searchUUIDs(all))
+	}
+
+	offsetOnly, err := db.SearchMessages(SessionFilter{}, "page needle", SearchPagination{Offset: 3})
+	if err != nil {
+		t.Fatalf("SearchMessages offset-only: %v", err)
+	}
+	if got, want := searchUUIDs(offsetOnly), []string{"old"}; !slices.Equal(got, want) {
+		t.Errorf("offset-only page = %v, want %v", got, want)
+	}
+	final, err := db.SearchMessages(SessionFilter{}, "page needle", SearchPagination{Limit: 2, Offset: 3})
+	if err != nil {
+		t.Fatalf("SearchMessages final page: %v", err)
+	}
+	if got, want := searchUUIDs(final), []string{"old"}; !slices.Equal(got, want) {
+		t.Errorf("final page = %v, want %v", got, want)
+	}
+	outside, err := db.SearchMessages(SessionFilter{}, "page needle", SearchPagination{Limit: 2, Offset: 4})
+	if err != nil {
+		t.Fatalf("SearchMessages outside page: %v", err)
+	}
+	if len(outside) != 0 {
+		t.Errorf("outside page = %v, want empty", searchUUIDs(outside))
+	}
+
+	filtered, err := db.SearchMessages(SessionFilter{Projects: []string{"Brimday"}}, "page needle", SearchPagination{Limit: 1, Offset: 1})
+	if err != nil {
+		t.Fatalf("SearchMessages filtered page: %v", err)
+	}
+	if got, want := searchUUIDs(filtered), []string{"tie-a"}; !slices.Equal(got, want) {
+		t.Errorf("filtered page = %v, want %v (filters must precede pagination)", got, want)
+	}
+}
+
+func searchUUIDs(rows []SearchRow) []string {
+	uuid := make([]string, len(rows))
+	for i, row := range rows {
+		uuid[i] = row.UUID
+	}
+	return uuid
 }

@@ -119,7 +119,7 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return searchCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "JSON fields:", "source, sessionId, turn, timestamp, project, snippet", "turn: outline/show turn number", "Typical flow: search -> outline", "somniloq search --since 7d"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "JSON fields:", "source, sessionId, turn, timestamp, project, snippet", "turn: outline/show turn number", "-limit", "-offset", "Continue a fixed search", "somniloq search --since 7d"},
 		},
 		{
 			name: "projects",

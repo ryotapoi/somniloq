@@ -11,7 +11,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const searchUsageLine = "somniloq search [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--format <fmt>] <query>"
+const searchUsageLine = "somniloq search [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] <query>"
 
 const searchHelpDetails = `Columns (TSV, in order):
   session_id: source-local session identifier containing the matching message.
@@ -29,11 +29,15 @@ Notes:
   LIKE is ASCII-case-insensitive; % and _ in the query are wildcard characters.
   --since/--until filter message timestamps, not session start time.
   Date-only --since/--until values use --day-boundary or config dayBoundary.
+  --limit returns at most N results (N >= 1); --offset skips N ordered results (N >= 0).
+  Continue a fixed search with --limit and increasing --offset. Database changes or
+  different resolved relative-time filters can change later pages.
   Typical flow: search -> outline <session-id> -> show --turn <turn-or-range> <session-id>.
 
 Examples:
   somniloq search "auth bug"
   somniloq search --since 7d --project somniloq "migration"
+  somniloq search --limit 50 --offset 50 "auth bug"
   somniloq search --format json "auth bug"
   somniloq show --turn 42 <session-id>`
 
@@ -64,6 +68,12 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	if err := validateFormat(*flags.format, "tsv", "json"); err != nil {
 		return 1, err
 	}
+	if *flags.limit < 0 || *flags.limit == 0 && flagWasProvided(fs, "limit") {
+		return 1, fmt.Errorf("limit must be at least 1")
+	}
+	if *flags.offset < 0 {
+		return 1, fmt.Errorf("offset must be at least 0")
+	}
 
 	boundary, err := resolveDayBoundary(*flags.dayBoundary, cfg)
 	if err != nil {
@@ -80,7 +90,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	}
 	defer db.Close()
 
-	rows, err := db.SearchMessages(filter, query)
+	rows, err := db.SearchMessages(filter, query, core.SearchPagination{Limit: *flags.limit, Offset: *flags.offset})
 	if err != nil {
 		return 1, err
 	}
@@ -128,17 +138,29 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 
 type searchFlags struct {
 	since, until, dayBoundary, project, format *string
+	limit, offset                              *int
 }
 
 func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
-	return fs, searchFlags{
+	flags := searchFlags{
 		since:       fs.String("since", "", "filter by message time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
 		until:       fs.String("until", "", "filter messages before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
 		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)"),
 		project:     fs.String("project", "", "filter by repo path (substring match)"),
+		limit:       fs.Int("limit", 0, "maximum number of results (at least 1)"),
+		offset:      fs.Int("offset", 0, "number of ordered results to skip (at least 0)"),
 		format:      fs.String("format", "tsv", "output format (tsv, json)"),
 	}
+	return fs, flags
+}
+
+func flagWasProvided(fs *flag.FlagSet, name string) bool {
+	found := false
+	fs.Visit(func(f *flag.Flag) {
+		found = found || f.Name == name
+	})
+	return found
 }
 
 type searchSessionKey struct {

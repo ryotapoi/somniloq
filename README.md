@@ -171,10 +171,11 @@ somniloq search "auth bug"                          # search all message bodies
 somniloq search --since 7d "auth"                   # messages written in the last 7 days
 somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # messages since 04:00 on that local day
 somniloq search --since 7d --project myapp "auth"   # narrowed by project
+somniloq search --limit 50 --offset 50 "auth bug"   # next 50 results
 somniloq search --format json "auth bug"            # JSON search results
 ```
 
-Default output is TSV: `session_id`, `turn`, `time`, `project`, `snippet`, `source` (the internal identifier: `claude_code`, `codex`, or `cursor_agent`), newest first. `--format json` emits an array with `source`, `sessionId`, `turn`, `timestamp`, `project`, and `snippet`; timestamps and snippets retain their stored/raw values. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --source <source> --turn <N> <session_id>` or `somniloq outline --source <source> <session_id>`. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded.
+Default output is TSV: `session_id`, `turn`, `time`, `project`, `snippet`, `source` (the internal identifier: `claude_code`, `codex`, or `cursor_agent`), newest first. `--format json` emits an array with `source`, `sessionId`, `turn`, `timestamp`, `project`, and `snippet`; timestamps and snippets retain their stored/raw values. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --source <source> --turn <N> <session_id>` or `somniloq outline --source <source> <session_id>`. Matching follows SQLite LIKE: case-insensitive for ASCII only, and `%`/`_` act as wildcards. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded. `--limit N` returns at most N results (N >= 1; omitted means unlimited), and `--offset M` skips M ordered results (M >= 0; default 0) after filtering and sorting. Continue with a fixed query/filter and increasing `--offset`; pages are stable only while the DB and resolved time conditions are fixed. Database changes and snapshots are unsupported.
 
 ### JSON output
 
