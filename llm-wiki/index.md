@@ -35,7 +35,7 @@ sources:
 | ページ | regen | 内容 | 主なソース |
 |---|---|---|---|
 | [Command map](command-map.md) | full | CLI コマンドから入口関数・core クエリ・代表テストへ行く索引 | cmd/somniloq, internal/core |
-| [Import pipeline](import-pipeline.md) | compiled | Claude Code / Codex JSONL が DB 行になるまでの読む順序 | internal/core/import.go, internal/ingest |
+| [Import pipeline](import-pipeline.md) | compiled | Claude Code / Codex / Cursor Agent JSONL が DB 行になるまでの読む順序 | internal/core/import.go, internal/ingest |
 | [Storage and query map](storage-query-map.md) | compiled | schema, migration, query helper, backfill の変更入口 | internal/core/db*.go, internal/core/migrate_v04.go, internal/core/backfill.go |
 | [Display and turns](display-and-turns.md) | compiled | show / outline / search の表示・ターン採番・TSV/JSON の導線 | cmd/somniloq, internal/core/db_sessions_projects.go, internal/core/db_messages_summary.go, internal/core/db_search.go |
 | [Configuration and projects](configuration-and-projects.md) | compiled | repo_path 解決、project alias、project filter の波及先 | cmd/somniloq/config.go, internal/core/repo_path.go |
