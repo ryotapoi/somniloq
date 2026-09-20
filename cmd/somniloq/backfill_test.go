@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"database/sql"
 	"errors"
+	"io"
 	"strings"
 	"testing"
 
@@ -135,6 +136,111 @@ func TestBackfillCmd_InteractiveDeclineDoesNothing(t *testing.T) {
 	}
 	if strings.Contains(out.String(), "Backfilled") {
 		t.Errorf("stdout must not contain 'Backfilled' after decline, got %q", out.String())
+	}
+}
+
+func TestBackfillCmd_ConfirmationIOErrorDoesNotBackfill(t *testing.T) {
+	readErr := errors.New("read failed")
+	tests := []struct {
+		name string
+		in   io.Reader
+		err  io.Writer
+		want error
+	}{
+		{"prompt write", strings.NewReader("y\\n"), failWriter{}, errFailWriter},
+		{"read", &readError{err: readErr}, &bytes.Buffer{}, readErr},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			dsn := dir + "/backfill.db"
+			db, err := core.OpenDB(dsn)
+			if err != nil {
+				t.Fatalf("OpenDB: %v", err)
+			}
+			insertOrphanSession(t, db, "orphan", "/Users/test/orphan")
+			insertSessionWithMessage(t, db, "unresolved", "/not-a-repository", "m1")
+			if err := db.Close(); err != nil {
+				t.Fatalf("Close: %v", err)
+			}
+
+			open := func() (*core.DB, error) { return core.OpenDB(dsn) }
+			var out bytes.Buffer
+			code, err := backfillCmd(nil, open, tt.in, &out, tt.err, true)
+			if code != 1 {
+				t.Errorf("exit code = %d, want 1", code)
+			}
+			if !errors.Is(err, tt.want) {
+				t.Errorf("error = %v, want %v", err, tt.want)
+			}
+			if strings.Contains(out.String(), "Backfilled:") {
+				t.Errorf("stdout must not contain Backfilled after confirmation I/O error: %q", out.String())
+			}
+
+			rawDB, err := sql.Open("sqlite", dsn)
+			if err != nil {
+				t.Fatalf("sql.Open: %v", err)
+			}
+			defer rawDB.Close()
+			var orphanCount int
+			if err := rawDB.QueryRow(`SELECT COUNT(*) FROM sessions WHERE session_id = 'orphan'`).Scan(&orphanCount); err != nil {
+				t.Fatalf("count orphan: %v", err)
+			}
+			if orphanCount != 1 {
+				t.Errorf("orphan count = %d, want 1", orphanCount)
+			}
+			var repoPath sql.NullString
+			if err := rawDB.QueryRow(`SELECT repo_path FROM sessions WHERE session_id = 'unresolved'`).Scan(&repoPath); err != nil {
+				t.Fatalf("query repo_path: %v", err)
+			}
+			if repoPath.Valid {
+				t.Errorf("repo_path = %q, want NULL", repoPath.String)
+			}
+		})
+	}
+}
+
+func TestBackfillCmd_ConfirmationReadErrorAfterMigrationDoesNotBackfill(t *testing.T) {
+	dsn := setupV03DBFile(t)
+	insertV03SessionAt(t, dsn, "orphan", "/Users/test/orphan", false)
+	insertV03SessionAt(t, dsn, "unresolved", "/not-a-repository", true)
+
+	readErr := errors.New("read failed")
+	open := func() (*core.DB, error) { return core.OpenDB(dsn) }
+	var out, errOut bytes.Buffer
+	code, err := backfillCmd(nil, open, &readError{err: readErr}, &out, &errOut, true)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !errors.Is(err, readErr) {
+		t.Errorf("error = %v, want %v", err, readErr)
+	}
+	if !strings.Contains(out.String(), "Migrated to v0.4: sessions=2 messages=1 import_states=0") {
+		t.Errorf("stdout = %q, want migration line", out.String())
+	}
+	if strings.Contains(out.String(), "Backfilled:") {
+		t.Errorf("stdout must not contain Backfilled after confirmation read error: %q", out.String())
+	}
+
+	rawDB, err := sql.Open("sqlite", dsn)
+	if err != nil {
+		t.Fatalf("sql.Open: %v", err)
+	}
+	defer rawDB.Close()
+	var orphanCount int
+	if err := rawDB.QueryRow(`SELECT COUNT(*) FROM sessions WHERE session_id = 'orphan'`).Scan(&orphanCount); err != nil {
+		t.Fatalf("count orphan: %v", err)
+	}
+	if orphanCount != 1 {
+		t.Errorf("orphan count = %d, want 1", orphanCount)
+	}
+	var repoPath sql.NullString
+	if err := rawDB.QueryRow(`SELECT repo_path FROM sessions WHERE session_id = 'unresolved'`).Scan(&repoPath); err != nil {
+		t.Fatalf("query repo_path: %v", err)
+	}
+	if repoPath.Valid {
+		t.Errorf("repo_path = %q, want NULL", repoPath.String)
 	}
 }
 

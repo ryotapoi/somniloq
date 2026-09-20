@@ -19,7 +19,7 @@
 - [x] Cursor Agent を検証ルールと取り込み案内に同期し、共通 ingest 変更で未知 timestamp、path 由来 identity、差分取り込みの確認範囲から漏れないようにする。コードと既存の挙動は維持する。
 - [x] 表示整形から session 参照解決を分離し、Markdown 整形と DB lookup・曖昧エラーの変更理由を局所化する。resolver、`show`、`outline` の観測結果を維持する。
 - [x] Codex と Cursor Agent の再帰走査と失敗収集を共通化し、root 不存在・部分失敗の既存契約を維持する。受理する path は各 adapter に残し、1 階層を走査する Claude Code は対象外とする。
-- [ ] 確認入力の I/O 異常と通常の拒否を区別し、EOF と空入力の拒否 UX を維持する。reader/writer 異常時は副作用なしで失敗として扱う。
+- [x] 確認入力の I/O 異常と通常の拒否を区別し、EOF と空入力の拒否 UX を維持する。reader/writer 異常時は副作用なしで失敗として扱う。
 - [ ] 増分行数計算について、limit、未終端行、複数 buffer、reader error の境界を少数のテストで固定し、既存の正常系を重複させない。
 
 ### v0.11.0 履歴の再参照と機械処理

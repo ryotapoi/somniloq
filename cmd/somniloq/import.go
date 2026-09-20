@@ -51,7 +51,11 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 		if !isTTY {
 			return 1, errors.New("--full requires confirmation; use --yes to skip in non-interactive mode")
 		}
-		if !confirmFullImport(in, errOut) {
+		confirmed, err := confirmFullImport(in, errOut)
+		if err != nil {
+			return 1, err
+		}
+		if !confirmed {
 			return 0, nil
 		}
 	}

@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,6 +11,39 @@ import (
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
+
+func TestImportCmd_ConfirmationIOErrorDoesNotOpenDB(t *testing.T) {
+	readErr := errors.New("read failed")
+	tests := []struct {
+		name string
+		in   io.Reader
+		err  io.Writer
+		want error
+	}{
+		{"prompt write", strings.NewReader("y\\n"), failWriter{}, errFailWriter},
+		{"read", &readError{err: readErr}, &bytes.Buffer{}, readErr},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			opened := false
+			open := func() (*core.DB, error) {
+				opened = true
+				return nil, errors.New("openDB must not be called after confirmation I/O error")
+			}
+			code, err := importCmd([]string{"--full"}, open, "", "", "", tt.in, &bytes.Buffer{}, tt.err, true)
+			if code != 1 {
+				t.Errorf("exit code = %d, want 1", code)
+			}
+			if !errors.Is(err, tt.want) {
+				t.Errorf("error = %v, want %v", err, tt.want)
+			}
+			if opened {
+				t.Error("openDB was called after confirmation I/O error")
+			}
+		})
+	}
+}
 
 // Pins the summary line scripts parse, including the unparsed-lines counter.
 func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {

@@ -80,7 +80,11 @@ func backfillCmd(args []string, openDB func() (*core.DB, error), in io.Reader, o
 		if !isTTY {
 			return 1, errors.New("backfill requires confirmation when deleting sessions; use --yes to skip in non-interactive mode")
 		}
-		if !confirmBackfillDelete(in, errOut, count) {
+		confirmed, err := confirmBackfillDelete(in, errOut, count)
+		if err != nil {
+			return 1, err
+		}
+		if !confirmed {
 			return 0, nil
 		}
 	}
