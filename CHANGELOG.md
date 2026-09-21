@@ -2,6 +2,15 @@
 
 English | [日本語](CHANGELOG.ja.md)
 
+## v0.11.0 — 2026-09-21
+
+### Added
+
+- `show` and `outline` now accept `--source` to open a session from a specific import source when the same session ID exists in multiple sources; the existing ambiguity error remains when omitted.
+- `search --format json` now emits machine-readable results with source, session ID, turn, timestamp, project, and matching snippet.
+- `search --limit` and `--offset` now paginate results while preserving the existing search order; without pagination flags, all results are still returned.
+- `sessions --imported-since` now lists sessions imported at or after a specified time, including sessions whose conversation timestamps are unknown.
+
 ## v0.10.1 — 2026-09-20
 
 ### Fixed

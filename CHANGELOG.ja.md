@@ -2,6 +2,15 @@
 
 [English](CHANGELOG.md) | 日本語
 
+## v0.11.0 — 2026-09-21
+
+### 追加
+
+- `show` と `outline` が `--source` を受け付けるようになった。同じ session ID が複数の source に存在する場合、特定の import source からセッションを開ける。未指定時は従来どおり曖昧性エラーとなる。
+- `search --format json` が、source、session ID、turn、timestamp、project、検索に一致したスニペットを含む機械可読な結果を出力するようになった。
+- `search --limit` と `--offset` が、既存の検索順を維持したまま結果をページ分割するようになった。ページネーション指定がない場合は、従来どおり全件を返す。
+- `sessions --imported-since` が、指定時刻以降に取り込まれたセッションを一覧できるようになった。会話の timestamp が不明なセッションも含まれる。
+
 ## v0.10.1 — 2026-09-20
 
 ### 修正
