@@ -17,3 +17,7 @@
 - [x] `search` の JSON 出力を追加し、source、session ID、turn、発言時刻、検索スニペットを既存の JSON 出力規則に沿って機械処理できるようにする。
 - [x] `search` にページネーションを追加し、1回の取得件数を指定して、同じ検索条件の続きを順に取得できるようにする。既存の検索順と、ページネーションを使わない全件出力を維持する。
 - [x] 既存のセッション取り込み時刻を使い、指定時点以降に取り込んだ会話を source + session ID で一覧取得できるようにする。継続中の追記や日時不明の会話も取り込み時刻で探し、本文は既存の `show` で会話全体を読む。再処理による本文未変更の会話や重複候補を許容する。発言単位の差分、変更履歴の新設、消費先の処理済み状態管理は対象外とする。
+
+### 保守
+
+- [ ] UTC の `imported_at` fixture とタイムゾーンなしの `--imported-since` を組み合わせる `TestSessionsCmd_ImportedSinceFiltersUnknownStartedAt` および `TestSessionsCmd_ImportedSinceJSONPreservesSourceAndSessionID` が `time.Local` に依存して `America/Los_Angeles` で失敗するため、production の挙動を変えず、テスト内で `time.Local` を UTC に設定・復元して必須テスト gate の誤失敗をなくす。完了条件: 両テストが UTC、Asia/Tokyo、America/Los_Angeles で通り、共通の `go test -count=1 ./...` が成功する。
