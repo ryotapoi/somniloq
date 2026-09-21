@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -404,4 +405,74 @@ func TestSessionsCmd_ProjectAliasExpansion(t *testing.T) {
 	if strings.Contains(got, "other-1") {
 		t.Errorf("output should not contain other-1:\n%s", got)
 	}
+}
+
+func TestProjectAliasLiteralConditionsAcrossCommands(t *testing.T) {
+	aliases := []string{"new_rate_100%", `old\repo`, "legacy_100%"}
+	cfg := config{ProjectAliases: map[string][]string{aliases[0]: aliases[1:]}}
+	for _, input := range aliases {
+		t.Run(input, func(t *testing.T) {
+			for _, command := range []struct {
+				name string
+				run  func(*core.DB, *bytes.Buffer, *bytes.Buffer) (int, error)
+			}{
+				{"sessions", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
+					return sessionsCmd([]string{"--project", input}, staticDB(db), cfg, out, errOut)
+				}},
+				{"show", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
+					return showCmd([]string{"--since", "2026-03-28", "--project", input}, staticDB(db), cfg, out, errOut)
+				}},
+				{"search", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
+					return searchCmd([]string{"--project", input, "literal alias hit"}, staticDB(db), cfg, out, errOut)
+				}},
+			} {
+				t.Run(command.name, func(t *testing.T) {
+					db := newLiteralAliasTestDB(t, aliases)
+					var out, errOut bytes.Buffer
+					code, err := command.run(db, &out, &errOut)
+					if err != nil || code != 0 {
+						t.Fatalf("%s = %d, %v (stderr: %q)", command.name, code, err, errOut.String())
+					}
+					for i := range aliases {
+						if !strings.Contains(out.String(), fmt.Sprintf("alias-%d", i)) {
+							t.Errorf("%s output missing alias-%d:\n%s", command.name, i, out.String())
+						}
+					}
+					if strings.Contains(out.String(), "false-positive") {
+						t.Errorf("%s output included wildcard false positive:\n%s", command.name, out.String())
+					}
+				})
+			}
+		})
+	}
+}
+
+func newLiteralAliasTestDB(t *testing.T, aliases []string) *core.DB {
+	t.Helper()
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	for i, name := range aliases {
+		id := fmt.Sprintf("alias-%d", i)
+		if err := db.UpsertSession(core.SessionMeta{
+			Source: core.SourceClaudeCode, SessionID: id,
+			RepoPath: "/Users/test/" + name, StartedAt: "2026-03-28T10:00:00Z",
+		}, "2026-03-28T15:00:00Z"); err != nil {
+			t.Fatalf("UpsertSession(%s): %v", id, err)
+		}
+		if err := db.InsertMessage(core.NormalizedMessage{
+			Source: core.SourceClaudeCode, UUID: "message-" + id, SessionID: id,
+			Role: "user", Content: "literal alias hit", Timestamp: "2026-03-28T10:00:00Z",
+		}); err != nil {
+			t.Fatalf("InsertMessage(%s): %v", id, err)
+		}
+	}
+	if err := db.UpsertSession(core.SessionMeta{
+		Source: core.SourceClaudeCode, SessionID: "false-positive",
+		RepoPath: "/Users/test/newXrateX100anything", StartedAt: "2026-03-28T10:00:00Z",
+	}, "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession(false-positive): %v", err)
+	}
+	return db
 }

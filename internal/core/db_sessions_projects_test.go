@@ -234,12 +234,12 @@ func TestListSessions_ProjectFilterExcludesUnknownRepoPath(t *testing.T) {
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "known", RepoPath: "/Users/test/project", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	must(t, db.UpsertSession(SessionMeta{Source: SourceCursorAgent, SessionID: "unknown", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 
-	rows, err := db.ListSessions(SessionFilter{Projects: []string{"%"}})
+	rows, err := db.ListSessions(SessionFilter{Projects: []string{"project"}})
 	if err != nil {
 		t.Fatalf("ListSessions: %v", err)
 	}
 	if len(rows) != 1 || rows[0].SessionID != "known" {
-		t.Fatalf("project wildcard rows = %+v, want only known repo path", rows)
+		t.Fatalf("project filter rows = %+v, want only known repo path", rows)
 	}
 }
 
@@ -294,27 +294,33 @@ func TestGetSession_RepoPath(t *testing.T) {
 	}
 }
 
-func TestListSessions_ProjectFilter_LikeMetacharKnownLimitation(t *testing.T) {
-	// Pin the documented Known limitation: LIKE wildcards in --project are not
-	// escaped, so a literal "%" in the filter degenerates into a "match anything"
-	// segment. This test catches a future change that decides to escape them.
-	// Rename signal: if escape is added, rename/repurpose this test instead of
-	// silently treating the new behavior as a regression.
+func TestListSessions_ProjectFilter_LiteralMetacharacters(t *testing.T) {
 	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{
-		Source:    SourceClaudeCode,
-		SessionID: "s1",
-		RepoPath:  "/Users/test/Brimday",
-		StartedAt: "2026-03-28T10:00:00Z",
-	}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{Projects: []string{"Brim%day"}})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
+	for _, session := range []SessionMeta{
+		{Source: SourceClaudeCode, SessionID: "percent", RepoPath: "/Users/test/rate_100%", StartedAt: "2026-03-28T10:00:00Z"},
+		{Source: SourceClaudeCode, SessionID: "escape", RepoPath: `/Users/test/path\segment`, StartedAt: "2026-03-28T10:01:00Z"},
+		{Source: SourceClaudeCode, SessionID: "combined", RepoPath: `/Users/test/mix%_\`, StartedAt: "2026-03-28T10:02:00Z"},
+		{Source: SourceClaudeCode, SessionID: "false", RepoPath: "/Users/test/rateX100anything", StartedAt: "2026-03-28T10:03:00Z"},
+	} {
+		must(t, db.UpsertSession(session, "2026-03-28T15:00:00Z"))
 	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row (LIKE %% wildcard passthrough), got %d", len(rows))
+	for _, tt := range []struct {
+		project string
+		want    string
+	}{
+		{"rate_100%", "percent"},
+		{`path\segment`, "escape"},
+		{`mix%_\`, "combined"},
+	} {
+		t.Run(tt.project, func(t *testing.T) {
+			rows, err := db.ListSessions(SessionFilter{Projects: []string{tt.project}})
+			if err != nil {
+				t.Fatalf("ListSessions: %v", err)
+			}
+			if len(rows) != 1 || rows[0].SessionID != tt.want {
+				t.Fatalf("ListSessions(%q) = %+v, want only %q", tt.project, rows, tt.want)
+			}
+		})
 	}
 }
 

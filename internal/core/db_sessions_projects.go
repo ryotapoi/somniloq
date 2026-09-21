@@ -26,7 +26,7 @@ type SessionFilter struct {
 	Since         string // RFC3339 UTC string. Empty = no filter.
 	Until         string // RFC3339 UTC string. Empty = no filter. Exclusive upper bound.
 	ImportedSince string // RFC3339 UTC string. Empty = no filter. Inclusive lower bound.
-	// Projects holds repo_path substring patterns; a row matches when ANY
+	// Projects holds repo_path literal substrings; a row matches when ANY
 	// pattern matches (project aliases expand one --project value into the
 	// whole alias group). Empty = no filter.
 	Projects []string
@@ -134,8 +134,14 @@ func timeFilterConditions(filter SessionFilter, column timestampColumn) (conditi
 	return conditions, args
 }
 
-// projectsCondition builds the repo_path substring condition for
-// filter.Projects: one LIKE per pattern, OR-joined so any alias-group name
+// escapeLikeLiteral makes a value safe for SQLite LIKE with a backslash ESCAPE
+// clause while preserving it as a literal substring.
+func escapeLikeLiteral(value string) string {
+	return strings.NewReplacer("\\", "\\\\", "%", "\\%", "_", "\\_").Replace(value)
+}
+
+// projectsCondition builds the repo_path literal substring condition for
+// filter.Projects: one LIKE per value, OR-joined so any alias-group name
 // matches. Returns "" when no patterns are given.
 func projectsCondition(projects []string) (condition string, args []any) {
 	if len(projects) == 0 {
@@ -143,8 +149,8 @@ func projectsCondition(projects []string) (condition string, args []any) {
 	}
 	likes := make([]string, len(projects))
 	for i, p := range projects {
-		likes[i] = "s.repo_path LIKE '%' || ? || '%'"
-		args = append(args, p)
+		likes[i] = "s.repo_path LIKE '%' || ? || '%' ESCAPE '\\'"
+		args = append(args, escapeLikeLiteral(p))
 	}
 	return "s.repo_path <> '' AND (" + strings.Join(likes, " OR ") + ")", args
 }

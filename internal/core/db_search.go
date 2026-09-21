@@ -23,9 +23,8 @@ type SearchPagination struct {
 }
 
 // SearchMessages returns non-sidechain messages whose content contains the
-// query, newest first. Matching uses SQLite LIKE: ASCII-only
-// case-insensitivity, and `%`/`_` in the query act as wildcards (the same
-// known limitation as the --project filter). filter.Since/Until apply to the
+// query, newest first. Matching uses SQLite LIKE with literal query text and
+// ASCII-only case-insensitivity. filter.Since/Until apply to the
 // message timestamp, not the session start, because the search target is the
 // message. rowid breaks timestamp ties like GetMessages, inverted to follow
 // the DESC order.
@@ -35,8 +34,8 @@ func (d *DB) SearchMessages(filter SessionFilter, query string, pagination Searc
 		FROM messages m
 		JOIN sessions s ON m.source = s.source AND m.session_id = s.session_id
 		WHERE m.is_sidechain = 0
-		  AND m.content LIKE '%' || ? || '%'`
-	args := []any{query}
+		  AND m.content LIKE '%' || ? || '%' ESCAPE '\'`
+	args := []any{escapeLikeLiteral(query)}
 	conditions, filterArgs := sessionFilterConditions(filter, messageTimestampColumn)
 	if len(conditions) > 0 {
 		q += " AND " + strings.Join(conditions, " AND ")

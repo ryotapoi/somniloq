@@ -80,7 +80,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - `--imported-since` は session の `imported_at` を基準にした包含下限。相対時刻、ローカル日付、分精度日時、RFC3339 instant は `--since` と同じ形式で指定できるが、date-only はローカル時刻の 00:00 とし `dayBoundary` を適用しない。`--since` / `--until` / `--project` と併用した場合は AND。`imported_at` は session を保存更新した import pass の開始時刻（UTC・秒精度）であり、本文差分時刻・commit 完了時刻・無重複消費を保証する watermark ではない。出力された `source` と `session_id` は `show --source` に渡して会話全体を再参照できる
 - 時刻は `started_at ~ ended_at` の範囲形式で表示。ended_at がない場合は `started_at ~`。両方未知なら空欄
 - `--since` または `--until` を指定した時は、NULL / 空の started_at を一致させない。指定しない一覧では未知 timestamp も表示する
-- `--project` は空でない `repo_path` への substring マッチ（LIKE メタ文字の扱いは Known limitations 参照）。値が config の alias グループに完全一致する場合はグループ全名に展開する（「設定ファイル」節参照）。NULL / 空の repository は条件に一致させない
+- `--project` は空でない `repo_path` への literal substring マッチ。`%`、`_`、`\` も文字列として扱う。値が config の alias グループに完全一致する場合はグループ全名に展開する（「設定ファイル」節参照）。NULL / 空の repository は条件に一致させない
 - `repo_path` は絶対パスのため、`/` セグメントを跨いだ部分一致（例: `--project Sources/ryot`）も可能
 - 表示は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合、デフォルト表示は `repo_path` をそのまま
 - `--short` は alias 非一致時に `filepath.Base(repo_path)`（ハイフン保持）
@@ -136,7 +136,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 
 - `search <query> [--since] [--until] [--day-boundary] [--project] [--limit N] [--offset M] [--format tsv|json]` で全メッセージ本文を横断検索する。デフォルトは `tsv`
 - 実装は LIKE 全走査。FTS5 は日本語だと trigram 必須で索引が本文の 2〜3 倍に膨らみ、3 文字未満のクエリが索引で引けないため、LIKE で困るスケールになるまで見送り（本文 42 MB の DB で実測 0.1 秒前後）
-- マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして素通し（Known limitations 参照）
+- マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ。query の `%`、`_`、`\` は文字列として扱う
 - sidechain メッセージは除外（show と同じ扱い）
 - 出力 TSV の列: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順（メッセージ `timestamp` 降順、同値は rowid 降順）
 - `turn` は outline / show --turn と同じ採番。ヒットしたメッセージが属する turn 番号を出すため、検索結果の `source` と `session_id` を `somniloq show --source <source> --turn <N> <session_id>` または `somniloq outline --source <source> <session_id>` に渡して再参照できる。source を省略して同じ `session_id` が複数 source にある場合は show の曖昧エラーに従う
@@ -292,8 +292,11 @@ CREATE TABLE import_state (
 ## Known limitations
 
 - Claude Code が将来 `cwd` 空の `user`/`assistant` レコードを生成する仕様になった場合、somniloq 側ではそのまま `repo_path` 空で保存する。`projects` 集約で複数リポジトリが空グループに潰れる（`GROUP BY repo_path` 一本のため）。その時点で対応方針を再検討する
-- `--project` の値と `search` のクエリは SQLite LIKE のメタ文字（`%`、`_`）を素通しでクエリに渡す（既存挙動の継承）。例: `--project my_repo` は `_` が 1 文字ワイルドカードとして解釈されるため `myXrepo` のような値にも誤マッチする可能性がある
 - alias グループに一致する project を JSON で出す場合、または `--short` を付けた場合、出力からは生の `repo_path` を取れない（表示名だけが出る）。生パスが必要になったら別フィールドの追加を検討する
+
+## 互換性
+
+- v0.12.0 以降、`search` query と `--project` は `%`、`_`、`\` を wildcard ではなく文字列として扱う。従来 wildcard を渡していた検索結果は変わる。explicit wildcard mode は提供しない。保存形式は変わらないため、DB migration、backfill、再 import は不要
 
 ## スキーマ変更への対応方針
 

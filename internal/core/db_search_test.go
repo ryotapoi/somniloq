@@ -60,6 +60,44 @@ func TestSearchMessages_MatchesNewestFirstExcludingSidechain(t *testing.T) {
 	}
 }
 
+func TestSearchMessages_LiteralMetacharacters(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "literal", RepoPath: "/Users/test/literal", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	for _, message := range []NormalizedMessage{
+		{Source: SourceClaudeCode, UUID: "percent", SessionID: "literal", Role: "user", Content: "rate_100% is exact", Timestamp: "2026-03-28T10:01:00Z"},
+		{Source: SourceClaudeCode, UUID: "underscore", SessionID: "literal", Role: "user", Content: "rate_100 only", Timestamp: "2026-03-28T10:02:00Z"},
+		{Source: SourceClaudeCode, UUID: "escape", SessionID: "literal", Role: "user", Content: `path\segment`, Timestamp: "2026-03-28T10:03:00Z"},
+		{Source: SourceClaudeCode, UUID: "combined", SessionID: "literal", Role: "user", Content: `mix%_\`, Timestamp: "2026-03-28T10:04:00Z"},
+		{Source: SourceClaudeCode, UUID: "false", SessionID: "literal", Role: "user", Content: "rateX100anything mixZZ", Timestamp: "2026-03-28T10:05:00Z"},
+	} {
+		must(t, db.InsertMessage(message))
+	}
+
+	for _, tt := range []struct {
+		query string
+		want  []string
+	}{
+		{"rate_100%", []string{"percent"}},
+		{"rate_100", []string{"underscore", "percent"}},
+		{`path\segment`, []string{"escape"}},
+		{`mix%_\`, []string{"combined"}},
+	} {
+		t.Run(tt.query, func(t *testing.T) {
+			rows, err := db.SearchMessages(SessionFilter{}, tt.query, SearchPagination{})
+			if err != nil {
+				t.Fatalf("SearchMessages: %v", err)
+			}
+			got := make([]string, len(rows))
+			for i, row := range rows {
+				got[i] = row.UUID
+			}
+			if !slices.Equal(got, tt.want) {
+				t.Errorf("SearchMessages(%q) UUIDs = %v, want %v", tt.query, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestSearchMessages_TimeFilterUsesMessageTimestamp(t *testing.T) {
 	db := newSearchTestDB(t)
 

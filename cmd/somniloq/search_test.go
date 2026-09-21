@@ -270,6 +270,10 @@ func TestSearchSnippet(t *testing.T) {
 			"..." + strings.Repeat("a", 40) + "needle" + strings.Repeat("b", 40) + "..."},
 		{"multibyte runes counted not bytes", strings.Repeat("あ", 50) + "鍵" + strings.Repeat("い", 50), "鍵",
 			"..." + strings.Repeat("あ", 40) + "鍵" + strings.Repeat("い", 40) + "..."},
+		{"first ASCII-folded match before exact match", strings.Repeat("あ", 60) + "RATE_100%" + strings.Repeat("b", 60) + "rate_100%", "rate_100%",
+			"..." + strings.Repeat("あ", 40) + "RATE_100%" + strings.Repeat("b", 40) + "..."},
+		{"non-ASCII case difference does not win", strings.Repeat("あ", 60) + "RÄTE" + strings.Repeat("b", 60) + "räte", "räte",
+			"..." + strings.Repeat("b", 40) + "räte"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

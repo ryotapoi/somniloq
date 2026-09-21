@@ -27,7 +27,7 @@ JSON fields:
 Notes:
   Search scans non-sidechain message bodies using SQLite LIKE.
   --since/--until accept RFC3339 instants; dates and minute datetimes are local.
-  LIKE is ASCII-case-insensitive; % and _ in the query are wildcard characters.
+  LIKE is ASCII-case-insensitive; query text, including %, _, and \, is literal.
   --since/--until filter message timestamps, not session start time.
   Date-only --since/--until values use --day-boundary or config dayBoundary.
   --limit returns at most N results (N >= 1); --offset skips N ordered results (N >= 0).
@@ -148,7 +148,7 @@ func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 		since:       fs.String("since", "", "filter by message time (relative, local date/datetime, or RFC3339 instant)"),
 		until:       fs.String("until", "", "filter messages before a relative, local date/datetime, or RFC3339 instant"),
 		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)"),
-		project:     fs.String("project", "", "filter by repo path (substring match)"),
+		project:     fs.String("project", "", "filter by repo path (literal substring match)"),
 		limit:       fs.Int("limit", 0, "maximum number of results (at least 1)"),
 		offset:      fs.Int("offset", 0, "number of ordered results to skip (at least 0)"),
 		format:      fs.String("format", "tsv", "output format (tsv, json)"),
@@ -188,17 +188,11 @@ func searchTurnsByUUID(db *core.DB, cache map[searchSessionKey]map[string]int, s
 
 // searchSnippet extracts the text around the first match of query in content,
 // keeping snippetContext runes on each side and marking truncation with
-// "...". SQL already guaranteed a LIKE match; the exact lookup falls back to
-// an ASCII-insensitive one (LIKE's case rule), and to the content head if the
-// position still cannot be pinned down.
+// "...". SQL already guaranteed a literal LIKE match; lookup follows LIKE's
+// ASCII-only case rule and falls back to the content head only if the position
+// cannot be pinned down.
 func searchSnippet(content, query string) string {
-	idx := strings.Index(content, query)
-	if idx < 0 {
-		idx = strings.Index(strings.ToLower(content), strings.ToLower(query))
-	}
-	// idx >= len(content) is reachable: ToLower can grow non-ASCII bytes
-	// (e.g. İ), so an offset found in the lowered string can point past the
-	// original content.
+	idx := indexASCIIFold(content, query)
 	if idx < 0 || idx >= len(content) {
 		idx = 0
 	}
@@ -236,4 +230,33 @@ func searchSnippet(content, query string) string {
 		snippet += "..."
 	}
 	return snippet
+}
+
+// indexASCIIFold returns the first byte offset where needle occurs in haystack
+// under SQLite LIKE's ASCII-only case-insensitive comparison. Bytes outside
+// ASCII must match exactly, avoiding Unicode lowercasing and offset changes.
+func indexASCIIFold(haystack, needle string) int {
+	if needle == "" {
+		return 0
+	}
+	for start := 0; start+len(needle) <= len(haystack); start++ {
+		matched := true
+		for i := 0; i < len(needle); i++ {
+			if asciiLower(haystack[start+i]) != asciiLower(needle[i]) {
+				matched = false
+				break
+			}
+		}
+		if matched {
+			return start
+		}
+	}
+	return -1
+}
+
+func asciiLower(b byte) byte {
+	if b >= 'A' && b <= 'Z' {
+		return b + ('a' - 'A')
+	}
+	return b
 }

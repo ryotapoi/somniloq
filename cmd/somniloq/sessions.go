@@ -29,7 +29,7 @@ Notes:
   Date-only --since/--until values use --day-boundary or config dayBoundary. Relative times and datetimes do not.
   --imported-since filters sessions imported at or after a time; date-only values start at local midnight and ignore --day-boundary.
   Use the resulting source and session_id with somniloq show --source <source> <session-id> to read the session.
-  --project expands exact projectAliases matches, then filters repo_path by substring.
+  --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
 
 Examples:
   somniloq sessions --since 7d --short
@@ -130,7 +130,7 @@ func newSessionsFlagSet() (*flag.FlagSet, sessionsFlags) {
 		until:         fs.String("until", "", "filter sessions started before a relative, local date/datetime, or RFC3339 instant"),
 		importedSince: fs.String("imported-since", "", "filter by import time (relative, local date/datetime, or RFC3339 instant)"),
 		dayBoundary:   fs.String("day-boundary", "", "logical day boundary for date filters and display (HH:MM, overrides config dayBoundary)"),
-		project:       fs.String("project", "", "filter by repo path (substring match)"),
+		project:       fs.String("project", "", "filter by repo path (literal substring match)"),
 		short:         fs.Bool("short", false, "shorten unaliased projects to repo basename"),
 		format:        fs.String("format", "tsv", "output format (tsv, json)"),
 	}

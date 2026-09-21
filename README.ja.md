@@ -134,7 +134,7 @@ somniloq projects --format json
 
 出力は TSV 形式: `project`, `session_count`。`--format json` では `project`, `sessionCount`。alias グループは canonical 名で表示・集計する。
 
-repository が未知のセッションは filter なしでは空 project グループに残る。`%` wildcard を含め、`--project` には一致しない。
+repository が未知のセッションは filter なしでは空 project グループに残る。文字列としての `%` を含め、`--project` には一致しない。
 
 ### show
 
@@ -179,7 +179,7 @@ somniloq search --limit 50 --offset 50 "auth バグ"    # 51 件目から次の 
 somniloq search --format json "auth バグ"             # JSON で検索結果を出力
 ```
 
-デフォルト出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。`--format json` は `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet` を持つ配列を出力し、timestamp と snippet は保存値・生値のまま。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、検索結果の `source` とともに `somniloq show --source <source> --turn <N> <session_id>` または `somniloq outline --source <source> <session_id>` に渡して再参照できる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ、`%`/`_` はワイルドカードとして解釈される。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。`--limit N` は最大 N 件を返す（N は 1 以上。未指定は無制限）。`--offset M` は filter とソート後の先頭 M 件を飛ばす（M は 0 以上。デフォルトは 0）。同じ query/filter で `--offset` を増やせば続きのページを取得できるが、ページの安定性は DB と解決済みの時刻条件が固定の場合だけ保証する。DB 変更時や snapshot はサポートしない。
+デフォルト出力は TSV 形式: `session_id`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。`--format json` は `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet` を持つ配列を出力し、timestamp と snippet は保存値・生値のまま。新しい順。`turn` は `outline` / `show --turn` と同じ採番なので、検索結果の `source` とともに `somniloq show --source <source> --turn <N> <session_id>` または `somniloq outline --source <source> <session_id>` に渡して再参照できる。マッチは SQLite LIKE 準拠で、大文字小文字の無視は ASCII のみ。query の `%`、`_`、`\` は文字列として扱う。`sessions`/`show` と異なり、`--since`/`--until` は**メッセージ**の timestamp（内容が書かれた時刻）で絞る。date-only のフィルタは `dayBoundary` を使う。sidechain メッセージは除外。`--limit N` は最大 N 件を返す（N は 1 以上。未指定は無制限）。`--offset M` は filter とソート後の先頭 M 件を飛ばす（M は 0 以上。デフォルトは 0）。同じ query/filter で `--offset` を増やせば続きのページを取得できるが、ページの安定性は DB と解決済みの時刻条件が固定の場合だけ保証する。DB 変更時や snapshot はサポートしない。
 
 ### JSON 出力
 
@@ -204,7 +204,7 @@ somniloq search --format json "auth バグ"             # JSON で検索結果�
 }
 ```
 
-`projectAliases` は、時期によって名前が変わった同一プロジェクト（リネームしたリポジトリ等）をグループ化する: 現行名 → 旧名の配列。`--project` の値がグループ内のいずれかの名前に完全一致すると、フィルタがグループ全体に展開され、どちらの名前で記録されたセッションも見つかる。一致しない値は従来どおり。空または未知の `repo_path` は wildcard を含む project filter にも一致せず、filter を付けなければ空 project グループに残る。フィルタ展開の対象は `sessions` / `show` / `search`。`sessions` / `show` / `projects` / `search` の project 表示は、保存された `repo_path` または basename が alias グループに一致する場合に canonical 名のみを出し、`projects` は canonical 名で合算する。
+`projectAliases` は、時期によって名前が変わった同一プロジェクト（リネームしたリポジトリ等）をグループ化する: 現行名 → 旧名の配列。`--project` の値がグループ内のいずれかの名前に完全一致すると、フィルタがグループ全体に展開され、どちらの名前で記録されたセッションも見つかる。一致しない値は従来どおり。project filter は `%`、`_`、`\` を含め literal substring で照合する。空または未知の `repo_path` は一致せず、filter を付けなければ空 project グループに残る。フィルタ展開の対象は `sessions` / `show` / `search`。`sessions` / `show` / `projects` / `search` の project 表示は、保存された `repo_path` または basename が alias グループに一致する場合に canonical 名のみを出し、`projects` は canonical 名で合算する。
 
 `commandPatterns` は `sessions` のスキップ判定用列だけで使う Go 正規表現のリスト。各 pattern は trim 済みの user message 本文全体に対して評価する。不正な正規表現は壊れた JSON と同じく config 読み込みエラーになり、typo を黙って無効化しない。
 
@@ -257,6 +257,7 @@ v0.4 では Codex 対応に伴い、セッションキーに `source` を含め�
 - `sessions` / `projects` の TSV 出力は `repo_path` 由来の `project` を出す（`project_dir` フォールバック表記なし）。設定された project alias は canonical 名で表示する。
 - `--short` は alias 非一致時に `filepath.Base(repo_path)` を出す。
 - `import` はデフォルトで Claude Code、Codex、Cursor Agent のログを取り込む。1 source だけ選ぶ場合は `--source claude-code|codex|cursor-agent` を使う。
+- v0.12.0 以降、`search` query と `--project` は `%`、`_`、`\` を wildcard ではなく文字列として扱う。従来 wildcard を渡していた検索結果は変わる。wildcard mode は提供しない。保存形式は変わらないため、DB migration、backfill、再 import は不要。
 
 ## ドキュメント
 
