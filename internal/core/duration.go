@@ -8,18 +8,23 @@ import (
 )
 
 // ParseTimeRef parses a time reference that is either a relative duration
-// ("24h", "7d") or an absolute date/datetime ("2026-03-28", "2026-03-28T15:00").
-// Absolute dates are interpreted in the given location. Returns the resolved
-// time and whether only a date (no time component) was provided.
+// ("24h", "7d") or an absolute date/datetime ("2026-03-28", "2026-03-28T15:00",
+// "2026-03-28T15:00:00Z"). Dates and minute-precision datetimes are
+// interpreted in the given location; RFC3339 datetimes include their own
+// location. Returns the resolved time and whether only a date (no time
+// component) was provided.
 func ParseTimeRef(s string, now time.Time, loc *time.Location) (time.Time, bool, error) {
 	if strings.Contains(s, "-") {
+		if t, err := time.Parse(time.RFC3339, s); err == nil {
+			return t, false, nil
+		}
 		if t, err := time.ParseInLocation("2006-01-02T15:04", s, loc); err == nil {
 			return t, false, nil
 		}
 		if t, err := time.ParseInLocation("2006-01-02", s, loc); err == nil {
 			return t, true, nil
 		}
-		return time.Time{}, false, fmt.Errorf("invalid date: %q (use YYYY-MM-DD or YYYY-MM-DDThh:mm)", s)
+		return time.Time{}, false, fmt.Errorf("invalid date: %q (use YYYY-MM-DD, YYYY-MM-DDThh:mm, or RFC3339)", s)
 	}
 	d, err := ParseDuration(s)
 	if err != nil {

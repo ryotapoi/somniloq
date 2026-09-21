@@ -17,6 +17,7 @@ JSON fields:
 
 Notes:
   Projects are grouped by repo_path in SQL, then alias-equivalent rows are merged for display.
+  --since/--until accept RFC3339 instants; dates and minute datetimes are local.
   --since/--until filter session start time. Date-only filters use local 00:00; dayBoundary does not apply to projects.
   --short only affects projects that do not match projectAliases.
 
@@ -88,8 +89,8 @@ type projectsFlags struct {
 func newProjectsFlagSet() (*flag.FlagSet, projectsFlags) {
 	fs := flag.NewFlagSet("projects", flag.ContinueOnError)
 	return fs, projectsFlags{
-		since:  fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
-		until:  fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		since:  fs.String("since", "", "filter by start time (relative, local date/datetime, or RFC3339 instant)"),
+		until:  fs.String("until", "", "filter sessions started before a relative, local date/datetime, or RFC3339 instant"),
 		short:  fs.Bool("short", false, "shorten unaliased projects to repo basename"),
 		format: fs.String("format", "tsv", "output format (tsv, json)"),
 	}

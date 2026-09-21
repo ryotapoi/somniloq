@@ -26,6 +26,7 @@ JSON fields:
 
 Notes:
   Search scans non-sidechain message bodies using SQLite LIKE.
+  --since/--until accept RFC3339 instants; dates and minute datetimes are local.
   LIKE is ASCII-case-insensitive; % and _ in the query are wildcard characters.
   --since/--until filter message timestamps, not session start time.
   Date-only --since/--until values use --day-boundary or config dayBoundary.
@@ -144,8 +145,8 @@ type searchFlags struct {
 func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	flags := searchFlags{
-		since:       fs.String("since", "", "filter by message time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
-		until:       fs.String("until", "", "filter messages before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		since:       fs.String("since", "", "filter by message time (relative, local date/datetime, or RFC3339 instant)"),
+		until:       fs.String("until", "", "filter messages before a relative, local date/datetime, or RFC3339 instant"),
 		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)"),
 		project:     fs.String("project", "", "filter by repo path (substring match)"),
 		limit:       fs.Int("limit", 0, "maximum number of results (at least 1)"),

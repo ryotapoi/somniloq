@@ -21,11 +21,15 @@ func TestParseTimeRef(t *testing.T) {
 		{"relative 7d", "7d", time.UTC, time.Date(2026, 3, 22, 12, 0, 0, 0, time.UTC), false, false},
 		{"absolute date", "2026-03-28", time.UTC, time.Date(2026, 3, 28, 0, 0, 0, 0, time.UTC), true, false},
 		{"absolute datetime", "2026-03-28T15:00", time.UTC, time.Date(2026, 3, 28, 15, 0, 0, 0, time.UTC), false, false},
+		{"RFC3339 UTC datetime", "2026-03-28T15:00:37Z", jst, time.Date(2026, 3, 28, 15, 0, 37, 0, time.UTC), false, false},
+		{"RFC3339 offset datetime", "2026-03-29T00:00:37+09:00", time.UTC, time.Date(2026, 3, 28, 15, 0, 37, 0, time.UTC), false, false},
+		{"RFC3339 negative offset datetime", "2026-03-28T10:00:37-05:00", jst, time.Date(2026, 3, 28, 15, 0, 37, 0, time.UTC), false, false},
 		{"absolute date JST", "2026-03-28", jst, time.Date(2026, 3, 28, 0, 0, 0, 0, jst), true, false},
 		{"absolute datetime JST", "2026-03-28T15:00", jst, time.Date(2026, 3, 28, 15, 0, 0, 0, jst), false, false},
 		{"empty", "", time.UTC, time.Time{}, false, true},
 		{"invalid", "abc", time.UTC, time.Time{}, false, true},
 		{"invalid date", "2026-13-01", time.UTC, time.Time{}, false, true},
+		{"seconds datetime requires RFC3339 offset", "2026-03-28T15:00:00", time.UTC, time.Time{}, false, true},
 	}
 
 	for _, tt := range tests {

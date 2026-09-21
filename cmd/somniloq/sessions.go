@@ -25,6 +25,7 @@ JSON fields:
   source, sessionId, project, title, startedAt, endedAt, logicalDay, messageCount, bodySize, nonCommandUserTurnCount, firstNonCommandUserLine
 
 Notes:
+  --since/--until and --imported-since accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   Date-only --since/--until values use --day-boundary or config dayBoundary. Relative times and datetimes do not.
   --imported-since filters sessions imported at or after a time; date-only values start at local midnight and ignore --day-boundary.
   Use the resulting source and session_id with somniloq show --source <source> <session-id> to read the session.
@@ -125,9 +126,9 @@ type sessionsFlags struct {
 func newSessionsFlagSet() (*flag.FlagSet, sessionsFlags) {
 	fs := flag.NewFlagSet("sessions", flag.ContinueOnError)
 	flags := sessionsFlags{
-		since:         fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
-		until:         fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
-		importedSince: fs.String("imported-since", "", "filter by import time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates start at local midnight"),
+		since:         fs.String("since", "", "filter by start time (relative, local date/datetime, or RFC3339 instant)"),
+		until:         fs.String("until", "", "filter sessions started before a relative, local date/datetime, or RFC3339 instant"),
+		importedSince: fs.String("imported-since", "", "filter by import time (relative, local date/datetime, or RFC3339 instant)"),
 		dayBoundary:   fs.String("day-boundary", "", "logical day boundary for date filters and display (HH:MM, overrides config dayBoundary)"),
 		project:       fs.String("project", "", "filter by repo path (substring match)"),
 		short:         fs.Bool("short", false, "shorten unaliased projects to repo basename"),

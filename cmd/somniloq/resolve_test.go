@@ -26,6 +26,8 @@ func TestResolveTimeFlag(t *testing.T) {
 		{"date since JST", "2026-03-28", false, jst, "2026-03-27T15:00:00.000Z"},
 		{"date until JST", "2026-03-28", true, jst, "2026-03-28T15:00:00.000Z"},
 		{"datetime since JST", "2026-03-28T15:00", false, jst, "2026-03-28T06:00:00.000Z"},
+		{"RFC3339 UTC ignores location", "2026-03-28T15:00:37Z", false, jst, "2026-03-28T15:00:37.000Z"},
+		{"RFC3339 offset resolves same instant", "2026-03-29T00:00:37+09:00", false, time.UTC, "2026-03-28T15:00:37.000Z"},
 	}
 
 	for _, tt := range tests {
@@ -56,6 +58,7 @@ func TestResolveTimeFlag_DayBoundaryAppliesOnlyToDateOnly(t *testing.T) {
 		{"date until ends at next boundary", "2026-03-28", true, "2026-03-28T19:00:00.000Z"},
 		{"datetime ignores boundary", "2026-03-28T15:00", false, "2026-03-28T06:00:00.000Z"},
 		{"relative ignores boundary", "2h", false, "2026-03-29T10:00:00.000Z"},
+		{"RFC3339 ignores boundary", "2026-03-29T00:00:37+09:00", false, "2026-03-28T15:00:37.000Z"},
 	}
 
 	for _, tt := range tests {
@@ -81,6 +84,7 @@ func TestResolveImportedSince(t *testing.T) {
 		{"relative rounds up to stored second", "0m", "2026-03-29T12:00:01.000Z"},
 		{"date starts at local midnight", "2026-03-28", "2026-03-27T15:00:00.000Z"},
 		{"datetime ignores day boundary", "2026-03-28T15:00", "2026-03-28T06:00:00.000Z"},
+		{"RFC3339 offset resolves exact instant", "2026-03-29T00:00:37+09:00", "2026-03-28T15:00:37.000Z"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

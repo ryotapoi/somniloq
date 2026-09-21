@@ -115,7 +115,7 @@ Output is TSV: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, 
 
 Sessions with an unknown timestamp remain visible without a time filter, but do not match `--since` or `--until`. When both timestamps are unknown, the TSV time range and Markdown Started value are empty.
 
-`sessions --imported-since <time>` filters by the inclusive `imported_at` lower bound. It accepts the same relative, local-date, and minute-precision forms as `--since`, but a date starts at local midnight and ignores `--day-boundary`. It combines with `--since`, `--until`, and `--project` using AND. `imported_at` is the UTC, whole-second start time of the import pass that last saved the session; it is not a message-change timestamp, commit time, or exactly-once consumption watermark. Pass the output `source` and `session_id` to `somniloq show --source <source> <session-id>` to read the session.
+`sessions --imported-since <time>` filters by the inclusive `imported_at` lower bound. It accepts the same relative, local-date, minute-precision, and RFC3339-instant forms as `--since`, but a date starts at local midnight and ignores `--day-boundary`. It combines with `--since`, `--until`, and `--project` using AND. `imported_at` is the UTC, whole-second start time of the import pass that last saved the session; it is not a message-change timestamp, commit time, or exactly-once consumption watermark. Pass the output `source` and `session_id` to `somniloq show --source <source> <session-id>` to read the session.
 
 When `projectAliases` matches a repo path or basename, project output uses only the canonical name.
 
@@ -230,7 +230,8 @@ Optional config file at `~/.somniloq/config.json` (override with the global `--c
 |--------|---------|---------|
 | Relative | `30m`, `24h`, `7d` | That amount of time ago |
 | Date | `2026-03-28` | The configured local `dayBoundary` on that day for `sessions`/`search`; otherwise 00:00 local time |
-| Datetime | `2026-03-28T15:00` | Exact local time |
+| Local datetime | `2026-03-28T15:00` | Exact local time |
+| RFC3339 instant | `2026-03-28T15:00:00Z`, `2026-03-29T00:00:00+09:00` | Exact instant using the explicit UTC or numeric offset |
 
 ## Upgrading to v0.4
 

@@ -23,6 +23,7 @@ JSON fields:
 
 Notes:
   Flags must come before <session-id>.
+  --since/--until accept RFC3339 instants; dates and minute datetimes are local.
   Use either <session-id> or --since/--until. --project only applies in time-range mode.
   --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent with <session-id>; it cannot be used with --since/--until.
   --summary N shows first N user messages per session, skipping /clear and local-command-caveat unless --include-clear is set.
@@ -200,8 +201,8 @@ type showFlags struct {
 func newShowFlagSet() (*flag.FlagSet, showFlags) {
 	fs := flag.NewFlagSet("show", flag.ContinueOnError)
 	return fs, showFlags{
-		since:        fs.String("since", "", "filter by start time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
-		until:        fs.String("until", "", "filter sessions started before this time (e.g. 24h, 7d, 2026-03-28, 2026-03-28T15:00); dates are local time"),
+		since:        fs.String("since", "", "filter by start time (relative, local date/datetime, or RFC3339 instant)"),
+		until:        fs.String("until", "", "filter sessions started before a relative, local date/datetime, or RFC3339 instant"),
 		project:      fs.String("project", "", "filter by repo path (substring match)"),
 		short:        fs.Bool("short", false, "shorten unaliased project to repo basename"),
 		summary:      fs.Int("summary", 0, "show first N user messages skipping /clear and local-command-caveat (0 disables)"),
