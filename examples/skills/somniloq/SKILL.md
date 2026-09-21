@@ -26,18 +26,23 @@ DB は import 時点のスナップショットです。自動更新ではあり
 somniloq sessions --short
 
 # キーワードで見つける
-somniloq search "keyword"
+somniloq search --format json "keyword"
 
+# search または sessions が出した source は --source に、session ID は位置引数に渡す
 # 長いセッションは、先に地図を見て必要な turn だけ読む
-somniloq outline <session-id>
-somniloq show --turn 12..18 <session-id>
+somniloq outline --source <source> <session-id>
+somniloq show --source <source> --turn 12..18 <session-id>
+
+# 検索結果を 50 件ずつページ単位で読む（最初、次）
+somniloq search --limit 50 --offset 0 "keyword"
+somniloq search --limit 50 --offset 50 "keyword"
 
 # 機械処理するときは JSON を優先する
 somniloq sessions --format json
-somniloq show --format json <session-id>
+somniloq show --source <source> --format json <session-id>
 ```
 
-Cursor Agent の履歴には時刻がないことがあるため、`--since` / `--until` を付けると対象外になります。日時で絞り込む必要がある場合は CLI help を確認してください。
+Cursor Agent の履歴には時刻がないことがあり、`--since` / `--until` を付けると対象外になります。時刻不明でも直近に取り込んだ履歴は、`somniloq sessions --imported-since 24h` で探せます。日時で絞り込む必要がある場合は CLI help を確認してください。
 
 ## 詳細は CLI help を見る
 
