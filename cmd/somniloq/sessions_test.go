@@ -180,6 +180,10 @@ func TestSessionsCmd_TimeFilterBoundaryWithSecondsPrecisionStartedAt(t *testing.
 }
 
 func TestSessionsCmd_ImportedSinceFiltersUnknownStartedAt(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.UTC
+	defer func() { time.Local = oldLocal }()
+
 	db, err := core.OpenDB(":memory:")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -200,6 +204,10 @@ func TestSessionsCmd_ImportedSinceFiltersUnknownStartedAt(t *testing.T) {
 }
 
 func TestSessionsCmd_ImportedSinceJSONPreservesSourceAndSessionID(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.UTC
+	defer func() { time.Local = oldLocal }()
+
 	db, err := core.OpenDB(":memory:")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)

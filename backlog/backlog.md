@@ -20,4 +20,4 @@
 
 ### 保守
 
-- [ ] UTC の `imported_at` fixture とタイムゾーンなしの `--imported-since` を組み合わせる `TestSessionsCmd_ImportedSinceFiltersUnknownStartedAt` および `TestSessionsCmd_ImportedSinceJSONPreservesSourceAndSessionID` が `time.Local` に依存して `America/Los_Angeles` で失敗するため、production の挙動を変えず、テスト内で `time.Local` を UTC に設定・復元して必須テスト gate の誤失敗をなくす。完了条件: 両テストが UTC、Asia/Tokyo、America/Los_Angeles で通り、共通の `go test -count=1 ./...` が成功する。
+- [x] UTC の `imported_at` fixture とタイムゾーンなしの `--imported-since` を組み合わせる `TestSessionsCmd_ImportedSinceFiltersUnknownStartedAt` および `TestSessionsCmd_ImportedSinceJSONPreservesSourceAndSessionID` が `time.Local` に依存して `America/Los_Angeles` で失敗するため、production の挙動を変えず、テスト内で `time.Local` を UTC に設定・復元して必須テスト gate の誤失敗をなくす。完了条件: 両テストが UTC、Asia/Tokyo、America/Los_Angeles で通り、共通の `go test -count=1 ./...` が成功する。
