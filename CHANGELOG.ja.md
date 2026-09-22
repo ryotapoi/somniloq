@@ -2,6 +2,20 @@
 
 [English](CHANGELOG.md) | 日本語
 
+## v0.12.0 — 2026-09-23
+
+### 追加
+
+- `sessions`、`projects`、`show`、`search` の `--since` と `--until` が、秒・小数秒・`Z` または数値の UTC offset を含む RFC3339 instant を受け付けるようになった。`sessions --imported-since` も同じ形式を受け付ける。明示した offset により、実行時のタイムゾーンにかかわらず同じ時点を指定できる。
+
+### 変更
+
+- 検索クエリと、`sessions`、`show`、`search` の `--project` で、`%`、`_`、`\` をワイルドカードではなくリテラルな文字列として扱うようにした。既存の部分一致、ASCII の大文字小文字を無視する挙動、project alias の展開は維持し、DB migration、backfill、再取り込みは不要。
+
+### 修正
+
+- RFC3339 の時刻境界が小数秒を保持して正確に比較され、等価な UTC offset を同じ時点として扱うようにした。`--since` の境界は含み、`--until` の境界は含まない。
+
 ## v0.11.0 — 2026-09-21
 
 ### 追加

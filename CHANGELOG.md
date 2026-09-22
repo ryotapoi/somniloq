@@ -2,6 +2,20 @@
 
 English | [日本語](CHANGELOG.ja.md)
 
+## v0.12.0 — 2026-09-23
+
+### Added
+
+- `sessions`, `projects`, `show`, and `search` now accept RFC3339 instants with seconds, fractional seconds, and `Z` or numeric UTC offsets for `--since` and `--until`; `sessions --imported-since` accepts the same format. An explicit offset specifies the same instant regardless of the runtime time zone.
+
+### Changed
+
+- Search queries and `--project` in `sessions`, `show`, and `search` now treat `%`, `_`, and `\` as literal text rather than wildcards. Existing substring matching, ASCII case-insensitivity, and project-alias expansion remain unchanged; no database migration, backfill, or re-import is required.
+
+### Fixed
+
+- RFC3339 time boundaries now preserve fractional seconds for exact comparisons, treat equivalent UTC offsets as the same instant, include `--since` boundaries, and exclude `--until` boundaries.
+
 ## v0.11.0 — 2026-09-21
 
 ### Added
