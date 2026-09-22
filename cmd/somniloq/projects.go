@@ -17,7 +17,7 @@ JSON fields:
 
 Notes:
   Projects are grouped by repo_path in SQL, then alias-equivalent rows are merged for display.
-  --since/--until accept RFC3339 instants; dates and minute datetimes are local.
+  --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   --since/--until filter session start time. Date-only filters use local 00:00; dayBoundary does not apply to projects.
   --short only affects projects that do not match projectAliases.
 

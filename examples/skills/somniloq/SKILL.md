@@ -42,7 +42,7 @@ somniloq sessions --format json
 somniloq show --source <source> --format json <session-id>
 ```
 
-Cursor Agent の履歴には時刻がないことがあり、`--since` / `--until` を付けると対象外になります。時刻不明でも直近に取り込んだ履歴は、`somniloq sessions --imported-since 24h` で探せます。日時で絞り込む必要がある場合は CLI help を確認してください。
+Cursor Agent の履歴には時刻がないことがあり、`--since` / `--until` を付けると対象外になります。時刻不明でも直近に取り込んだ履歴は、`somniloq sessions --imported-since 24h` で探せます。日時で絞り込む必要がある場合は CLI help を確認してください。`--since`、`--until`、`sessions --imported-since` は、相対時刻とローカルの日付・分単位日時に加え、`Z` または数値オフセット付きの RFC3339 instant を受け付ける。
 
 ## 詳細は CLI help を見る
 
