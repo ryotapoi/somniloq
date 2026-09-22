@@ -28,6 +28,7 @@ Notes:
   Search scans non-sidechain message bodies using SQLite LIKE.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   LIKE is ASCII-case-insensitive; query text, including %, _, and \, is literal.
+  --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
   --since/--until filter message timestamps, not session start time.
   Date-only --since/--until values use --day-boundary or config dayBoundary.
   --limit returns at most N results (N >= 1); --offset skips N ordered results (N >= 0).

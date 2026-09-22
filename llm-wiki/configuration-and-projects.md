@@ -31,6 +31,7 @@ sources:
 - alias 展開は `config.expandProject`。完全一致したときだけ canonical + old names に展開する。
 - `cmd/somniloq/filter.go` の `buildSessionFilter` が time flag と project alias をまとめて `core.SessionFilter` にする。`sessions` / `search` は date-only filter に `dayBoundary` を渡し、`show` / `projects` は従来どおり 00:00 境界で呼ぶ。
 - SQL 条件は `internal/core/db_sessions_projects.go` の `projectsCondition`。空でない repo_path の substring LIKE を OR でつなぎ、NULL / 空 repo_path は `%` を含む条件にも一致させない。
+- ユーザー入力の `%`、`_`、`\` は `escapeLikeLiteral` でエスケープしてから LIKE する。`search` の query と `--project` に wildcard モードはない。
 
 ## commandPatterns
 
