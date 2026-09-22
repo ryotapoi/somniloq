@@ -425,7 +425,7 @@ func TestProjectAliasLiteralConditionsAcrossCommands(t *testing.T) {
 					return sessionsCmd([]string{"--project", input}, staticDB(db), cfg, out, errOut)
 				}},
 				{"show", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
-					return showCmd([]string{"--since", "2026-03-28", "--project", input}, staticDB(db), cfg, out, errOut)
+					return showCmd([]string{"--since", "2026-03-28T00:00:00Z", "--project", input}, staticDB(db), cfg, out, errOut)
 				}},
 				{"search", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
 					return searchCmd([]string{"--project", input, "literal alias hit"}, staticDB(db), cfg, out, errOut)
