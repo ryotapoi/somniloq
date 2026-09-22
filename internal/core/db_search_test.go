@@ -227,6 +227,33 @@ func TestSearchMessages_SinceFilter_MillisecondTimestamp(t *testing.T) {
 	}
 }
 
+func TestSearchMessages_TimeFiltersCompareVariableFractionalSecondsAsInstants(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "fractional", StartedAt: "2026-03-28T14:10:45.123Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "fractional-message", SessionID: "fractional", Role: "user", Content: "fractional auth", Timestamp: "2026-03-28T14:10:45.123Z"}))
+
+	for _, filter := range []struct {
+		name   string
+		filter SessionFilter
+		want   int
+	}{
+		{"until later fraction includes", SessionFilter{Until: "2026-03-28T14:10:45.1235Z"}, 1},
+		{"since later fraction excludes", SessionFilter{Since: "2026-03-28T14:10:45.1235Z"}, 0},
+		{"since equal includes", SessionFilter{Since: "2026-03-28T14:10:45.123Z"}, 1},
+		{"until equal excludes", SessionFilter{Until: "2026-03-28T14:10:45.123Z"}, 0},
+	} {
+		t.Run(filter.name, func(t *testing.T) {
+			rows, err := db.SearchMessages(filter.filter, "auth", SearchPagination{})
+			if err != nil {
+				t.Fatalf("SearchMessages: %v", err)
+			}
+			if len(rows) != filter.want {
+				t.Fatalf("SearchMessages rows = %d, want %d", len(rows), filter.want)
+			}
+		})
+	}
+}
+
 func TestSearchMessages_NoMatch(t *testing.T) {
 	db := newSearchTestDB(t)
 

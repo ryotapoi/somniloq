@@ -18,16 +18,17 @@ func TestResolveTimeFlag(t *testing.T) {
 		loc     *time.Location
 		want    string
 	}{
-		{"relative since", "24h", false, time.UTC, "2026-03-28T12:00:00.000Z"},
-		{"date since", "2026-03-28", false, time.UTC, "2026-03-28T00:00:00.000Z"},
-		{"date until adds day", "2026-03-28", true, time.UTC, "2026-03-29T00:00:00.000Z"},
-		{"datetime until no add", "2026-03-28T15:00", true, time.UTC, "2026-03-28T15:00:00.000Z"},
-		{"relative until no add", "2h", true, time.UTC, "2026-03-29T10:00:00.000Z"},
-		{"date since JST", "2026-03-28", false, jst, "2026-03-27T15:00:00.000Z"},
-		{"date until JST", "2026-03-28", true, jst, "2026-03-28T15:00:00.000Z"},
-		{"datetime since JST", "2026-03-28T15:00", false, jst, "2026-03-28T06:00:00.000Z"},
-		{"RFC3339 UTC ignores location", "2026-03-28T15:00:37Z", false, jst, "2026-03-28T15:00:37.000Z"},
-		{"RFC3339 offset resolves same instant", "2026-03-29T00:00:37+09:00", false, time.UTC, "2026-03-28T15:00:37.000Z"},
+		{"relative since", "24h", false, time.UTC, "2026-03-28T12:00:00Z"},
+		{"date since", "2026-03-28", false, time.UTC, "2026-03-28T00:00:00Z"},
+		{"date until adds day", "2026-03-28", true, time.UTC, "2026-03-29T00:00:00Z"},
+		{"datetime until no add", "2026-03-28T15:00", true, time.UTC, "2026-03-28T15:00:00Z"},
+		{"relative until no add", "2h", true, time.UTC, "2026-03-29T10:00:00Z"},
+		{"date since JST", "2026-03-28", false, jst, "2026-03-27T15:00:00Z"},
+		{"date until JST", "2026-03-28", true, jst, "2026-03-28T15:00:00Z"},
+		{"datetime since JST", "2026-03-28T15:00", false, jst, "2026-03-28T06:00:00Z"},
+		{"RFC3339 UTC ignores location", "2026-03-28T15:00:37Z", false, jst, "2026-03-28T15:00:37Z"},
+		{"RFC3339 offset resolves same instant", "2026-03-29T00:00:37+09:00", false, time.UTC, "2026-03-28T15:00:37Z"},
+		{"RFC3339 fractional seconds preserve precision", "2026-03-28T15:00:37.1235Z", false, time.UTC, "2026-03-28T15:00:37.1235Z"},
 	}
 
 	for _, tt := range tests {
@@ -54,11 +55,11 @@ func TestResolveTimeFlag_DayBoundaryAppliesOnlyToDateOnly(t *testing.T) {
 		isUntil bool
 		want    string
 	}{
-		{"date since starts at boundary", "2026-03-28", false, "2026-03-27T19:00:00.000Z"},
-		{"date until ends at next boundary", "2026-03-28", true, "2026-03-28T19:00:00.000Z"},
-		{"datetime ignores boundary", "2026-03-28T15:00", false, "2026-03-28T06:00:00.000Z"},
-		{"relative ignores boundary", "2h", false, "2026-03-29T10:00:00.000Z"},
-		{"RFC3339 ignores boundary", "2026-03-29T00:00:37+09:00", false, "2026-03-28T15:00:37.000Z"},
+		{"date since starts at boundary", "2026-03-28", false, "2026-03-27T19:00:00Z"},
+		{"date until ends at next boundary", "2026-03-28", true, "2026-03-28T19:00:00Z"},
+		{"datetime ignores boundary", "2026-03-28T15:00", false, "2026-03-28T06:00:00Z"},
+		{"relative ignores boundary", "2h", false, "2026-03-29T10:00:00Z"},
+		{"RFC3339 ignores boundary", "2026-03-29T00:00:37+09:00", false, "2026-03-28T15:00:37Z"},
 	}
 
 	for _, tt := range tests {
@@ -147,6 +148,20 @@ func TestBuildSessionFilter_SinceAfterUntil(t *testing.T) {
 	_, err := buildSessionFilter("2027-01-01", "2026-01-01", "", config{}, dayBoundary{})
 	if err == nil {
 		t.Error("expected error for since >= until, got nil")
+	}
+}
+
+func TestBuildSessionFilter_OrdersFractionalSecondsByInstant(t *testing.T) {
+	_, err := buildSessionFilterAt(time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC), "2026-03-28T10:00:37.1231Z", "2026-03-28T10:00:37.1235Z", "", config{}, dayBoundary{})
+	if err != nil {
+		t.Fatalf("ordered fractional-second range: %v", err)
+	}
+
+	for _, until := range []string{"2026-03-28T10:00:37.1230Z", "2026-03-28T10:00:37.1231Z", "2026-03-28T19:00:37.1231+09:00"} {
+		_, err := buildSessionFilterAt(time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC), "2026-03-28T10:00:37.1231Z", until, "", config{}, dayBoundary{})
+		if err == nil {
+			t.Errorf("non-increasing range ending at %q was accepted", until)
+		}
 	}
 }
 

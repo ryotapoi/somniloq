@@ -30,8 +30,18 @@ func buildSessionFilterAt(now time.Time, since, until, project string, cfg confi
 		}
 		filter.Until = u
 	}
-	if filter.Since != "" && filter.Until != "" && filter.Since >= filter.Until {
-		return filter, fmt.Errorf("--since must be before --until")
+	if filter.Since != "" && filter.Until != "" {
+		sinceTime, err := time.Parse(time.RFC3339Nano, filter.Since)
+		if err != nil {
+			return filter, err
+		}
+		untilTime, err := time.Parse(time.RFC3339Nano, filter.Until)
+		if err != nil {
+			return filter, err
+		}
+		if !sinceTime.Before(untilTime) {
+			return filter, fmt.Errorf("--since must be before --until")
+		}
 	}
 	filter.Projects = cfg.expandProject(project)
 	return filter, nil
@@ -48,12 +58,7 @@ func resolveTimeFlag(value string, now time.Time, isUntil bool, loc *time.Locati
 	if isUntil && dateOnly {
 		t = t.AddDate(0, 0, 1)
 	}
-	// Normalize to three-digit UTC representation compatible with the lexical range
-	// comparisons in internal/core/db_query.go. Source JSONL timestamps are
-	// stored in sessions.started_at and messages.timestamp with RFC3339
-	// second-or-finer precision, so an equal seconds-precision value (…:05Z)
-	// remains >= this boundary (…:05.000Z).
-	return t.UTC().Format("2006-01-02T15:04:05.000Z"), nil
+	return t.UTC().Format(time.RFC3339Nano), nil
 }
 
 // resolveImportedSince resolves an imported_at lower bound. imported_at is

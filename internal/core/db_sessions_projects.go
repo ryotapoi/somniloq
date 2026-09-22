@@ -112,11 +112,9 @@ const (
 
 // timeFilterConditions returns range conditions for filter.Since / filter.Until
 // on a trusted internal timestamp column. The column constants above are the
-// only callers; user-provided values remain query parameters. Its lexical
-// comparisons rely on cmd/somniloq/filter.go emitting three-digit UTC filter
-// boundaries that remain ordered with source JSONL timestamps stored in
-// sessions.started_at and messages.timestamp at RFC3339 second-or-finer
-// precision (for example, …:05Z >= …:05.000Z).
+// only callers; user-provided values remain query parameters. Both operands are
+// normalized so RFC3339 timestamps with variable fractional-second widths sort
+// by instant rather than text representation.
 func timeFilterConditions(filter SessionFilter, column timestampColumn) (conditions []string, args []any) {
 	if filter.Since != "" || filter.Until != "" {
 		// Unknown source timestamps are stored as NULL or empty strings. They
@@ -124,11 +122,11 @@ func timeFilterConditions(filter SessionFilter, column timestampColumn) (conditi
 		conditions = append(conditions, string(column)+" <> ''")
 	}
 	if filter.Since != "" {
-		conditions = append(conditions, string(column)+" >= ?")
+		conditions = append(conditions, "rfc3339_utc_nanos("+string(column)+") >= rfc3339_utc_nanos(?)")
 		args = append(args, filter.Since)
 	}
 	if filter.Until != "" {
-		conditions = append(conditions, string(column)+" < ?")
+		conditions = append(conditions, "rfc3339_utc_nanos("+string(column)+") < rfc3339_utc_nanos(?)")
 		args = append(args, filter.Until)
 	}
 	return conditions, args

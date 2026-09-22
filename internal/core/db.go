@@ -2,9 +2,30 @@ package core
 
 import (
 	"database/sql"
+	"database/sql/driver"
+	"time"
 
-	_ "modernc.org/sqlite"
+	"modernc.org/sqlite"
 )
+
+const rfc3339UTCNanosLayout = "2006-01-02T15:04:05.000000000Z"
+
+func init() {
+	sqlite.MustRegisterDeterministicScalarFunction("rfc3339_utc_nanos", 1, func(_ *sqlite.FunctionContext, args []driver.Value) (driver.Value, error) {
+		if args[0] == nil {
+			return nil, nil
+		}
+		value, ok := args[0].(string)
+		if !ok || value == "" {
+			return nil, nil
+		}
+		t, err := time.Parse(time.RFC3339Nano, value)
+		if err != nil {
+			return nil, err
+		}
+		return t.UTC().Format(rfc3339UTCNanosLayout), nil
+	})
+}
 
 type DB struct {
 	db *sql.DB

@@ -188,6 +188,40 @@ func TestListSessions_SinceFilter_MillisecondTimestamp(t *testing.T) {
 	}
 }
 
+func TestTimeFilters_CompareVariableFractionalSecondsAsInstants(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "fractional", RepoPath: "/project/fractional", StartedAt: "2026-03-28T14:10:45.123Z"}, "2026-03-28T15:00:00Z"))
+
+	for _, filter := range []struct {
+		name   string
+		filter SessionFilter
+		want   int
+	}{
+		{"until later fraction includes", SessionFilter{Until: "2026-03-28T14:10:45.1235Z"}, 1},
+		{"since later fraction excludes", SessionFilter{Since: "2026-03-28T14:10:45.1235Z"}, 0},
+		{"since equal includes", SessionFilter{Since: "2026-03-28T14:10:45.123Z"}, 1},
+		{"until equal excludes", SessionFilter{Until: "2026-03-28T14:10:45.123Z"}, 0},
+	} {
+		t.Run(filter.name, func(t *testing.T) {
+			rows, err := db.ListSessions(filter.filter)
+			if err != nil {
+				t.Fatalf("ListSessions: %v", err)
+			}
+			if len(rows) != filter.want {
+				t.Fatalf("ListSessions rows = %d, want %d", len(rows), filter.want)
+			}
+
+			projects, err := db.ListProjects(filter.filter)
+			if err != nil {
+				t.Fatalf("ListProjects: %v", err)
+			}
+			if len(projects) != filter.want {
+				t.Fatalf("ListProjects rows = %d, want %d", len(projects), filter.want)
+			}
+		})
+	}
+}
+
 func TestListSessions_ImportedSinceFilter(t *testing.T) {
 	db := testDB(t)
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "before", StartedAt: "2026-03-01T10:00:00Z", RepoPath: "/project/old"}, "2026-03-28T14:59:59Z"))
