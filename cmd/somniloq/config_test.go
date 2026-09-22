@@ -8,6 +8,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
@@ -408,6 +409,10 @@ func TestSessionsCmd_ProjectAliasExpansion(t *testing.T) {
 }
 
 func TestProjectAliasLiteralConditionsAcrossCommands(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.FixedZone("UTC-11", -11*60*60)
+	defer func() { time.Local = oldLocal }()
+
 	aliases := []string{"new_rate_100%", `old\repo`, "legacy_100%"}
 	cfg := config{ProjectAliases: map[string][]string{aliases[0]: aliases[1:]}}
 	for _, input := range aliases {
