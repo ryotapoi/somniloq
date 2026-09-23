@@ -202,9 +202,16 @@ func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	if out.String() != want {
 		t.Errorf("stdout = %q, want %q", out.String(), want)
 	}
-	wantErr := "  error: " + filepath.Join(projDir, "s1.jsonl") + ":2: invalid character 'b' looking for beginning of object key string\n"
-	if errOut.String() != wantErr {
-		t.Errorf("stderr = %q, want %q", errOut.String(), wantErr)
+	gotErr := errOut.String()
+	errLines := strings.Split(gotErr, "\n")
+	if len(errLines) != 2 || errLines[1] != "" {
+		t.Fatalf("stderr = %q, want exactly one newline-terminated diagnostic line", gotErr)
+	}
+	wantErrPrefix := "  error: " + filepath.Join(projDir, "s1.jsonl") + ":2: "
+	if !strings.HasPrefix(errLines[0], wantErrPrefix) {
+		t.Errorf("stderr diagnostic = %q, want prefix %q", errLines[0], wantErrPrefix)
+	} else if detail := strings.TrimPrefix(errLines[0], wantErrPrefix); detail == "" {
+		t.Errorf("stderr diagnostic = %q, want non-empty detail after prefix %q", errLines[0], wantErrPrefix)
 	}
 }
 

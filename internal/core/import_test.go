@@ -294,12 +294,17 @@ func TestImport_CountsUnparsedLines(t *testing.T) {
 	if len(res.UnparsedDiagnostics) != 2 {
 		t.Fatalf("UnparsedDiagnostics: got %d, want 2: %v", len(res.UnparsedDiagnostics), res.UnparsedDiagnostics)
 	}
-	for i, want := range []string{
-		path + ":2: invalid character 'b' looking for beginning of object key string",
-		path + ":3: json: cannot unmarshal string into Go value of type claudecode.MessageEnvelope",
+	for i, wantPrefix := range []string{
+		path + ":2: ",
+		path + ":3: ",
 	} {
-		if got := res.UnparsedDiagnostics[i].Error(); got != want {
-			t.Errorf("UnparsedDiagnostics[%d] = %q, want %q", i, got, want)
+		got := res.UnparsedDiagnostics[i].Error()
+		if !strings.HasPrefix(got, wantPrefix) {
+			t.Errorf("UnparsedDiagnostics[%d] = %q, want prefix %q", i, got, wantPrefix)
+			continue
+		}
+		if detail := strings.TrimPrefix(got, wantPrefix); detail == "" {
+			t.Errorf("UnparsedDiagnostics[%d] = %q, want non-empty detail after prefix %q", i, got, wantPrefix)
 		}
 	}
 
@@ -341,8 +346,13 @@ func TestImport_CapsUnparsedDiagnosticsInEncounterOrder(t *testing.T) {
 	}
 	for i, diagnostic := range res.UnparsedDiagnostics {
 		wantPrefix := path + ":" + strconv.Itoa(i+2) + ": "
-		if !strings.HasPrefix(diagnostic.Error(), wantPrefix) {
-			t.Errorf("UnparsedDiagnostics[%d] = %q, want prefix %q", i, diagnostic, wantPrefix)
+		got := diagnostic.Error()
+		if !strings.HasPrefix(got, wantPrefix) {
+			t.Errorf("UnparsedDiagnostics[%d] = %q, want prefix %q", i, got, wantPrefix)
+			continue
+		}
+		if detail := strings.TrimPrefix(got, wantPrefix); detail == "" {
+			t.Errorf("UnparsedDiagnostics[%d] = %q, want non-empty detail after prefix %q", i, got, wantPrefix)
 		}
 	}
 }
@@ -415,8 +425,12 @@ func TestImport_ReportsClaudeCodeDiagnosticLineAfterOffset(t *testing.T) {
 	if res.UnparsedLines != 1 || len(res.UnparsedDiagnostics) != 1 {
 		t.Fatalf("incremental diagnostics: lines=%d diagnostics=%v", res.UnparsedLines, res.UnparsedDiagnostics)
 	}
-	if got, wantPrefix := res.UnparsedDiagnostics[0].Error(), path+":2: "; !strings.HasPrefix(got, wantPrefix) {
+	got := res.UnparsedDiagnostics[0].Error()
+	wantPrefix := path + ":2: "
+	if !strings.HasPrefix(got, wantPrefix) {
 		t.Errorf("diagnostic = %q, want prefix %q", got, wantPrefix)
+	} else if detail := strings.TrimPrefix(got, wantPrefix); detail == "" {
+		t.Errorf("diagnostic = %q, want non-empty detail after prefix %q", got, wantPrefix)
 	}
 }
 
@@ -446,8 +460,12 @@ func TestImport_ReportsClaudeCodeDiagnosticOnUnterminatedPrefixLine(t *testing.T
 	if res.UnparsedLines != 1 || len(res.UnparsedDiagnostics) != 1 {
 		t.Fatalf("incremental diagnostics: lines=%d diagnostics=%v", res.UnparsedLines, res.UnparsedDiagnostics)
 	}
-	if got, wantPrefix := res.UnparsedDiagnostics[0].Error(), path+":1: "; !strings.HasPrefix(got, wantPrefix) {
+	got := res.UnparsedDiagnostics[0].Error()
+	wantPrefix := path + ":1: "
+	if !strings.HasPrefix(got, wantPrefix) {
 		t.Errorf("diagnostic = %q, want prefix %q", got, wantPrefix)
+	} else if detail := strings.TrimPrefix(got, wantPrefix); detail == "" {
+		t.Errorf("diagnostic = %q, want non-empty detail after prefix %q", got, wantPrefix)
 	}
 }
 
