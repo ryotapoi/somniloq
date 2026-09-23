@@ -106,4 +106,31 @@ func TestNormalizeMessage_UsesRolloutPathAndLineNumberUUID(t *testing.T) {
 	if got.Message.Role != "user" || got.Message.Content != "hello" {
 		t.Errorf("message: %+v", got.Message)
 	}
+	if got.Message.Timestamp != "2026-05-01T00:00:01.000Z" {
+		t.Errorf("timestamp: got %q, want %q", got.Message.Timestamp, "2026-05-01T00:00:01.000Z")
+	}
+}
+
+func TestNormalizeMessage_UsesSessionMetaTimestampWhenRecordTimestampMissing(t *testing.T) {
+	meta := sessionMetaCursor{
+		SessionID: "s1",
+		Timestamp: "2026-05-01T00:00:00.000Z",
+	}
+	rec, err := ParseRecord([]byte(`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}`))
+	if err != nil {
+		t.Fatalf("ParseRecord failed: %v", err)
+	}
+
+	payload, err := parseResponseItem(rec)
+	if err != nil {
+		t.Fatalf("parseResponseItem failed: %v", err)
+	}
+	got, err := normalizeMessage(rec, payload, meta, "/tmp/rollout.jsonl", 7)
+	if err != nil {
+		t.Fatalf("normalizeMessage failed: %v", err)
+	}
+
+	if got.Message.Timestamp != meta.Timestamp {
+		t.Errorf("timestamp: got %q, want session meta timestamp %q", got.Message.Timestamp, meta.Timestamp)
+	}
 }
