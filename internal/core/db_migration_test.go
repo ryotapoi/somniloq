@@ -309,6 +309,16 @@ func TestOpenDB_MigratesLegacyFile(t *testing.T) {
 	if isNull != 1 {
 		t.Errorf("existing row should have repo_path IS NULL after migration")
 	}
+	if err := db.DeleteAll(); err != nil {
+		t.Fatalf("DeleteAll on legacy file failed: %v", err)
+	}
+	var remaining int
+	if err := db.db.QueryRow(`SELECT COUNT(*) FROM sessions`).Scan(&remaining); err != nil {
+		t.Fatalf("count legacy sessions after DeleteAll: %v", err)
+	}
+	if remaining != 0 {
+		t.Errorf("legacy sessions after DeleteAll = %d, want 0", remaining)
+	}
 }
 
 type tableColumnDef struct {

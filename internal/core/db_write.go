@@ -124,10 +124,16 @@ func upsertImportState(e execer, state ImportState) error {
 }
 
 func (d *DB) DeleteAll() error {
+	tx, err := d.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	for _, table := range []string{"messages", "sessions", "import_state"} {
-		if _, err := d.execer().Exec("DELETE FROM " + table); err != nil {
+		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
 			return err
 		}
 	}
-	return nil
+	return tx.Commit()
 }

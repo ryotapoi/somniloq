@@ -284,6 +284,64 @@ func TestGetImportState_NotFound(t *testing.T) {
 	}
 }
 
+func TestDeleteAll_RollsBackOnDeleteFailure(t *testing.T) {
+	db := testDB(t)
+	if err := db.DeleteAll(); err != nil {
+		t.Fatalf("DeleteAll on empty database: %v", err)
+	}
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "session-before"}, "imported-before"))
+	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "message-before", SessionID: "session-before", Role: "user", Content: "content-before", Timestamp: "timestamp-before"}))
+	must(t, db.UpsertImportState(ImportState{JSONLPath: "path-before", Source: SourceClaudeCode, FileSize: 42, LastOffset: 21, ImportedAt: "state-before"}))
+	if _, err := db.db.Exec(`CREATE TRIGGER fail_import_state_delete BEFORE DELETE ON import_state BEGIN SELECT RAISE(ABORT, 'delete failed'); END`); err != nil {
+		t.Fatalf("create trigger: %v", err)
+	}
+
+	if err := db.DeleteAll(); err == nil {
+		t.Fatal("DeleteAll succeeded despite the import_state trigger")
+	}
+
+	var sessionID, importedAt string
+	if err := db.db.QueryRow(`SELECT session_id, imported_at FROM sessions`).Scan(&sessionID, &importedAt); err != nil {
+		t.Fatalf("read sessions after failed delete: %v", err)
+	}
+	if sessionID != "session-before" || importedAt != "imported-before" {
+		t.Errorf("sessions changed after failed delete: %q, %q", sessionID, importedAt)
+	}
+	var uuid, content string
+	if err := db.db.QueryRow(`SELECT uuid, content FROM messages`).Scan(&uuid, &content); err != nil {
+		t.Fatalf("read messages after failed delete: %v", err)
+	}
+	if uuid != "message-before" || content != "content-before" {
+		t.Errorf("messages changed after failed delete: %q, %q", uuid, content)
+	}
+	var path string
+	var fileSize, lastOffset int64
+	if err := db.db.QueryRow(`SELECT jsonl_path, file_size, last_offset FROM import_state`).Scan(&path, &fileSize, &lastOffset); err != nil {
+		t.Fatalf("read import_state after failed delete: %v", err)
+	}
+	if path != "path-before" || fileSize != 42 || lastOffset != 21 {
+		t.Errorf("import_state changed after failed delete: %q, %d, %d", path, fileSize, lastOffset)
+	}
+
+	if _, err := db.db.Exec(`DROP TRIGGER fail_import_state_delete`); err != nil {
+		t.Fatalf("drop trigger: %v", err)
+	}
+	for attempt := 1; attempt <= 2; attempt++ {
+		if err := db.DeleteAll(); err != nil {
+			t.Fatalf("DeleteAll attempt %d: %v", attempt, err)
+		}
+		for _, table := range []string{"messages", "sessions", "import_state"} {
+			var count int
+			if err := db.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
+				t.Fatalf("count %s after attempt %d: %v", table, attempt, err)
+			}
+			if count != 0 {
+				t.Errorf("%s count after attempt %d = %d, want 0", table, attempt, count)
+			}
+		}
+	}
+}
+
 func TestUpdateSessionAgentName(t *testing.T) {
 	db := testDB(t)
 

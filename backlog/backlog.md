@@ -13,7 +13,7 @@
 
 ### v0.12.1 不具合修正
 
-- [ ] `import --full` の `DeleteAll` で `messages`・`sessions`・`import_state` の削除を既存の transaction 内で不可分にし、削除途中に失敗しても3表がすべて元の状態を保つことを確認する。部分削除のため後続の差分 import で行が復元できなくなる不具合を直し、新しい抽象化は追加しない。
+- [x] `import --full` の `DeleteAll` で `messages`・`sessions`・`import_state` の削除を既存の transaction 内で不可分にし、削除途中に失敗しても3表がすべて元の状態を保つことを確認する。部分削除のため後続の差分 import で行が復元できなくなる不具合を直し、新しい抽象化は追加しない。
 - [ ] `GetMessages`・`GetSummaryMessages`・`SearchMessages`・`ListSessions`・`ListProjects` と `UpsertSession` の `started_at` / `ended_at` 選択で、時刻の順序比較を既存の時点比較機構に揃える。保存文字列と schema は変えず、offset や小数桁が異なる有効な RFC3339 時刻で並び・集約・最初と最後の選択が正しく、空の開始時刻が後続の実時刻で更新され、同時刻の `rowid` 順が保たれることを確認する。
 - [ ] import の2つの stderr 診断ループで出力エラーを既存のエラー返却経路から返し、unparsed 診断だけの場合も出力失敗で成功終了しないようにする。失敗する writer で終了結果と返却 error を確認する。
 - [ ] `internal/core/import_test.go`（`TestImport_Full` を含む）と `internal/core/codex_import_test.go` で未検査の `QueryRow.Scan` エラーを検査し、SQL 取得に失敗したとき以前の count 値でテストが誤成功しないようにする。既存テストの期待値と production 挙動を維持して core tests が通ることを確認し、新しい汎用 helper は追加しない。
