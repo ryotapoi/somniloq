@@ -24,7 +24,7 @@
 - [x] VF-022: 既存のCursor fixture/incremental testのassertionだけを拡張し、保存identityがpathとphysical line（ignored/broken/blank行を含む）から決まり、追記後も物理行番号が続くこと、再処理でUUIDが保たれ重複しないこと、unknown timestamp/model等が宣言済みmetadata契約どおり空であることを確認する。別のE2E suiteやhash algorithm helperのunit caseを増やさず、wall clock fallbackやproduction変更を加えない。
 - [x] VF-023: `codex.normalizeMessage` の直接unit testで、timestampのないresponseが `session_meta.Timestamp` を継承することを確認する。timestamp明示時の優先順位は既存テストを再利用し、core/CLI統合テストやproduction変更・hookは追加しない。
 - [x] VF-040: coreの `ImportResult.add` / `addUnparsedDiagnostics` を直接呼ぶテストで、複数batch（複数file相当）をまたいでも診断が遭遇順の先頭5件に保たれ、上限到達後のbatchから増えないことを確認する。既存parserの上限テストと重複するdisk/CLI fixture、production変更・hook・汎用helperは追加しない。
-- [ ] VF-041: 既存の `importWithAdapter` 境界とsetupを使い、小さなtest doubleでstat失敗（走査結果にnonexistent pathを返す）と `ProcessFile` errorを別々に発生させ、各々で `FilesFailed` / `Errors` と後続の成功file処理継続を確認する。permission race・sleep・global production hook・新しいDIを導入せず、冗長な全source/CLI matrixを作らない。
+- [x] VF-041: 既存の `importWithAdapter` 境界とsetupを使い、小さなtest doubleでstat失敗（走査結果にnonexistent pathを返す）と `ProcessFile` errorを別々に発生させ、各々で `FilesFailed` / `Errors` と後続の成功file処理継続を確認する。permission race・sleep・global production hook・新しいDIを導入せず、冗長な全source/CLI matrixを作らない。
 - [ ] VF-042: 既存の `internal/core/import_test.go` と `cmd/somniloq/import_test.go` の診断assertionで、`encoding/json` の文言やGo内部型名への全文一致を避け、件数・順序・file:line・詳細非空とCLIのstderr形式・終了結果・summaryを検証する。production変更・新test suite・汎用helperは加えない。
 
 ### v1.0.0 公開機能の整理

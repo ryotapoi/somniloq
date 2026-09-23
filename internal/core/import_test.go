@@ -27,6 +27,84 @@ func newImportTransaction(db *DB) ingest.NewImportTransaction {
 	}
 }
 
+type failingFileAdapter struct {
+	files     []string
+	failPath  string
+	failErr   error
+	processed []string
+}
+
+func (a *failingFileAdapter) ScanFiles(string) ([]string, []error) {
+	return a.files, nil
+}
+
+func (a *failingFileAdapter) ProcessFile(_ ingest.NewImportTransaction, path string, _, _ int64, _ string) (ingest.ProcessResult, error) {
+	a.processed = append(a.processed, path)
+	if path == a.failPath {
+		return ingest.ProcessResult{}, a.failErr
+	}
+	return ingest.ProcessResult{}, nil
+}
+
+func TestImportWithAdapter_StatFailureContinues(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	missingPath := filepath.Join(dir, "missing.jsonl")
+	successPath := filepath.Join(dir, "success.jsonl")
+	if err := os.WriteFile(successPath, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	adapter := &failingFileAdapter{files: []string{missingPath, successPath}}
+
+	result, err := importWithAdapter(db, dir, adapter)
+	if err != nil {
+		t.Fatalf("importWithAdapter failed: %v", err)
+	}
+	if result.FilesScanned != 2 || result.FilesFailed != 1 || result.FilesImported != 1 {
+		t.Errorf("counts: got scanned=%d failed=%d imported=%d, want 2, 1, 1", result.FilesScanned, result.FilesFailed, result.FilesImported)
+	}
+	if len(result.Errors) != 1 {
+		t.Fatalf("Errors: got %d, want 1: %v", len(result.Errors), result.Errors)
+	}
+	if !strings.Contains(result.Errors[0].Error(), missingPath+": stat:") || !errors.Is(result.Errors[0], os.ErrNotExist) {
+		t.Errorf("stat error should retain path and cause: %v", result.Errors[0])
+	}
+	if !reflect.DeepEqual(adapter.processed, []string{successPath}) {
+		t.Errorf("processed paths: got %v, want [%s]", adapter.processed, successPath)
+	}
+}
+
+func TestImportWithAdapter_ProcessFileFailureContinues(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	failPath := filepath.Join(dir, "fail.jsonl")
+	successPath := filepath.Join(dir, "success.jsonl")
+	for _, path := range []string{failPath, successPath} {
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	processErr := errors.New("process failure")
+	adapter := &failingFileAdapter{files: []string{failPath, successPath}, failPath: failPath, failErr: processErr}
+
+	result, err := importWithAdapter(db, dir, adapter)
+	if err != nil {
+		t.Fatalf("importWithAdapter failed: %v", err)
+	}
+	if result.FilesScanned != 2 || result.FilesFailed != 1 || result.FilesImported != 1 {
+		t.Errorf("counts: got scanned=%d failed=%d imported=%d, want 2, 1, 1", result.FilesScanned, result.FilesFailed, result.FilesImported)
+	}
+	if len(result.Errors) != 1 {
+		t.Fatalf("Errors: got %d, want 1: %v", len(result.Errors), result.Errors)
+	}
+	if !strings.Contains(result.Errors[0].Error(), failPath+":") || !errors.Is(result.Errors[0], processErr) {
+		t.Errorf("process error should retain path and cause: %v", result.Errors[0])
+	}
+	if !reflect.DeepEqual(adapter.processed, []string{failPath, successPath}) {
+		t.Errorf("processed paths: got %v, want [%s %s]", adapter.processed, failPath, successPath)
+	}
+}
+
 func processFile(db *DB, path string, offset, fileSize int64, importedAt string) error {
 	_, err := claudecode.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db), path, offset, fileSize, importedAt)
 	return err
