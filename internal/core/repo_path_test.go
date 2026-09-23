@@ -8,11 +8,8 @@ import (
 	"testing"
 )
 
-// unsetAllGitEnv は GIT_ プレフィックスの全環境変数を一時的に unset する。
-// GIT_DIR / GIT_WORK_TREE / GIT_CEILING_DIRECTORIES 等が rev-parse --show-toplevel
-// に影響するため、テストの決定性を確保するために列挙ではなく走査で unset する。
-// t.Setenv("GIT_DIR", "") は空文字が "fatal: not a git repository: ”" を誘発
-// するため使わない。
+// unsetAllGitEnv clears GIT_* variables because they can affect repository
+// discovery. An empty GIT_DIR value is not equivalent to unsetting it.
 func unsetAllGitEnv(t *testing.T) {
 	t.Helper()
 	for _, kv := range os.Environ() {
@@ -39,8 +36,6 @@ func unsetAllGitEnv(t *testing.T) {
 	}
 }
 
-// TestResolveRepoPath_Empty は仕様 1 の早期 return を担保する。
-// git -C "" rev-parse を起動させない意図は実装側のコメントで保証する。
 func TestResolveRepoPath_Empty(t *testing.T) {
 	if got := ResolveRepoPath(""); got != "" {
 		t.Errorf("ResolveRepoPath(\"\") = %q, want empty", got)
@@ -48,9 +43,8 @@ func TestResolveRepoPath_Empty(t *testing.T) {
 }
 
 func TestResolveRepoPath_Worktree(t *testing.T) {
-	// 仕様 2 が仕様 3（git 経路）より優先されることを固定化する。GIT_* を
-	// unset した上で、存在しない cwd を渡しても worktree prefix が返ること
-	// （= git 経路を通っていないこと）で担保する。
+	// This pins worktree-marker precedence over Git discovery, including for a
+	// cwd that does not exist.
 	unsetAllGitEnv(t)
 
 	tests := []struct {
@@ -69,7 +63,7 @@ func TestResolveRepoPath_Worktree(t *testing.T) {
 			want: "/Users/foo/repo",
 		},
 		{
-			// strings.Index 固定: LastIndex への変更で壊れる病的入力。
+			// Repeated markers resolve at the first occurrence.
 			name: "multiple fragments cut at first occurrence",
 			cwd:  "/foo/.claude/worktrees/x/.claude/worktrees/y",
 			want: "/foo",
@@ -83,8 +77,7 @@ func TestResolveRepoPath_Worktree(t *testing.T) {
 		})
 	}
 
-	// 文字列処理の回帰防止: `/.claude/worktreesXYZ/` は worktree 接頭辞として扱われない
-	// （仕様 2 にマッチしない）。仕様 4 に落ちて cwd 自体が返ることで担保する。
+	// A lookalike marker without the trailing slash must not select a worktree.
 	t.Run("similar but not exact does not match", func(t *testing.T) {
 		cwd := "/foo/bar/.claude/worktreesXYZ/baz"
 		if got := ResolveRepoPath(cwd); got != cwd {
@@ -93,22 +86,19 @@ func TestResolveRepoPath_Worktree(t *testing.T) {
 	})
 }
 
-// t.Parallel は使わない。os.Unsetenv はプロセスグローバルで、
-// 並列化すると GIT_* 復元中の他テストが影響を受けうる。
+// Keep these tests sequential because GIT_* changes are process-wide.
 func TestResolveRepoPath_GitToplevel(t *testing.T) {
 	unsetAllGitEnv(t)
 
 	dir := t.TempDir()
-	// macOS の t.TempDir は /var/folders/... のシンボリックリンク経由。
-	// git rev-parse --show-toplevel は実パスを返すので期待値も実パス化する。
+	// Resolve symlinks because Git reports the canonical temporary path on macOS.
 	want, err := filepath.EvalSymlinks(dir)
 	if err != nil {
 		t.Fatalf("EvalSymlinks(%q): %v", dir, err)
 	}
 
-	// CI ホームの .gitconfig に safe.directory 制限があっても通るよう
-	// テスト側の git init のみ -c safe.directory=* を付ける。
-	// 本体コード側は付けない（プラン参照）。
+	// Allow git init under CI safe.directory restrictions without changing the
+	// production Git invocation.
 	cmd := exec.Command("git", "-c", "safe.directory=*", "-C", dir, "init", "-q")
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("git init failed: %v\n%s", err, out)
@@ -135,14 +125,13 @@ func TestResolveRepoPath_GitToplevel(t *testing.T) {
 	}
 }
 
-// TestResolveRepoPath_GitToplevel_PreservesTrailingSpace は git rev-parse の
-// 出力から TrimSpace ではなく TrimRight("\r\n") のみを行うことを担保する。
-// ディレクトリ名末尾に空白を含むリポジトリでパスが壊れないこと。
+// TestResolveRepoPath_GitToplevel_PreservesTrailingSpace verifies that a
+// trailing space in a valid repository path survives Git output handling.
 func TestResolveRepoPath_GitToplevel_PreservesTrailingSpace(t *testing.T) {
 	unsetAllGitEnv(t)
 
 	parent := t.TempDir()
-	repo := filepath.Join(parent, "trail ") // 末尾スペース入り
+	repo := filepath.Join(parent, "trail ")
 	if err := os.Mkdir(repo, 0o755); err != nil {
 		t.Fatalf("Mkdir(%q): %v", repo, err)
 	}
@@ -161,15 +150,10 @@ func TestResolveRepoPath_GitToplevel_PreservesTrailingSpace(t *testing.T) {
 	}
 }
 
-// TestResolveRepoPath_NotGitRepo は仕様 4（git 経路が失敗したケースで cwd 自体が
-// 返る）を担保する。非 git ディレクトリ・実在しないパスのいずれも、cwd 引数が
-// そのまま返ってくる（symlink 解決などのラップは挟まない）。
 func TestResolveRepoPath_NotGitRepo(t *testing.T) {
 	unsetAllGitEnv(t)
 
-	// 非 git ディレクトリ（rev-parse 非 0 終了パス）。
 	nonGit := t.TempDir()
-	// 実在しないパス（chdir 失敗パス）。
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 
 	tests := []struct {
@@ -188,11 +172,8 @@ func TestResolveRepoPath_NotGitRepo(t *testing.T) {
 		})
 	}
 
-	// trailing-space を含む cwd でも仕様 4 は cwd をそのまま返す。手順 3（git 経路）
-	// の同様テスト TestResolveRepoPath_GitToplevel_PreservesTrailingSpace と対称。
-	// 将来 filepath.Clean 等でラップした際の退行を捕まえる。
 	t.Run("nonexistent path with trailing space", func(t *testing.T) {
-		cwd := filepath.Join(t.TempDir(), "missing dir ") // 末尾スペース入り
+		cwd := filepath.Join(t.TempDir(), "missing dir ")
 		if got := ResolveRepoPath(cwd); got != cwd {
 			t.Errorf("ResolveRepoPath(%q) = %q, want %q", cwd, got, cwd)
 		}
