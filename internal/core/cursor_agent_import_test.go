@@ -2,8 +2,12 @@ package core
 
 import (
 	"bytes"
+	"crypto/sha256"
+	"database/sql"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -80,6 +84,60 @@ func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 	if err := os.WriteFile(path, fixture, 0o644); err != nil {
 		t.Fatal(err)
 	}
+	type savedMessage struct {
+		uuid, source, sessionID, role, content, timestamp string
+		parentUUID                                        sql.NullString
+		isSidechain                                       bool
+	}
+	messageID := func(line int) string {
+		sum := sha256.Sum256([]byte(string(SourceCursorAgent) + "\x00" + path + "\x00" + strconv.Itoa(line)))
+		return fmt.Sprintf("cursor_agent:%x", sum)
+	}
+	want := []savedMessage{
+		{uuid: messageID(1), source: string(SourceCursorAgent), sessionID: "session-sample", role: "user", content: "Plan a harmless sample."},
+		{uuid: messageID(2), source: string(SourceCursorAgent), sessionID: "session-sample", role: "assistant", content: "First answer paragraph.\n\nSecond answer paragraph."},
+		{uuid: messageID(7), source: string(SourceCursorAgent), sessionID: "session-sample", role: "user", content: "Keep <timestamp>, <user_query>, and <cwd> as text."},
+	}
+	assertSaved := func(stage string, expected []savedMessage) {
+		t.Helper()
+		rows, err := db.db.Query(`SELECT uuid, source, session_id, parent_uuid, role, content, timestamp, is_sidechain
+			FROM messages ORDER BY rowid`)
+		if err != nil {
+			t.Fatalf("%s messages query: %v", stage, err)
+		}
+		var got []savedMessage
+		for rows.Next() {
+			var message savedMessage
+			if err := rows.Scan(&message.uuid, &message.source, &message.sessionID, &message.parentUUID,
+				&message.role, &message.content, &message.timestamp, &message.isSidechain); err != nil {
+				rows.Close()
+				t.Fatalf("%s messages scan: %v", stage, err)
+			}
+			got = append(got, message)
+		}
+		if err := rows.Err(); err != nil {
+			rows.Close()
+			t.Fatalf("%s messages rows: %v", stage, err)
+		}
+		if err := rows.Close(); err != nil {
+			t.Fatalf("%s messages close: %v", stage, err)
+		}
+		if !reflect.DeepEqual(got, expected) {
+			t.Errorf("%s messages = %+v, want %+v", stage, got, expected)
+		}
+
+		var cwd, repository, branch, title, agent, version, started, ended sql.NullString
+		if err := db.db.QueryRow(`SELECT cwd, repo_path, git_branch, custom_title, agent_name, version, started_at, ended_at
+			FROM sessions WHERE source = ? AND session_id = ?`, SourceCursorAgent, "session-sample").
+			Scan(&cwd, &repository, &branch, &title, &agent, &version, &started, &ended); err != nil {
+			t.Fatalf("%s session metadata: %v", stage, err)
+		}
+		if cwd.String != "" || repository.Valid || branch.String != "" || title.String != "" ||
+			agent.String != "" || version.String != "" || started.String != "" || ended.String != "" {
+			t.Errorf("%s session metadata = cwd:%+v repository:%+v branch:%+v title:%+v agent:%+v version:%+v started:%+v ended:%+v; want empty metadata and NULL repository",
+				stage, cwd, repository, branch, title, agent, version, started, ended)
+		}
+	}
 
 	result, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent})
 	if err != nil {
@@ -93,32 +151,13 @@ func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 			t.Errorf("diagnostic[%d] = %q, want %s:%d prefix", i, got, path, line)
 		}
 	}
-	var got []string
-	rows, err := db.db.Query("SELECT role, content FROM messages WHERE source = 'cursor_agent' ORDER BY timestamp, rowid")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer rows.Close()
-	for rows.Next() {
-		var role, content string
-		if err := rows.Scan(&role, &content); err != nil {
-			t.Fatal(err)
-		}
-		got = append(got, role+":"+content)
-	}
-	want := []string{
-		"user:Plan a harmless sample.",
-		"assistant:First answer paragraph.\n\nSecond answer paragraph.",
-		"user:Keep <timestamp>, <user_query>, and <cwd> as text.",
-	}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("messages = %q, want %q", got, want)
-	}
+	assertSaved("initial", want)
 
 	again, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent})
 	if err != nil || again.FilesSkipped != 1 {
 		t.Fatalf("unchanged re-import = %+v, %v; want one skipped file", again, err)
 	}
+	assertSaved("unchanged", want)
 	appendLine := `{"role":"assistant","message":{"content":[{"type":"text","text":"new reply"}]}}` + "\n"
 	if err := os.WriteFile(path, append(fixture, []byte(appendLine)...), 0o644); err != nil {
 		t.Fatal(err)
@@ -130,25 +169,15 @@ func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 	if appended.UnparsedLines != 0 {
 		t.Errorf("incremental unparsed lines = %d, want 0", appended.UnparsedLines)
 	}
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE source = 'cursor_agent'").Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	if count != 4 {
-		t.Errorf("message count after append = %d, want 4", count)
-	}
+	want = append(want, savedMessage{uuid: messageID(12), source: string(SourceCursorAgent), sessionID: "session-sample", role: "assistant", content: "new reply"})
+	assertSaved("append", want)
 	if err := os.WriteFile(path, fixture[:bytes.IndexByte(fixture, '\n')+1], 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
 		t.Fatalf("shrunken Import failed: %v", err)
 	}
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE source = 'cursor_agent'").Scan(&count); err != nil {
-		t.Fatal(err)
-	}
-	if count != 4 {
-		t.Errorf("message count after shrink = %d, want preserved 4", count)
-	}
+	assertSaved("shrink/reprocess", want)
 }
 
 func TestImport_AllIncludesCursorAgent(t *testing.T) {
