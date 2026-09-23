@@ -3,8 +3,9 @@ regen: compiled
 sources:
   - docs/rules/scope.md
   - docs/rules/architecture.md
-  - docs/decisions/0003-backfill-as-separate-subcommand.md
-  - docs/decisions/0004-codex-schema-and-migration.md
+  - docs/rules/constraints.md
+  - docs/rules/verification.md
+  - docs/specs/jsonl-schema.md
   - internal/core/db.go
   - internal/core/db_schema.go
   - internal/core/migrate_v04.go
@@ -14,50 +15,27 @@ sources:
   - internal/core/db_messages_summary.go
   - internal/core/db_search.go
   - internal/core/backfill.go
-  - llm-wiki/sqlite-driver-notes.md
+  - cmd/somniloq/backfill.go
+  - cmd/somniloq/sessions.go
+  - cmd/somniloq/show.go
+  - cmd/somniloq/session_resolution.go
+  - cmd/somniloq/jsonout.go
 ---
 
 # Storage and query map
 
-DB schema、migration、query helper を触るときの地図。SQL の意味や migration は High-risk なので、仕様とテストを同時に見る。
+SQLite の変更目的から入口を選ぶ。schema・migration・書き込み・query の制約と検証は `docs/rules/constraints.md` と `docs/rules/verification.md`、保存形式と CLI の契約は `docs/rules/scope.md` を読む。cmd と core の責務境界は `docs/rules/architecture.md` に従う。
 
-## 主な入口
+## schema と書き込み
 
-- `internal/core/db.go`
-  - `DB` / `OpenDB` / `Close` / `Begin` / `execer`: SQLite 接続と shared execution abstraction。
-- `internal/core/db_schema.go`
-  - `schema`: fresh DB の正。
-  - `ensureSessionsRepoPathColumn` / `ensureSessionsProjectDirColumnDropped`: lightweight migration。
-  - `tableColumnPresent`: `PRAGMA table_info` check-first helper。PRAGMA は placeholder を受けないため trusted internal constants だけを渡す。
-- `internal/core/db_write.go`
-  - `importTx`: `ingest.ImportTransaction` と `claudecode.SessionMetaWriter` の DB 書き込み実装。
-  - `upsertSession` / `insertMessage` / `updateSessionTitle` / `updateSessionAgentName` / `upsertImportState`: import/write 系 SQL。
-- `internal/core/db_import_state.go`
-  - `GetImportState`: JSONL path ごとの取り込み状態を読む。
-- `internal/core/db_sessions_projects.go`
-  - `sessionRowSelect` / `scanSessionRow`: sessions 系表示の SELECT と scan shape。列を変えるなら両方を同時に変える。
-  - `timeFilterConditions` / `projectsCondition`: sessions/projects/search が共有する filter 組み立て。
-- `internal/core/db_messages_summary.go`
-  - `GetMessages` / `GetSummaryMessages`: sidechain 除外と rowid tie-break の中心。
-- `internal/core/db_search.go`
-  - `SearchMessages`: sidechain を除外し、message timestamp と rowid の降順で検索結果を返す。
-- `internal/core/migrate_v04.go`
-  - `MigrateToV04IfNeeded`: v0.3 DB を v0.4 composite source schema へ rebuild。
-- `internal/core/backfill.go`
-  - `CountOrphanSessions`: destructive prompt の事前件数。
-  - `Backfill`: orphan DELETE と `repo_path` 解決。
+- 列やテーブルを変える: `internal/core/db_schema.go` の `schema` と `internal/core/db.go` の `OpenDB` を読む。旧 DB の移行を変える場合は `internal/core/migrate_v04.go` の `MigrateToV04IfNeeded` と該当 migration test を確認する。
+- import の保存を変える: `internal/core/db_write.go` の `importTx` と書き込み SQL、取り込み位置の読み取りは `internal/core/db_import_state.go` の `GetImportState` を確認する。JSONL 入力を変える場合は `docs/specs/jsonl-schema.md` も読む。
+- backfill の削除・更新を変える: `cmd/somniloq/backfill.go` の確認導線から `internal/core/backfill.go` の `CountOrphanSessions` / `Backfill` を辿る。
 
-## 変更時の読む順序
+## query と表示
 
-- schema column を追加/削除する: `db_schema.go` の `schema` -> `OpenDB` migration -> `docs/rules/scope.md` のテーブル設計 -> migration tests。
-- import/write SQL を変える: `db_write.go` の `importTx` / upsert / insert / update 群 -> import tests。
-- sessions/projects の列や集計を変える: `db_sessions_projects.go` の `sessionRowSelect` -> `scanSessionRow` -> `ListSessions` / `ListProjects` -> cmd formatter / JSON output。
-- message order を変える: `db_messages_summary.go` の `GetMessages` / `GetSummaryMessages` と `db_search.go` の `SearchMessages` -> `cmd/somniloq/turn.go` -> outline/show/search tests。
-- v0.4 migration を変える: `internal/core/migrate_v04.go` の PRAGMA / transaction / DDL order と migration tests を一緒に見る。
-- destructive backfill を変える: `cmd/somniloq/backfill.go` の prompt/TTY path と `internal/core/backfill.go` の DB path を一緒に見る。
+- session 行の SELECT / scan 列を変える: `internal/core/db_sessions_projects.go` の `sessionRowColumns` を入口に、そこから導出する `sessionRowSelectExpressions` / `sessionRowSelect` と `scanSessionRow` を辿る。直接の利用箇所は `ListSessions` / `GetSession` / `LookupSessionsByID`。表示への影響は `cmd/somniloq/sessions.go`、`cmd/somniloq/show.go`、`cmd/somniloq/session_resolution.go` と `cmd/somniloq/jsonout.go` で確認する。`ListProjects` は同じファイル内の別の集約 query。
+- session / project の絞り込みや集約を変える: `ListSessions` と `ListProjects` の別経路を読み、共通の時刻条件は `timeFilterConditions`、session の project 条件は `projectsCondition` を確認する。検索への影響は `internal/core/db_search.go` の `SearchMessages` まで辿る。
+- 本文の取得や順序を変える: `internal/core/db_messages_summary.go` の `GetMessages` / `GetSummaryMessages` を読み、表示とターンへの影響は [Display and turns](display-and-turns.md) を辿る。
 
-## 罠へのポインタ
-
-- modernc.org/sqlite / SQLite 固有の外部知見は [SQLite driver notes](sqlite-driver-notes.md)。
-- v0.4 migration の設計判断は `docs/decisions/0004-codex-schema-and-migration.md`。
-- backfill を import から独立させる判断は `docs/decisions/0003-backfill-as-separate-subcommand.md`。
+SQLite driver 固有の補助知見が必要な場合は [SQLite driver notes](sqlite-driver-notes.md) を参照する。

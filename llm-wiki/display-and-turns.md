@@ -2,14 +2,15 @@
 regen: compiled
 sources:
   - docs/rules/scope.md
-  - docs/decisions/0011-outline-subcommand-turn-numbering.md
-  - docs/decisions/0012-json-output-schema.md
-  - docs/decisions/0013-search-time-filter-on-message-timestamp.md
+  - cmd/somniloq/search.go
+  - cmd/somniloq/session_source.go
+  - cmd/somniloq/session_resolution.go
   - cmd/somniloq/show.go
-  - cmd/somniloq/format.go
   - cmd/somniloq/outline.go
   - cmd/somniloq/turn.go
-  - cmd/somniloq/search.go
+  - cmd/somniloq/sessions.go
+  - cmd/somniloq/config.go
+  - cmd/somniloq/format.go
   - cmd/somniloq/jsonout.go
   - internal/core/db_sessions_projects.go
   - internal/core/db_messages_summary.go
@@ -18,28 +19,20 @@ sources:
 
 # Display and turns
 
-表示系を変えるときは、cmd の出力整形だけでなく core query の order / sidechain 除外 / JSON shape を揃える。
+表示・ターン採番を変えるときは、`docs/rules/scope.md` で対象コマンドの契約を確認し、次の経路を辿る。
 
-## ターン採番
+## search からセッションを再参照する
 
-- 採番の実装は `cmd/somniloq/turn.go` の `assignTurns`。sidechain を除いた `GetMessages` 全体を渡す前提。
-- `show --turn`, `show --tail`, `outline`, `search` の `turn` 列、`sessions` の非コマンド user turn skip hint は同じ `assignTurns` / `userTurnMessages` 契約に乗る。片方だけの採番・user turn 母集団変更は避ける。
-- `internal/core/db_messages_summary.go` の `GetMessages` は `timestamp ASC, rowid ASC`。旧 Codex record の timestamp tie を壊すと turn number が揺れる。
-- 設計判断は `docs/decisions/0011-outline-subcommand-turn-numbering.md`。
+`cmd/somniloq/search.go` は `internal/core/db_search.go` の `SearchMessages` の結果に、`searchTurnsByUUID` でターンを付ける。結果の `source` と `session_id`（JSON では `sessionId`）を組で保持し、`show --source <source> --turn <N> <session_id>` または `outline --source <source> <session_id>` に渡す。
 
-## 表示 path
+source の受理は `cmd/somniloq/session_source.go` の `parseSessionSource`、対象セッションの選択は `cmd/somniloq/session_resolution.go` の `resolveSessionByID` を読む。両コマンドの入口は `cmd/somniloq/show.go` と `cmd/somniloq/outline.go`。ID 解決を変える際は両方の呼び出しと `cmd/somniloq/session_source_test.go` / `cmd/somniloq/session_resolution_test.go` を一緒に確認する。
 
-- Show: `cmd/somniloq/show.go` が ID 解決または一覧取得後、各 session の message 取得、filter、JSON または Markdown 出力を順に行う。Markdown の session 本文は `cmd/somniloq/format.go` の `formatSession` が整形し、Session / Source / Project / Started metadata を出す。両方の時刻が未知なら Started は空欄。
-- Summary show: `show.go` が `GetSummaryMessages` に差し替える。`/clear` / `<local-command-caveat>` skip は core query 側。
-- Outline: `outline.go` が `GetMessages` と `assignTurns` を使い、user message だけ出す。`body_size` / `bodySize` は各 turn に属する非 sidechain message content の UTF-8 byte 合計で、`show --turn` の読み取り量の目安になる。
-- Sessions skip hints: `sessions.go` が `ListSessions` 後に各 session の `GetMessages` を読み、`userTurnMessages` と `config.go` の `commandMatcher` で非コマンド user turn 数と最初の非コマンド行を出す。DB schema / core の session 集約 SQL には持ち込まない。
-- Sessions logical day: `sessions.go` が `sessionLogicalDay` で表示時に計算する。`ended_at` 優先、無ければ `started_at`。`dayBoundary` は config または `--day-boundary` で決まり、DB schema / import には持ち込まない。
-- Search: `search.go` が `SearchMessages` の結果に `searchSnippet` をかけ、同じ session の `GetMessages` に `assignTurns` を適用して hit message UUID の `turn` 列を出す。TSV の末尾 source 列で source-local session ID を識別する。検索結果から `show --turn` に繋げる導線は `session_id` が source 間で一意な場合に成立し、同じ `session_id` が複数 source にある場合は show の既存の曖昧エラーに従う。検索の time filter は message timestamp 基準で、空値は条件に一致しない。
-- JSON: `cmd/somniloq/jsonout.go`。単一 show も配列で返す。`sessions` JSON には `logicalDay` があるが、show JSON にはない。判断は `docs/decisions/0012-json-output-schema.md`。
+## メッセージとターンを変更する
 
-## 変更時のテスト入口
+解決したセッションの本文は `internal/core/db_messages_summary.go` の `GetMessages` から得る。`cmd/somniloq/turn.go` の `assignTurns` はその全メッセージ列を受け、show の `filterTurns` / `filterLastTurns`、outline の `userTurnMessages`、search の `searchTurnsByUUID` が番号を共有する。順序や採番を変えるときはこの経路と `cmd/somniloq/show_turn_test.go` / `cmd/somniloq/outline_test.go` / `cmd/somniloq/search_test.go` を確認する。show の要約経路は `GetSummaryMessages` を使うため、通常のターン指定とは分けて読む。
 
-- `cmd/somniloq/show_turn_test.go`, `cmd/somniloq/turn_test.go`
-- `cmd/somniloq/outline_test.go`
-- `cmd/somniloq/search_test.go`, `internal/core/db_search_test.go`
-- `cmd/somniloq/jsonout_test.go`
+セッション一覧の非コマンド user turn 案内を変える場合は `cmd/somniloq/sessions.go` の `summarizeNonCommandUserTurns` から `userTurnMessages` と `cmd/somniloq/config.go` の `commandMatcher` を辿る。session 行の集計は `internal/core/db_sessions_projects.go` を読む。
+
+## 出力を変更する
+
+Markdown の本文整形は `cmd/somniloq/format.go` の `formatSession`、JSON の出力型と共通書き込みは `cmd/somniloq/jsonout.go`。show / outline / search のどの出力を変えるか決め、各コマンドでの値の構築と対応する出力テストを確認する。出力項目と形式の仕様は `docs/rules/scope.md` を参照する。
