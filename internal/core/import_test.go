@@ -1,8 +1,10 @@
 package core
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strconv"
 	"strings"
 	"testing"
@@ -264,6 +266,48 @@ func TestImport_CapsUnparsedDiagnosticsInEncounterOrder(t *testing.T) {
 		if !strings.HasPrefix(diagnostic.Error(), wantPrefix) {
 			t.Errorf("UnparsedDiagnostics[%d] = %q, want prefix %q", i, diagnostic, wantPrefix)
 		}
+	}
+}
+
+func TestImportResultAdd_CapsDiagnosticsAcrossBatches(t *testing.T) {
+	diagnostics := []error{
+		errors.New("first"), errors.New("second"), errors.New("third"),
+		errors.New("fourth"), errors.New("fifth"), errors.New("sixth"),
+		errors.New("seventh"), errors.New("eighth"),
+	}
+	want := []error{diagnostics[0], diagnostics[1], diagnostics[2], diagnostics[3], diagnostics[4]}
+	var result ImportResult
+
+	result.add(&ImportResult{UnparsedDiagnostics: diagnostics[:2]})
+	result.add(&ImportResult{UnparsedDiagnostics: diagnostics[2:6]})
+	if !reflect.DeepEqual(result.UnparsedDiagnostics, want) {
+		t.Fatalf("diagnostics at cap = %v, want %v", result.UnparsedDiagnostics, want)
+	}
+
+	result.add(&ImportResult{UnparsedDiagnostics: diagnostics[6:]})
+	if !reflect.DeepEqual(result.UnparsedDiagnostics, want) {
+		t.Errorf("diagnostics after cap = %v, want %v", result.UnparsedDiagnostics, want)
+	}
+}
+
+func TestImportResultAddUnparsedDiagnostics_CapsAcrossBatches(t *testing.T) {
+	diagnostics := []error{
+		errors.New("first"), errors.New("second"), errors.New("third"),
+		errors.New("fourth"), errors.New("fifth"), errors.New("sixth"),
+		errors.New("seventh"), errors.New("eighth"),
+	}
+	want := []error{diagnostics[0], diagnostics[1], diagnostics[2], diagnostics[3], diagnostics[4]}
+	var result ImportResult
+
+	result.addUnparsedDiagnostics(diagnostics[:2])
+	result.addUnparsedDiagnostics(diagnostics[2:6])
+	if !reflect.DeepEqual(result.UnparsedDiagnostics, want) {
+		t.Fatalf("diagnostics at cap = %v, want %v", result.UnparsedDiagnostics, want)
+	}
+
+	result.addUnparsedDiagnostics(diagnostics[6:])
+	if !reflect.DeepEqual(result.UnparsedDiagnostics, want) {
+		t.Errorf("diagnostics after cap = %v, want %v", result.UnparsedDiagnostics, want)
 	}
 }
 
