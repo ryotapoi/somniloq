@@ -156,7 +156,9 @@ func TestCodexProcessFile_CountsUnparsedLines(t *testing.T) {
 	}
 
 	var count int
-	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='codex-session'").Scan(&count)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='codex-session'").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if count != 1 {
 		t.Errorf("messages: got %d, want 1", count)
 	}

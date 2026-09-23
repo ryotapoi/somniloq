@@ -107,7 +107,9 @@ func TestProcessFile(t *testing.T) {
 	}
 
 	var count int
-	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if count != 2 {
 		t.Errorf("messages: got %d, want 2", count)
 	}
@@ -222,7 +224,9 @@ func TestImport_CountsUnparsedLines(t *testing.T) {
 	}
 
 	var count int
-	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if count != 1 {
 		t.Errorf("messages: got %d, want 1", count)
 	}
@@ -358,7 +362,9 @@ func TestProcessFile_NoTrailingNewline(t *testing.T) {
 		t.Fatalf("processFile failed: %v", err)
 	}
 	var count int
-	db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if count != 1 {
 		t.Errorf("expected 1 message, got %d", count)
 	}
@@ -389,14 +395,18 @@ func TestProcessFile_SkipsEmptyContent(t *testing.T) {
 
 	// Only the user message should be saved (tool_use-only assistant message skipped)
 	var msgCount int
-	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&msgCount)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&msgCount); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if msgCount != 1 {
 		t.Errorf("messages: got %d, want 1 (empty content skipped)", msgCount)
 	}
 
 	// Session should still be created (upsertSession called for all messages)
 	var sessCount int
-	db.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id='s1'").Scan(&sessCount)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id='s1'").Scan(&sessCount); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if sessCount != 1 {
 		t.Errorf("session should exist even for empty content messages")
 	}
@@ -418,7 +428,9 @@ func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
 	}
 
 	var msgCount int
-	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&msgCount)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&msgCount); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if msgCount != 1 {
 		t.Errorf("messages: got %d, want 1 (whitespace-only content skipped)", msgCount)
 	}
@@ -458,7 +470,9 @@ func TestImport_Incremental(t *testing.T) {
 	}
 
 	var count int
-	db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if count != 3 {
 		t.Errorf("expected 3 messages, got %d", count)
 	}
@@ -496,7 +510,9 @@ func TestImport_FileShrink(t *testing.T) {
 
 	// Should have 3 messages total (2 old + 1 new, old not deleted)
 	var count int
-	db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if count != 3 {
 		t.Errorf("expected 3 messages (orphans retained), got %d", count)
 	}
@@ -528,7 +544,9 @@ func TestImport_Full(t *testing.T) {
 	Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
 
 	var count int
-	db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if count != 1 {
 		t.Fatalf("expected 1 message after first import, got %d", count)
 	}
@@ -541,7 +559,9 @@ func TestImport_Full(t *testing.T) {
 		t.Errorf("expected 1 imported, got %d", res.FilesImported)
 	}
 
-	db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count)
+	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
+		t.Fatalf("COUNT failed: %v", err)
+	}
 	if count != 1 {
 		t.Errorf("expected 1 message after full re-import, got %d", count)
 	}
