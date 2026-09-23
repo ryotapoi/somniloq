@@ -83,6 +83,61 @@ func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	}
 }
 
+func TestImportCmd_ErrorStderrWriteFailure(t *testing.T) {
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer db.Close()
+
+	dir := t.TempDir()
+	projectsPath := filepath.Join(dir, "projects")
+	if err := os.WriteFile(projectsPath, []byte("not a directory"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var out bytes.Buffer
+	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), projectsPath, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &out, failWriter{}, false)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !errors.Is(err, errFailWriter) {
+		t.Errorf("error = %v, want %v", err, errFailWriter)
+	}
+	if got, want := out.String(), "Imported 0 files (0 scanned, 0 skipped, 0 failed, 0 unparsed lines)\n"; got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
+	}
+}
+
+func TestImportCmd_UnparsedStderrWriteFailure(t *testing.T) {
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatalf("OpenDB: %v", err)
+	}
+	defer db.Close()
+
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "project")
+	if err := os.MkdirAll(projDir, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(projDir, "session.jsonl"), []byte("{broken json\n"), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+
+	var out bytes.Buffer
+	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), dir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &out, failWriter{}, false)
+	if code != 1 {
+		t.Errorf("exit code = %d, want 1", code)
+	}
+	if !errors.Is(err, errFailWriter) {
+		t.Errorf("error = %v, want %v", err, errFailWriter)
+	}
+	if got, want := out.String(), "Imported 1 files (1 scanned, 0 skipped, 0 failed, 1 unparsed lines)\n"; got != want {
+		t.Errorf("stdout = %q, want %q", got, want)
+	}
+}
+
 func TestImportCmd_CursorAgentRootWiring(t *testing.T) {
 	db, err := core.OpenDB(":memory:")
 	if err != nil {

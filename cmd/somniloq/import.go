@@ -83,10 +83,14 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 	}
 
 	for _, e := range result.Errors {
-		fmt.Fprintf(errOut, "  error: %v\n", e)
+		if _, err := fmt.Fprintf(errOut, "  error: %v\n", e); err != nil {
+			return 1, err
+		}
 	}
 	for _, diagnostic := range result.UnparsedDiagnostics {
-		fmt.Fprintf(errOut, "  error: %v\n", diagnostic)
+		if _, err := fmt.Fprintf(errOut, "  error: %v\n", diagnostic); err != nil {
+			return 1, err
+		}
 	}
 
 	// Errors covers failed files and non-fatal scan failures alike.
