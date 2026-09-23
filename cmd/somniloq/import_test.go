@@ -45,6 +45,131 @@ func TestImportCmd_ConfirmationIOErrorDoesNotOpenDB(t *testing.T) {
 	}
 }
 
+func TestImportCmd_FullConfirmation(t *testing.T) {
+	const prompt = "This will delete all data and re-import. Continue? [y/N] "
+	const summary = "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)\n"
+
+	tests := []struct {
+		name       string
+		args       []string
+		input      string
+		isTTY      bool
+		wantCode   int
+		wantError  string
+		wantOut    string
+		wantErrOut string
+		wantOpen   bool
+		wantFull   bool
+	}{
+		{"non-TTY without yes", []string{"--full"}, "", false, 1, "--full requires confirmation; use --yes to skip in non-interactive mode", "", "", false, false},
+		{"TTY rejects", []string{"--full"}, "n\n", true, 0, "", "", prompt, false, false},
+		{"TTY confirms", []string{"--full"}, "y\n", true, 0, "", summary, prompt, true, true},
+		{"non-TTY with yes", []string{"--full", "--yes"}, "", false, 0, "", summary, "", true, true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := t.TempDir()
+			projectsDir := filepath.Join(dir, "projects")
+			projectDir := filepath.Join(projectsDir, "-test-project")
+			if err := os.MkdirAll(projectDir, 0o755); err != nil {
+				t.Fatalf("MkdirAll: %v", err)
+			}
+			writeSession := func(sessionID, content string) string {
+				path := filepath.Join(projectDir, sessionID+".jsonl")
+				jsonl := `{"type":"user","uuid":"` + sessionID + `-u1","sessionId":"` + sessionID + `","timestamp":"2026-03-28T14:00:00Z","cwd":"","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"` + content + `"}}` + "\n"
+				if err := os.WriteFile(path, []byte(jsonl), 0o644); err != nil {
+					t.Fatalf("WriteFile(%s): %v", path, err)
+				}
+				return path
+			}
+			oldPath := writeSession("old", "old content")
+			writeSession("kept", "kept content")
+			dbPath := filepath.Join(dir, "somniloq.db")
+			open := func() (*core.DB, error) { return core.OpenDB(dbPath) }
+
+			var seedOut, seedErrOut bytes.Buffer
+			code, err := importCmd([]string{"--source", "claude-code"}, open, projectsDir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &seedOut, &seedErrOut, false)
+			if code != 0 || err != nil {
+				t.Fatalf("seed importCmd = (%d, %v), stdout = %q, stderr = %q", code, err, seedOut.String(), seedErrOut.String())
+			}
+			if got, want := seedOut.String(), "Imported 2 files (2 scanned, 0 skipped, 0 failed, 0 unparsed lines)\n"; got != want {
+				t.Fatalf("seed stdout = %q, want %q", got, want)
+			}
+			if err := os.Remove(oldPath); err != nil {
+				t.Fatalf("Remove(%s): %v", oldPath, err)
+			}
+
+			openCalls := 0
+			countedOpen := func() (*core.DB, error) {
+				openCalls++
+				return open()
+			}
+			var out, errOut bytes.Buffer
+			code, err = importCmd(append(tt.args, "--source", "claude-code"), countedOpen, projectsDir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(tt.input), &out, &errOut, tt.isTTY)
+			if code != tt.wantCode {
+				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
+			}
+			if tt.wantError == "" {
+				if err != nil {
+					t.Errorf("error = %v, want nil", err)
+				}
+			} else if err == nil || err.Error() != tt.wantError {
+				t.Errorf("error = %v, want %q", err, tt.wantError)
+			}
+			if got := out.String(); got != tt.wantOut {
+				t.Errorf("stdout = %q, want %q", got, tt.wantOut)
+			}
+			if got := errOut.String(); got != tt.wantErrOut {
+				t.Errorf("stderr = %q, want %q", got, tt.wantErrOut)
+			}
+			wantOpenCalls := 0
+			if tt.wantOpen {
+				wantOpenCalls = 1
+			}
+			if openCalls != wantOpenCalls {
+				t.Errorf("openDB calls = %d, want %d", openCalls, wantOpenCalls)
+			}
+
+			db, err := open()
+			if err != nil {
+				t.Fatalf("reopen DB: %v", err)
+			}
+			defer func() {
+				if err := db.Close(); err != nil {
+					t.Errorf("Close DB: %v", err)
+				}
+			}()
+			oldSession, err := db.GetSession(core.SourceClaudeCode, "old")
+			if err != nil {
+				t.Fatalf("GetSession(old): %v", err)
+			}
+			wantOldPresent := !tt.wantFull
+			if (oldSession != nil) != wantOldPresent {
+				t.Errorf("old session = %v, want present = %t", oldSession, wantOldPresent)
+			}
+			oldMessages, err := db.GetMessages(core.SourceClaudeCode, "old")
+			if err != nil {
+				t.Fatalf("GetMessages(old): %v", err)
+			}
+			wantOld := 1
+			if tt.wantFull {
+				wantOld = 0
+			}
+			if len(oldMessages) != wantOld {
+				t.Errorf("old messages = %v, want %d", oldMessages, wantOld)
+			}
+			keptMessages, err := db.GetMessages(core.SourceClaudeCode, "kept")
+			if err != nil {
+				t.Fatalf("GetMessages(kept): %v", err)
+			}
+			if len(keptMessages) != 1 || keptMessages[0].Content != "kept content" {
+				t.Errorf("kept messages = %v, want one with original content", keptMessages)
+			}
+		})
+	}
+}
+
 // Pins the summary line scripts parse, including the unparsed-lines counter.
 func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	db, err := core.OpenDB(":memory:")
