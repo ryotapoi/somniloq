@@ -78,6 +78,44 @@ func TestGetMessages_OrderByTimestamp(t *testing.T) {
 	}
 }
 
+func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "instant-order"}, "2026-03-28T15:00:00Z"))
+	for _, message := range []NormalizedMessage{
+		{Source: SourceClaudeCode, UUID: "latest", SessionID: "instant-order", Role: "user", Content: "latest", Timestamp: "2026-03-28T08:00:00.2Z"},
+		{Source: SourceClaudeCode, UUID: "tie-first", SessionID: "instant-order", Role: "user", Content: "tie first", Timestamp: "2026-03-28T09:00:00.100+01:00"},
+		{Source: SourceClaudeCode, UUID: "tie-second", SessionID: "instant-order", Role: "user", Content: "tie second", Timestamp: "2026-03-28T08:00:00.1Z"},
+		{Source: SourceClaudeCode, UUID: "earliest", SessionID: "instant-order", Role: "user", Content: "earliest", Timestamp: "2026-03-28T10:00:00+02:00"},
+	} {
+		must(t, db.InsertMessage(message))
+	}
+
+	messages, err := db.GetMessages(SourceClaudeCode, "instant-order")
+	if err != nil {
+		t.Fatalf("GetMessages: %v", err)
+	}
+	want := []string{"earliest", "tie-first", "tie-second", "latest"}
+	if len(messages) != len(want) {
+		t.Fatalf("GetMessages rows = %d, want %d", len(messages), len(want))
+	}
+	for i, uuid := range want {
+		if messages[i].UUID != uuid {
+			t.Errorf("GetMessages[%d].UUID = %q, want %q", i, messages[i].UUID, uuid)
+		}
+	}
+	if messages[1].Timestamp != "2026-03-28T09:00:00.100+01:00" || messages[2].Timestamp != "2026-03-28T08:00:00.1Z" {
+		t.Errorf("equal-instant stored strings changed: %q, %q", messages[1].Timestamp, messages[2].Timestamp)
+	}
+
+	summary, err := db.GetSummaryMessages(SourceClaudeCode, "instant-order", 2, false)
+	if err != nil {
+		t.Fatalf("GetSummaryMessages: %v", err)
+	}
+	if len(summary) != 2 || summary[0].UUID != "earliest" || summary[1].UUID != "tie-first" {
+		t.Fatalf("GetSummaryMessages = %+v, want earliest then tie-first", summary)
+	}
+}
+
 func TestGetMessages_EqualTimestampsKeepInsertionOrder(t *testing.T) {
 	db := testDB(t)
 

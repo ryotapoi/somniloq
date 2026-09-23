@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"database/sql"
+	"testing"
+)
 
 func TestUpsertSession(t *testing.T) {
 	db := testDB(t)
@@ -55,6 +58,84 @@ func TestUpsertSession(t *testing.T) {
 	}
 	if endedAt != "2026-03-28T14:20:00Z" {
 		t.Errorf("ended_at should be MAX: got %s", endedAt)
+	}
+}
+
+func TestUpsertSession_ChoosesInstantsAndPreservesUnknowns(t *testing.T) {
+	db := testDB(t)
+	upsert := func(startedAt, endedAt string) {
+		t.Helper()
+		if err := db.UpsertSession(SessionMeta{
+			Source: SourceClaudeCode, SessionID: "instant-upsert", StartedAt: startedAt, EndedAt: endedAt,
+		}, "2026-03-28T15:00:00Z"); err != nil {
+			t.Fatalf("UpsertSession(%q, %q): %v", startedAt, endedAt, err)
+		}
+	}
+	read := func() (string, string) {
+		t.Helper()
+		var startedAt, endedAt string
+		if err := db.db.QueryRow("SELECT started_at, ended_at FROM sessions WHERE session_id='instant-upsert'").Scan(&startedAt, &endedAt); err != nil {
+			t.Fatalf("read session endpoints: %v", err)
+		}
+		return startedAt, endedAt
+	}
+
+	upsert("2026-03-28T08:30:00Z", "2026-03-28T09:00:00Z")
+	upsert("2026-03-28T10:00:00+02:00", "2026-03-28T10:30:00+02:00")
+	if startedAt, endedAt := read(); startedAt != "2026-03-28T10:00:00+02:00" || endedAt != "2026-03-28T09:00:00Z" {
+		t.Fatalf("after earlier offset values: started_at=%q ended_at=%q", startedAt, endedAt)
+	}
+	upsert("2026-03-28T08:00:00.5Z", "2026-03-28T11:00:00.5+02:00")
+	if startedAt, endedAt := read(); startedAt != "2026-03-28T10:00:00+02:00" || endedAt != "2026-03-28T11:00:00.5+02:00" {
+		t.Fatalf("after later offset/fraction values: started_at=%q ended_at=%q", startedAt, endedAt)
+	}
+	upsert("", "")
+	if startedAt, endedAt := read(); startedAt != "2026-03-28T10:00:00+02:00" || endedAt != "2026-03-28T11:00:00.5+02:00" {
+		t.Fatalf("empty values erased known endpoints: started_at=%q ended_at=%q", startedAt, endedAt)
+	}
+
+	for _, sessionID := range []string{"empty-endpoints", "null-endpoints"} {
+		if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: sessionID}, "2026-03-28T15:00:00Z"); err != nil {
+			t.Fatalf("insert %s: %v", sessionID, err)
+		}
+	}
+	if _, err := db.db.Exec("UPDATE sessions SET started_at = NULL, ended_at = NULL WHERE session_id='null-endpoints'"); err != nil {
+		t.Fatalf("set null endpoints: %v", err)
+	}
+	for _, sessionID := range []string{"empty-endpoints", "null-endpoints"} {
+		var startedAt, endedAt sql.NullString
+		if err := db.db.QueryRow("SELECT started_at, ended_at FROM sessions WHERE session_id=?", sessionID).Scan(&startedAt, &endedAt); err != nil {
+			t.Fatalf("read unknown endpoints for %s: %v", sessionID, err)
+		}
+		if sessionID == "empty-endpoints" && (startedAt.String != "" || endedAt.String != "") {
+			t.Fatalf("empty endpoints changed before update: %q, %q", startedAt.String, endedAt.String)
+		}
+		if sessionID == "null-endpoints" && (startedAt.Valid || endedAt.Valid) {
+			t.Fatalf("NULL endpoints changed before update: %+v, %+v", startedAt, endedAt)
+		}
+		if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: sessionID}, "2026-03-28T15:01:00Z"); err != nil {
+			t.Fatalf("empty update for %s: %v", sessionID, err)
+		}
+	}
+	var nullStart, nullEnd sql.NullString
+	if err := db.db.QueryRow("SELECT started_at, ended_at FROM sessions WHERE session_id='null-endpoints'").Scan(&nullStart, &nullEnd); err != nil {
+		t.Fatalf("read null endpoints after empty update: %v", err)
+	}
+	if nullStart.Valid || nullEnd.Valid {
+		t.Fatalf("unknown NULL endpoints were replaced with values: %+v, %+v", nullStart, nullEnd)
+	}
+
+	for _, sessionID := range []string{"empty-endpoints", "null-endpoints"} {
+		if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: sessionID, StartedAt: "2026-03-28T08:00:00.1Z", EndedAt: "2026-03-28T09:00:00.100+01:00"}, "2026-03-28T15:02:00Z"); err != nil {
+			t.Fatalf("fill endpoints for %s: %v", sessionID, err)
+		}
+		var startedAt, endedAt string
+		if err := db.db.QueryRow("SELECT started_at, ended_at FROM sessions WHERE session_id=?", sessionID).Scan(&startedAt, &endedAt); err != nil {
+			t.Fatalf("read filled endpoints for %s: %v", sessionID, err)
+		}
+		if startedAt != "2026-03-28T08:00:00.1Z" || endedAt != "2026-03-28T09:00:00.100+01:00" {
+			t.Errorf("filled endpoints for %s = %q, %q", sessionID, startedAt, endedAt)
+		}
 	}
 }
 

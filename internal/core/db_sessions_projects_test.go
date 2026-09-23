@@ -76,6 +76,49 @@ func TestListSessions_OrderAndCount(t *testing.T) {
 	}
 }
 
+func TestListSessionsAndProjectsOrderByInstant(t *testing.T) {
+	db := testDB(t)
+	for _, session := range []SessionMeta{
+		{Source: SourceClaudeCode, SessionID: "repo-a-early", RepoPath: "/instant/RepoA", StartedAt: "2026-03-28T10:00:00+02:00"},
+		{Source: SourceClaudeCode, SessionID: "repo-a-latest", RepoPath: "/instant/RepoA", StartedAt: "2026-03-28T11:00:00+02:00"},
+		{Source: SourceClaudeCode, SessionID: "repo-b", RepoPath: "/instant/RepoB", StartedAt: "2026-03-28T09:30:00Z"},
+		{Source: SourceClaudeCode, SessionID: "repo-c", RepoPath: "/instant/RepoC", StartedAt: "2026-03-28T09:00:00.5Z"},
+	} {
+		must(t, db.UpsertSession(session, "2026-03-28T15:00:00Z"))
+	}
+
+	sessions, err := db.ListSessions(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListSessions: %v", err)
+	}
+	wantSessions := []string{"repo-b", "repo-c", "repo-a-latest", "repo-a-early"}
+	if len(sessions) != len(wantSessions) {
+		t.Fatalf("ListSessions rows = %d, want %d", len(sessions), len(wantSessions))
+	}
+	for i, id := range wantSessions {
+		if sessions[i].SessionID != id {
+			t.Errorf("ListSessions[%d].SessionID = %q, want %q", i, sessions[i].SessionID, id)
+		}
+	}
+
+	projects, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	wantProjects := []string{"/instant/RepoB", "/instant/RepoC", "/instant/RepoA"}
+	if len(projects) != len(wantProjects) {
+		t.Fatalf("ListProjects rows = %d, want %d", len(projects), len(wantProjects))
+	}
+	for i, repo := range wantProjects {
+		if projects[i].RepoPath != repo {
+			t.Errorf("ListProjects[%d].RepoPath = %q, want %q", i, projects[i].RepoPath, repo)
+		}
+	}
+	if projects[2].SessionCount != 2 {
+		t.Errorf("RepoA SessionCount = %d, want 2", projects[2].SessionCount)
+	}
+}
+
 func TestListSessions_ZeroMessages(t *testing.T) {
 	db := testDB(t)
 

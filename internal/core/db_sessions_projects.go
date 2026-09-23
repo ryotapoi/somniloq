@@ -178,7 +178,7 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	query += " GROUP BY s.source, s.session_id ORDER BY s.started_at DESC"
+	query += " GROUP BY s.source, s.session_id ORDER BY rfc3339_utc_nanos(s.started_at) DESC"
 
 	rows, err := d.execer().Query(query, args...)
 	if err != nil {
@@ -204,7 +204,7 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	query += " GROUP BY COALESCE(s.repo_path, '') ORDER BY MAX(s.started_at) DESC"
+	query += " GROUP BY COALESCE(s.repo_path, '') ORDER BY MAX(rfc3339_utc_nanos(s.started_at)) DESC"
 
 	rows, err := d.execer().Query(query, args...)
 	if err != nil {

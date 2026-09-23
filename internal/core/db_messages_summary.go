@@ -30,7 +30,7 @@ func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) 
 		FROM messages
 		WHERE source = ? AND session_id = ?
 		  AND is_sidechain = 0
-		ORDER BY timestamp ASC, rowid ASC`,
+		ORDER BY rfc3339_utc_nanos(timestamp) ASC, rowid ASC`,
 		string(source), sessionID,
 	)
 	if err != nil {
@@ -78,7 +78,7 @@ func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, incl
 		args = append(args, clearCommandPrefix+"%", localCommandCaveatPrefix+"%")
 	}
 	query += `
-		ORDER BY timestamp ASC, rowid ASC
+		ORDER BY rfc3339_utc_nanos(timestamp) ASC, rowid ASC
 		LIMIT ?`
 	args = append(args, limit)
 

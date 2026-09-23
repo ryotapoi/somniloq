@@ -58,8 +58,20 @@ func upsertSession(e execer, meta SessionMeta, importedAt string) error {
 		  repo_path = COALESCE(NULLIF(excluded.repo_path, ''), sessions.repo_path),
 		  git_branch = COALESCE(NULLIF(excluded.git_branch, ''), sessions.git_branch),
 		  version = COALESCE(NULLIF(excluded.version, ''), sessions.version),
-		  started_at = COALESCE(MIN(sessions.started_at, excluded.started_at), excluded.started_at, sessions.started_at),
-		  ended_at = COALESCE(MAX(sessions.ended_at, excluded.ended_at), excluded.ended_at, sessions.ended_at),
+		  started_at = CASE
+		    WHEN rfc3339_utc_nanos(sessions.started_at) IS NULL THEN
+		      CASE WHEN rfc3339_utc_nanos(excluded.started_at) IS NULL THEN sessions.started_at ELSE excluded.started_at END
+		    WHEN rfc3339_utc_nanos(excluded.started_at) IS NULL THEN sessions.started_at
+		    WHEN rfc3339_utc_nanos(excluded.started_at) < rfc3339_utc_nanos(sessions.started_at) THEN excluded.started_at
+		    ELSE sessions.started_at
+		  END,
+		  ended_at = CASE
+		    WHEN rfc3339_utc_nanos(sessions.ended_at) IS NULL THEN
+		      CASE WHEN rfc3339_utc_nanos(excluded.ended_at) IS NULL THEN sessions.ended_at ELSE excluded.ended_at END
+		    WHEN rfc3339_utc_nanos(excluded.ended_at) IS NULL THEN sessions.ended_at
+		    WHEN rfc3339_utc_nanos(excluded.ended_at) > rfc3339_utc_nanos(sessions.ended_at) THEN excluded.ended_at
+		    ELSE sessions.ended_at
+		  END,
 		  imported_at = excluded.imported_at`,
 		string(meta.Source), meta.SessionID, meta.CWD, meta.RepoPath, meta.GitBranch,
 		meta.Version, meta.StartedAt, meta.EndedAt, importedAt,

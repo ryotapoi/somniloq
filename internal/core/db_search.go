@@ -41,7 +41,7 @@ func (d *DB) SearchMessages(filter SessionFilter, query string, pagination Searc
 		q += " AND " + strings.Join(conditions, " AND ")
 		args = append(args, filterArgs...)
 	}
-	q += " ORDER BY m.timestamp DESC, m.rowid DESC"
+	q += " ORDER BY rfc3339_utc_nanos(m.timestamp) DESC, m.rowid DESC"
 	if pagination.Limit > 0 {
 		q += " LIMIT ? OFFSET ?"
 		args = append(args, pagination.Limit, pagination.Offset)

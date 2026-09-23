@@ -290,6 +290,39 @@ func TestSearchMessages_TimestampTieBrokenByRowid(t *testing.T) {
 	}
 }
 
+func TestSearchMessages_OrderByInstantBeforePagination(t *testing.T) {
+	db := testDB(t)
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "instant-search"}, "2026-03-28T15:00:00Z"))
+	for _, message := range []NormalizedMessage{
+		{Source: SourceClaudeCode, UUID: "earliest", SessionID: "instant-search", Role: "user", Content: "instant needle", Timestamp: "2026-03-28T10:00:00+02:00"},
+		{Source: SourceClaudeCode, UUID: "tie-first", SessionID: "instant-search", Role: "user", Content: "instant needle", Timestamp: "2026-03-28T08:00:00.1Z"},
+		{Source: SourceClaudeCode, UUID: "tie-second", SessionID: "instant-search", Role: "user", Content: "instant needle", Timestamp: "2026-03-28T09:00:00.100+01:00"},
+		{Source: SourceClaudeCode, UUID: "latest", SessionID: "instant-search", Role: "user", Content: "instant needle", Timestamp: "2026-03-28T08:00:00.2Z"},
+	} {
+		must(t, db.InsertMessage(message))
+	}
+
+	all, err := db.SearchMessages(SessionFilter{}, "instant needle", SearchPagination{})
+	if err != nil {
+		t.Fatalf("SearchMessages: %v", err)
+	}
+	want := []string{"latest", "tie-second", "tie-first", "earliest"}
+	if got := searchUUIDs(all); !slices.Equal(got, want) {
+		t.Fatalf("SearchMessages order = %v, want %v", got, want)
+	}
+	first, err := db.SearchMessages(SessionFilter{}, "instant needle", SearchPagination{Limit: 2})
+	if err != nil {
+		t.Fatalf("SearchMessages first page: %v", err)
+	}
+	second, err := db.SearchMessages(SessionFilter{}, "instant needle", SearchPagination{Limit: 2, Offset: 2})
+	if err != nil {
+		t.Fatalf("SearchMessages second page: %v", err)
+	}
+	if got := append(searchUUIDs(first), searchUUIDs(second)...); !slices.Equal(got, want) {
+		t.Fatalf("SearchMessages pages = %v, want %v", got, want)
+	}
+}
+
 func TestSearchMessages_PaginationPreservesOrderedPages(t *testing.T) {
 	db := testDB(t)
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "page-a", RepoPath: "/Users/test/Brimday"}, "2026-03-28T15:00:00Z"))
