@@ -113,7 +113,7 @@ somniloq sessions --format json          # TSV の代わりに JSON 配列
 
 timestamp が未知のセッションは時刻 filter なしでは表示するが、`--since` / `--until` には一致しない。両方の timestamp が未知なら TSV の時刻範囲と Markdown の Started は空欄。
 
-`sessions --imported-since <time>` は `imported_at` の包含下限で絞り込む。`--since` と同じ相対時刻・ローカル日付・分精度日時・RFC3339 instant を受け付けるが、date-only はローカル時刻の 00:00 とし `--day-boundary` を適用しない。`--since` / `--until` / `--project` とは AND で結合する。`imported_at` は session を最後に保存した import pass の開始時刻（UTC・秒精度）であり、本文差分時刻・commit 完了時刻・exactly-once の消費 watermark ではない。出力の `source` と `session_id` を `somniloq show --source <source> <session-id>` に渡すと会話全体を読める。
+`sessions --imported-since <time>` は `imported_at` の包含下限で絞り込む。`--since` と同じ相対時刻・ローカル日付・分精度日時・RFC3339 instant を受け付けるが、date-only はローカル時刻の 00:00 とし `--day-boundary` を適用しない。`--since` / `--until` / `--project` とは AND で結合する。`imported_at` はその session を最後に保存更新した JSONL ファイル処理の開始時刻（UTC・秒精度）であり、CLI 呼出し全体や最新の呼出しの時刻、本文差分時刻・commit 完了時刻・exactly-once の消費 watermark ではない。変更なしとしてスキップしたファイルは `imported_at` を更新しない。出力の `source` と `session_id` を `somniloq show --source <source> <session-id>` に渡すと会話全体を読める。
 
 `projectAliases` に一致する repo path / basename は canonical 名のみで表示する。
 
