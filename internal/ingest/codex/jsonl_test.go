@@ -3,6 +3,8 @@ package codex
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
 func TestExtractText_CodexContentBlocks(t *testing.T) {
@@ -75,13 +77,15 @@ func TestParseResponseItemAndIsConversationMessage(t *testing.T) {
 }
 
 func TestNormalizeMessage_UsesRolloutPathAndLineNumberUUID(t *testing.T) {
-	meta := sessionMetaCursor{
+	meta := ingest.SessionMeta{
+		Source:    ingest.SourceCodex,
 		SessionID: "s1",
 		CWD:       "/tmp/project",
 		RepoPath:  "/tmp/project",
 		GitBranch: "main",
 		Version:   "0.128.0",
-		Timestamp: "2026-05-01T00:00:00.000Z",
+		StartedAt: "2026-05-01T00:00:00.000Z",
+		EndedAt:   "2026-05-01T00:00:00.000Z",
 	}
 	rec, err := ParseRecord([]byte(`{"timestamp":"2026-05-01T00:00:01.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}`))
 	if err != nil {
@@ -112,9 +116,11 @@ func TestNormalizeMessage_UsesRolloutPathAndLineNumberUUID(t *testing.T) {
 }
 
 func TestNormalizeMessage_UsesSessionMetaTimestampWhenRecordTimestampMissing(t *testing.T) {
-	meta := sessionMetaCursor{
+	meta := ingest.SessionMeta{
+		Source:    ingest.SourceCodex,
 		SessionID: "s1",
-		Timestamp: "2026-05-01T00:00:00.000Z",
+		StartedAt: "2026-05-01T00:00:00.000Z",
+		EndedAt:   "2026-05-01T00:00:00.000Z",
 	}
 	rec, err := ParseRecord([]byte(`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}`))
 	if err != nil {
@@ -130,7 +136,10 @@ func TestNormalizeMessage_UsesSessionMetaTimestampWhenRecordTimestampMissing(t *
 		t.Fatalf("normalizeMessage failed: %v", err)
 	}
 
-	if got.Message.Timestamp != meta.Timestamp {
-		t.Errorf("timestamp: got %q, want session meta timestamp %q", got.Message.Timestamp, meta.Timestamp)
+	if got.Message.Timestamp != meta.StartedAt {
+		t.Errorf("timestamp: got %q, want session meta timestamp %q", got.Message.Timestamp, meta.StartedAt)
+	}
+	if got.Session.StartedAt != meta.StartedAt || got.Session.EndedAt != meta.EndedAt {
+		t.Errorf("session times = (%q, %q), want session meta timestamp %q", got.Session.StartedAt, got.Session.EndedAt, meta.StartedAt)
 	}
 }

@@ -39,19 +39,6 @@ type ContentBlock struct {
 	Text string `json:"text"`
 }
 
-// sessionMetaCursor retains the latest session_meta fields needed to normalize
-// later response_item records. normalizeMessage maps its fields to the
-// persisted ingest.SessionMeta: SessionID, CWD, RepoPath, GitBranch, Version,
-// and Timestamp becomes StartedAt/EndedAt when the response has no timestamp.
-type sessionMetaCursor struct {
-	SessionID string
-	CWD       string
-	RepoPath  string
-	GitBranch string
-	Version   string
-	Timestamp string
-}
-
 func ParseRecord(line []byte) (*RawRecord, error) {
 	var rec RawRecord
 	if err := json.Unmarshal(line, &rec); err != nil {
@@ -60,22 +47,24 @@ func ParseRecord(line []byte) (*RawRecord, error) {
 	return &rec, nil
 }
 
-func parseSessionMetaCursor(rec *RawRecord, resolveRepoPath ingest.RepoResolver) (*sessionMetaCursor, error) {
+func parseSessionMeta(rec *RawRecord, resolveRepoPath ingest.RepoResolver) (*ingest.SessionMeta, error) {
 	var payload SessionMetaPayload
 	if err := json.Unmarshal(rec.Payload, &payload); err != nil {
 		return nil, err
 	}
-	return &sessionMetaCursor{
+	return &ingest.SessionMeta{
+		Source:    ingest.SourceCodex,
 		SessionID: payload.ID,
 		CWD:       payload.CWD,
 		RepoPath:  resolveRepoPath(payload.CWD),
 		GitBranch: payload.Git.Branch,
 		Version:   payload.CLIVersion,
-		Timestamp: rec.Timestamp,
+		StartedAt: rec.Timestamp,
+		EndedAt:   rec.Timestamp,
 	}, nil
 }
 
-func normalizeMessage(rec *RawRecord, payload *ResponseItemPayload, meta sessionMetaCursor, rolloutPath string, lineNumber int) (*ingest.NormalizedRecord, error) {
+func normalizeMessage(rec *RawRecord, payload *ResponseItemPayload, meta ingest.SessionMeta, rolloutPath string, lineNumber int) (*ingest.NormalizedRecord, error) {
 	content, err := ExtractText(payload.Content)
 	if err != nil {
 		return nil, err
@@ -83,20 +72,13 @@ func normalizeMessage(rec *RawRecord, payload *ResponseItemPayload, meta session
 
 	timestamp := rec.Timestamp
 	if timestamp == "" {
-		timestamp = meta.Timestamp
+		timestamp = meta.StartedAt
 	}
+	meta.StartedAt = timestamp
+	meta.EndedAt = timestamp
 
 	return &ingest.NormalizedRecord{
-		Session: ingest.SessionMeta{
-			Source:    ingest.SourceCodex,
-			SessionID: meta.SessionID,
-			CWD:       meta.CWD,
-			RepoPath:  meta.RepoPath,
-			GitBranch: meta.GitBranch,
-			Version:   meta.Version,
-			StartedAt: timestamp,
-			EndedAt:   timestamp,
-		},
+		Session: meta,
 		Message: ingest.NormalizedMessage{
 			UUID:      messageUUID(rolloutPath, lineNumber),
 			Source:    ingest.SourceCodex,

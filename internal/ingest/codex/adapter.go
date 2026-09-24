@@ -32,7 +32,7 @@ type fileHandler struct {
 	resolveRepoPath ingest.RepoResolver
 	importedAt      string
 	path            string
-	meta            *sessionMetaCursor
+	meta            *ingest.SessionMeta
 	lineNumber      int
 }
 
@@ -135,7 +135,7 @@ func (h *fileHandler) Flush(tx ingest.ImportTransaction) error {
 }
 
 func (h *fileHandler) applySessionMeta(rec *RawRecord) error {
-	meta, err := parseSessionMetaCursor(rec, h.resolveRepoPath)
+	meta, err := parseSessionMeta(rec, h.resolveRepoPath)
 	if err != nil {
 		return err
 	}

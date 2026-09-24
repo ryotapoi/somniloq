@@ -83,8 +83,12 @@ func parseTurnRange(s string) (lo, hi int, err error) {
 // filterTurns keeps the messages whose turn falls in the inclusive range
 // [lo, hi].
 func filterTurns(messages []core.MessageRow, lo, hi int) []core.MessageRow {
+	return filterAssignedTurns(assignTurns(messages), lo, hi)
+}
+
+func filterAssignedTurns(turns []turnMessage, lo, hi int) []core.MessageRow {
 	var result []core.MessageRow
-	for _, tm := range assignTurns(messages) {
+	for _, tm := range turns {
 		if tm.Turn >= lo && tm.Turn <= hi {
 			result = append(result, tm.Msg)
 		}
@@ -99,5 +103,5 @@ func filterLastTurns(messages []core.MessageRow, n int) []core.MessageRow {
 		return nil
 	}
 	hi := turns[len(turns)-1].Turn
-	return filterTurns(messages, max(hi-n+1, 1), hi)
+	return filterAssignedTurns(turns, max(hi-n+1, 1), hi)
 }

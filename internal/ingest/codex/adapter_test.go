@@ -15,11 +15,13 @@ func TestFileHandler_HandleLineReturnsPersistenceError(t *testing.T) {
 	h := &fileHandler{
 		importedAt: "2026-07-12T00:00:00Z",
 		path:       "/tmp/rollout.jsonl",
-		meta: &sessionMetaCursor{
+		meta: &ingest.SessionMeta{
+			Source:    ingest.SourceCodex,
 			SessionID: "s1",
 			CWD:       "/repo",
 			RepoPath:  "/repo",
-			Timestamp: "2026-07-12T00:00:00Z",
+			StartedAt: "2026-07-12T00:00:00Z",
+			EndedAt:   "2026-07-12T00:00:00Z",
 		},
 	}
 
@@ -54,11 +56,47 @@ func TestAdapter_ProcessFileMalformedSessionMetaContinues(t *testing.T) {
 	if result.UnparsedLines != 1 {
 		t.Errorf("UnparsedLines = %d, want 1", result.UnparsedLines)
 	}
-	if tx.messages != 1 {
-		t.Errorf("InsertMessage calls = %d, want 1", tx.messages)
+	if len(tx.messages) != 1 {
+		t.Errorf("InsertMessage calls = %d, want 1", len(tx.messages))
 	}
 	if tx.commits != 1 {
 		t.Errorf("Commit calls = %d, want 1", tx.commits)
+	}
+}
+
+func TestAdapter_UsesOriginalSessionTimestampAfterTimestampedMessage(t *testing.T) {
+	const sessionTimestamp = "2026-07-12T00:00:00Z"
+	const contents = `{"timestamp":"2026-07-12T00:00:00Z","type":"session_meta","payload":{"id":"s1","cwd":"/repo"}}
+{"timestamp":"2026-07-12T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"first"}]}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"second"}]}}
+`
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	tx := &recordingTransaction{}
+	result, err := NewAdapter(func(string) string { return "/repo" }).ProcessFile(
+		func() (ingest.ImportTransaction, error) { return tx, nil },
+		path,
+		0,
+		int64(len(contents)),
+		"2026-07-12T01:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("ProcessFile error = %v", err)
+	}
+	if result.UnparsedLines != 0 {
+		t.Errorf("UnparsedLines = %d, want 0", result.UnparsedLines)
+	}
+	if len(tx.messages) != 2 {
+		t.Fatalf("messages = %d, want 2", len(tx.messages))
+	}
+	if got, want := tx.messages[0].Timestamp, "2026-07-12T00:00:01Z"; got != want {
+		t.Errorf("first message timestamp = %q, want %q", got, want)
+	}
+	if got := tx.messages[1].Timestamp; got != sessionTimestamp {
+		t.Errorf("second message timestamp = %q, want original session metadata timestamp %q", got, sessionTimestamp)
 	}
 }
 
@@ -115,14 +153,14 @@ func (t *failingTransaction) Commit() error { return nil }
 func (t *failingTransaction) Rollback() error { return nil }
 
 type recordingTransaction struct {
-	messages int
+	messages []ingest.NormalizedMessage
 	commits  int
 }
 
 func (*recordingTransaction) UpsertSession(ingest.SessionMeta, string) error { return nil }
 
-func (t *recordingTransaction) InsertMessage(ingest.NormalizedMessage) error {
-	t.messages++
+func (t *recordingTransaction) InsertMessage(message ingest.NormalizedMessage) error {
+	t.messages = append(t.messages, message)
 	return nil
 }
 
