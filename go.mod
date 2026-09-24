@@ -1,6 +1,6 @@
 module github.com/ryotapoi/somniloq
 
-go 1.25.6
+go 1.27.1
 
 require (
 	github.com/mattn/go-isatty v0.0.16
