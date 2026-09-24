@@ -2,6 +2,19 @@
 
 English | [日本語](CHANGELOG.ja.md)
 
+## v0.12.1 — 2026-09-24
+
+### Changed
+
+- The documentation now clarifies that `imported_at` is the start time of processing the JSONL file that last saved or updated a session; processing an unchanged file does not update it.
+- Building from source now requires Go 1.27.1 or newer; CI uses Go 1.27.1.
+
+### Fixed
+
+- `import --full` now deletes all rows from the `messages`, `sessions`, and `import_state` tables in one transaction, so a deletion failure preserves their existing data instead of leaving them partly cleared.
+- Stored RFC3339 timestamps are now compared by instant when selecting session start and end times and ordering messages, sessions, projects, and search results. Different UTC offsets or fractional-second precision no longer cause chronological misordering; message ordering keeps its existing `rowid` tie-break, and a valid timestamp can fill an empty session start time.
+- `import` now returns an error if it cannot write an import diagnostic to stderr, instead of exiting successfully after a failed diagnostic write.
+
 ## v0.12.0 — 2026-09-23
 
 ### Added
