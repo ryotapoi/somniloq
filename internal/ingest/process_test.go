@@ -5,6 +5,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 )
@@ -145,6 +146,38 @@ func TestProcessJSONL_NoBodyDoesNotAdvanceOffsetOrCommit(t *testing.T) {
 	}
 }
 
+func TestProcessJSONL_RetainsFirstFiveLineDiagnosticsInEncounterOrder(t *testing.T) {
+	const contents = "one\ntwo\nthree\nfour\nfive\nsix\n"
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := ProcessJSONL(
+		func() (ImportTransaction, error) { return &processRecordingTx{}, nil },
+		SourceClaudeCode,
+		&diagnosticHandler{},
+		path,
+		0,
+		int64(len(contents)),
+		"2026-07-12T00:00:00Z",
+	)
+	if err != nil {
+		t.Fatalf("ProcessJSONL error = %v, want nil", err)
+	}
+	if result.UnparsedLines != 6 {
+		t.Errorf("UnparsedLines = %d, want 6", result.UnparsedLines)
+	}
+	if len(result.UnparsedDiagnostics) != MaxUnparsedDiagnostics {
+		t.Fatalf("UnparsedDiagnostics count = %d, want %d", len(result.UnparsedDiagnostics), MaxUnparsedDiagnostics)
+	}
+	for i, want := range []string{"line 1", "line 2", "line 3", "line 4", "line 5"} {
+		if got := result.UnparsedDiagnostics[i].Error(); got != want {
+			t.Errorf("UnparsedDiagnostics[%d] = %q, want %q", i, got, want)
+		}
+	}
+}
+
 func TestProcessJSONL_BeginErrorKeepsOffsetWithoutStartingTransaction(t *testing.T) {
 	const offset = 17
 	wantErr := errors.New("restore state failed")
@@ -209,18 +242,29 @@ type ignoredHandler struct{}
 
 func (ignoredHandler) Begin(string, int64) error { return nil }
 
-func (ignoredHandler) HandleLine(ImportTransaction, []byte) (LineOutcome, error) {
-	return LineIgnored, nil
+func (ignoredHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) {
+	return LineResult{Outcome: LineIgnored}, nil
 }
 
 func (ignoredHandler) Flush(ImportTransaction) error { return nil }
+
+type diagnosticHandler struct{ line int }
+
+func (diagnosticHandler) Begin(string, int64) error { return nil }
+
+func (h *diagnosticHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) {
+	h.line++
+	return LineResult{Outcome: LineUnparsed, Diagnostic: errors.New("line " + strconv.Itoa(h.line))}, nil
+}
+
+func (diagnosticHandler) Flush(ImportTransaction) error { return nil }
 
 type beginErrorHandler struct{ err error }
 
 func (h beginErrorHandler) Begin(string, int64) error { return h.err }
 
-func (beginErrorHandler) HandleLine(ImportTransaction, []byte) (LineOutcome, error) {
-	return LineIgnored, nil
+func (beginErrorHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) {
+	return LineResult{Outcome: LineIgnored}, nil
 }
 
 func (beginErrorHandler) Flush(ImportTransaction) error { return nil }
@@ -229,9 +273,9 @@ type bodyHandler struct{ lines int }
 
 func (*bodyHandler) Begin(string, int64) error { return nil }
 
-func (h *bodyHandler) HandleLine(ImportTransaction, []byte) (LineOutcome, error) {
+func (h *bodyHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) {
 	h.lines++
-	return LineWroteBody, nil
+	return LineResult{Outcome: LineWroteBody}, nil
 }
 
 func (*bodyHandler) Flush(ImportTransaction) error { return nil }
@@ -285,42 +329,54 @@ func TestProcessJSONL_HandlerErrorDiscardsOutcomeAndRollsBack(t *testing.T) {
 	}
 
 	wantErr := errors.New("persist failed")
-	tx := &processRecordingTx{}
-	result, err := ProcessJSONL(
-		func() (ImportTransaction, error) { return tx, nil },
-		SourceClaudeCode,
-		errorOutcomeHandler{err: wantErr},
-		path,
-		int64(len(prefix)),
-		int64(len(prefix+line)),
-		"2026-07-12T00:00:00Z",
-	)
+	tests := []struct {
+		name   string
+		result LineResult
+	}{
+		{name: "body outcome", result: LineResult{Outcome: LineWroteBody}},
+		{name: "unparsed diagnostic", result: LineResult{Outcome: LineUnparsed, Diagnostic: errors.New("must be discarded")}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tx := &processRecordingTx{}
+			result, err := ProcessJSONL(
+				func() (ImportTransaction, error) { return tx, nil },
+				SourceClaudeCode,
+				errorOutcomeHandler{result: tt.result, err: wantErr},
+				path,
+				int64(len(prefix)),
+				int64(len(prefix+line)),
+				"2026-07-12T00:00:00Z",
+			)
 
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
-	}
-	if result.UnparsedLines != 0 {
-		t.Errorf("UnparsedLines = %d, want 0", result.UnparsedLines)
-	}
-	if tx.importStateWrites != 0 {
-		t.Errorf("UpsertImportState calls = %d, want 0", tx.importStateWrites)
-	}
-	if tx.commits != 0 {
-		t.Errorf("Commit calls = %d, want 0", tx.commits)
-	}
-	if tx.rollbacks != 1 {
-		t.Errorf("Rollback calls = %d, want 1", tx.rollbacks)
+			if !errors.Is(err, wantErr) {
+				t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
+			}
+			if result.UnparsedLines != 0 || len(result.UnparsedDiagnostics) != 0 {
+				t.Errorf("unparsed result = (%d, %v), want no unparsed lines or diagnostics", result.UnparsedLines, result.UnparsedDiagnostics)
+			}
+			if tx.importStateWrites != 0 {
+				t.Errorf("UpsertImportState calls = %d, want 0", tx.importStateWrites)
+			}
+			if tx.commits != 0 {
+				t.Errorf("Commit calls = %d, want 0", tx.commits)
+			}
+			if tx.rollbacks != 1 {
+				t.Errorf("Rollback calls = %d, want 1", tx.rollbacks)
+			}
+		})
 	}
 }
 
 type errorOutcomeHandler struct {
-	err error
+	result LineResult
+	err    error
 }
 
 func (h errorOutcomeHandler) Begin(string, int64) error { return nil }
 
-func (h errorOutcomeHandler) HandleLine(ImportTransaction, []byte) (LineOutcome, error) {
-	return LineWroteBody, h.err
+func (h errorOutcomeHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) {
+	return h.result, h.err
 }
 
 func (h errorOutcomeHandler) Flush(ImportTransaction) error { return nil }

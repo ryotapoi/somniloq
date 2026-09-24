@@ -36,6 +36,13 @@ const (
 	LineUnparsed
 )
 
+// LineResult reports how a FileHandler consumed one line and, when it was
+// unparsed, the diagnostic for that line.
+type LineResult struct {
+	Outcome    LineOutcome
+	Diagnostic error
+}
+
 // ProcessResult reports the outcome of processing one file.
 type ProcessResult struct {
 	// UnparsedLines counts lines dropped as LineUnparsed during this pass.
@@ -43,13 +50,6 @@ type ProcessResult struct {
 	// UnparsedDiagnostics holds up to five parse or normalization diagnostics
 	// in encounter order. Each one identifies the physical JSONL line.
 	UnparsedDiagnostics []error
-}
-
-// UnparsedDiagnosticReporter lets a source-specific handler attach the
-// underlying error to its most recent LineUnparsed outcome. It intentionally
-// does not report persistence failures, which abort the file instead.
-type UnparsedDiagnosticReporter interface {
-	UnparsedDiagnostic() error
 }
 
 // FileHandler is the source-specific part of processing one JSONL file.
@@ -67,9 +67,10 @@ type FileHandler interface {
 	Begin(path string, offset int64) error
 	// HandleLine receives each raw line including blank ones (some sources
 	// derive line numbers from them) and reports how the line was consumed.
-	// On a non-nil error the outcome carries no meaning: the runner aborts
-	// the file and rolls back, discarding whatever outcome was returned.
-	HandleLine(tx ImportTransaction, line []byte) (LineOutcome, error)
+	// Diagnostic is used only when the outcome is LineUnparsed. On a non-nil
+	// error the result carries no meaning: the runner aborts the file and rolls
+	// back, discarding the entire result.
+	HandleLine(tx ImportTransaction, line []byte) (LineResult, error)
 	// Flush writes metadata buffered during HandleLine. It runs at EOF, only
 	// when a body record has been written.
 	Flush(tx ImportTransaction) error
@@ -116,21 +117,19 @@ func processJSONL(newTransaction NewImportTransaction, source Source, handler Fi
 	// positive offset proves a sessions row already exists for this file.
 	hasBody := offset > 0
 	consumed, err := ForEachLine(f, -1, func(line []byte) error {
-		outcome, herr := handler.HandleLine(tx, line)
+		lineResult, herr := handler.HandleLine(tx, line)
 		if herr != nil {
-			// Per the FileHandler contract the outcome carries no meaning
+			// Per the FileHandler contract the result carries no meaning
 			// alongside an error; discard it before it can touch any state.
 			return herr
 		}
-		switch outcome {
+		switch lineResult.Outcome {
 		case LineWroteBody:
 			hasBody = true
 		case LineUnparsed:
 			result.UnparsedLines++
-			if reporter, ok := handler.(UnparsedDiagnosticReporter); ok && len(result.UnparsedDiagnostics) < MaxUnparsedDiagnostics {
-				if diagnostic := reporter.UnparsedDiagnostic(); diagnostic != nil {
-					result.UnparsedDiagnostics = append(result.UnparsedDiagnostics, diagnostic)
-				}
+			if lineResult.Diagnostic != nil && len(result.UnparsedDiagnostics) < MaxUnparsedDiagnostics {
+				result.UnparsedDiagnostics = append(result.UnparsedDiagnostics, lineResult.Diagnostic)
 			}
 		}
 		return nil

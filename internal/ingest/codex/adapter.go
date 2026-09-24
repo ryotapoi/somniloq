@@ -34,7 +34,6 @@ type fileHandler struct {
 	path            string
 	meta            *sessionMetaCursor
 	lineNumber      int
-	diagnostic      error
 }
 
 func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, path string, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
@@ -80,61 +79,55 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 	return err
 }
 
-func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (ingest.LineOutcome, error) {
+func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (ingest.LineResult, error) {
 	h.lineNumber++
-	h.diagnostic = nil
 	trimmed := bytes.TrimSpace(line)
 	if len(trimmed) == 0 {
-		return ingest.LineIgnored, nil
+		return ingest.LineResult{Outcome: ingest.LineIgnored}, nil
 	}
 
 	rec, perr := ParseRecord(trimmed)
 	if perr != nil {
-		h.setUnparsedDiagnostic(perr)
-		return ingest.LineUnparsed, nil
+		return h.unparsed(perr), nil
 	}
 
 	if rec.Type == "session_meta" {
 		if err := h.applySessionMeta(rec); err != nil {
-			h.setUnparsedDiagnostic(err)
-			return ingest.LineUnparsed, nil
+			return h.unparsed(err), nil
 		}
-		return ingest.LineIgnored, nil
+		return ingest.LineResult{Outcome: ingest.LineIgnored}, nil
 	}
 
 	if rec.Type != "response_item" {
-		return ingest.LineIgnored, nil
+		return ingest.LineResult{Outcome: ingest.LineIgnored}, nil
 	}
 	payload, err := parseResponseItem(rec)
 	if err != nil {
-		h.setUnparsedDiagnostic(err)
-		return ingest.LineUnparsed, nil
+		return h.unparsed(err), nil
 	}
 	// A message arriving before session_meta is Ignored, not Unparsed: the line
 	// parses fine, we just cannot attribute it to a session yet. Counting it as
 	// unparsed would put a non-zero number on structurally valid rollouts and
 	// drown out the real signal.
 	if !isConversationMessage(payload) || h.meta == nil {
-		return ingest.LineIgnored, nil
+		return ingest.LineResult{Outcome: ingest.LineIgnored}, nil
 	}
 
 	normalized, err := normalizeMessage(rec, payload, *h.meta, h.path, h.lineNumber)
 	if err != nil {
-		h.setUnparsedDiagnostic(err)
-		return ingest.LineUnparsed, nil
+		return h.unparsed(err), nil
 	}
 	if err := ingest.PersistMessage(tx, normalized, h.importedAt); err != nil {
-		return ingest.LineIgnored, err
+		return ingest.LineResult{}, err
 	}
-	return ingest.LineWroteBody, nil
+	return ingest.LineResult{Outcome: ingest.LineWroteBody}, nil
 }
 
-func (h *fileHandler) UnparsedDiagnostic() error {
-	return h.diagnostic
-}
-
-func (h *fileHandler) setUnparsedDiagnostic(err error) {
-	h.diagnostic = fmt.Errorf("%s:%d: %w", h.path, h.lineNumber, err)
+func (h *fileHandler) unparsed(err error) ingest.LineResult {
+	return ingest.LineResult{
+		Outcome:    ingest.LineUnparsed,
+		Diagnostic: fmt.Errorf("%s:%d: %w", h.path, h.lineNumber, err),
+	}
 }
 
 func (h *fileHandler) Flush(tx ingest.ImportTransaction) error {

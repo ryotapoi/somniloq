@@ -156,7 +156,7 @@ func deriveSessionUserTurnSummaries(db *core.DB, sessions []core.SessionRow, mat
 
 func summarizeNonCommandUserTurns(messages []core.MessageRow, matcher commandMatcher) sessionUserTurnSummary {
 	var summary sessionUserTurnSummary
-	for _, tm := range userTurnMessages(messages) {
+	for _, tm := range userTurnMessages(assignTurns(messages)) {
 		if matcher.isCommand(tm.Msg.Content) {
 			continue
 		}

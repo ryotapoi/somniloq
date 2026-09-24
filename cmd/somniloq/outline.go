@@ -90,10 +90,12 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 		return 1, err
 	}
 
+	turns := assignTurns(messages)
+	users := userTurnMessages(turns)
+	bodySizes := turnBodySizes(turns)
 	if *format == "json" {
-		entries := []outlineEntryJSON{}
-		bodySizes := turnBodySizes(messages)
-		for _, tm := range userTurnMessages(messages) {
+		entries := make([]outlineEntryJSON, 0, len(users))
+		for _, tm := range users {
 			entries = append(entries, outlineEntryJSON{
 				Turn:      tm.Turn,
 				Timestamp: tm.Msg.Timestamp,
@@ -107,8 +109,7 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 		return 0, nil
 	}
 
-	bodySizes := turnBodySizes(messages)
-	for _, tm := range userTurnMessages(messages) {
+	for _, tm := range users {
 		if _, err := fmt.Fprintf(out, "%d\t%s\t%d\t%s\n",
 			tm.Turn, sanitizeTSV(formatLocalTime(tm.Msg.Timestamp, time.Local)), bodySizes[tm.Turn], sanitizeTSV(firstLine(tm.Msg.Content))); err != nil {
 			return 1, err

@@ -4,12 +4,13 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
-func TestFileHandler_HandleLineReturnsIgnoredOutcomeOnPersistError(t *testing.T) {
+func TestFileHandler_HandleLineReturnsPersistenceError(t *testing.T) {
 	wantErr := errors.New("write failed")
 	h := &fileHandler{
 		importedAt: "2026-07-12T00:00:00Z",
@@ -22,13 +23,10 @@ func TestFileHandler_HandleLineReturnsIgnoredOutcomeOnPersistError(t *testing.T)
 		},
 	}
 
-	outcome, err := h.HandleLine(&failingTransaction{err: wantErr}, []byte(`{"timestamp":"2026-07-12T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}`))
+	_, err := h.HandleLine(&failingTransaction{err: wantErr}, []byte(`{"timestamp":"2026-07-12T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}`))
 
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("HandleLine error = %v, want wrapping %v", err, wantErr)
-	}
-	if outcome != ingest.LineIgnored {
-		t.Errorf("HandleLine outcome = %v, want %v", outcome, ingest.LineIgnored)
 	}
 }
 
@@ -86,15 +84,17 @@ func TestFileHandler_HandleLineReportsMalformedPayloads(t *testing.T) {
 				resolveRepoPath: func(string) string { return "/repo" },
 			}
 
-			outcome, err := h.HandleLine(&failingTransaction{}, []byte(tt.line))
+			result, err := h.HandleLine(&failingTransaction{}, []byte(tt.line))
 			if err != nil {
 				t.Fatalf("HandleLine error = %v, want nil", err)
 			}
-			if outcome != ingest.LineUnparsed {
-				t.Errorf("HandleLine outcome = %v, want %v", outcome, ingest.LineUnparsed)
+			if result.Outcome != ingest.LineUnparsed {
+				t.Errorf("HandleLine outcome = %v, want %v", result.Outcome, ingest.LineUnparsed)
 			}
-			if h.UnparsedDiagnostic() == nil {
-				t.Error("UnparsedDiagnostic = nil, want malformed payload diagnostic")
+			if result.Diagnostic == nil {
+				t.Error("HandleLine diagnostic = nil, want malformed payload diagnostic")
+			} else if !strings.HasPrefix(result.Diagnostic.Error(), h.path+":1:") {
+				t.Errorf("HandleLine diagnostic = %q, want path and physical line prefix", result.Diagnostic)
 			}
 		})
 	}

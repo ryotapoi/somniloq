@@ -36,11 +36,11 @@ func assignTurns(messages []core.MessageRow) []turnMessage {
 }
 
 // userTurnMessages returns the user-message population used by outline and
-// other turn-derived views. The caller must pass the full GetMessages output,
-// preserving assignTurns' sidechain exclusion and ordering contract.
-func userTurnMessages(messages []core.MessageRow) []turnMessage {
+// other turn-derived views. The input must be the full assignTurns output,
+// preserving the shared numbering and ordering contract.
+func userTurnMessages(turns []turnMessage) []turnMessage {
 	var result []turnMessage
-	for _, tm := range assignTurns(messages) {
+	for _, tm := range turns {
 		if tm.Msg.Role == "user" {
 			result = append(result, tm)
 		}
@@ -48,10 +48,10 @@ func userTurnMessages(messages []core.MessageRow) []turnMessage {
 	return result
 }
 
-// turnBodySizes returns each turn's total content size in bytes.
-func turnBodySizes(messages []core.MessageRow) map[int]int {
+// turnBodySizes returns each assigned turn's total content size in bytes.
+func turnBodySizes(turns []turnMessage) map[int]int {
 	result := make(map[int]int)
-	for _, tm := range assignTurns(messages) {
+	for _, tm := range turns {
 		result[tm.Turn] += len(tm.Msg.Content)
 	}
 	return result

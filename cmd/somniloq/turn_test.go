@@ -61,7 +61,7 @@ func TestTurnBodySizes_CountsUTF8BytesByAssignedTurn(t *testing.T) {
 		{UUID: "u2", Role: "user", Content: "次"},
 	}
 
-	got := turnBodySizes(messages)
+	got := turnBodySizes(assignTurns(messages))
 	if got[1] != 13 {
 		t.Errorf("turn 1 body size = %d, want 13 (3 + 6 + 4 bytes)", got[1])
 	}

@@ -55,7 +55,6 @@ type fileHandler struct {
 	sessionID  string
 	importedAt string
 	lineNumber int
-	diagnostic error
 }
 
 func (h *fileHandler) Begin(path string, offset int64) error {
@@ -76,36 +75,34 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 	return nil
 }
 
-func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (ingest.LineOutcome, error) {
+func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (ingest.LineResult, error) {
 	h.lineNumber++
-	h.diagnostic = nil
 	trimmed := bytes.TrimSpace(line)
 	if len(trimmed) == 0 {
-		return ingest.LineIgnored, nil
+		return ingest.LineResult{Outcome: ingest.LineIgnored}, nil
 	}
 	record, err := parseRecord(trimmed)
 	if err != nil {
-		h.setDiagnostic(err)
-		return ingest.LineUnparsed, nil
+		return h.unparsed(err), nil
 	}
 	if record.Role != "user" && record.Role != "assistant" {
-		return ingest.LineIgnored, nil
+		return ingest.LineResult{Outcome: ingest.LineIgnored}, nil
 	}
 	normalized, err := normalizeRecord(record, h.sessionID, h.path, h.lineNumber)
 	if err != nil {
-		h.setDiagnostic(err)
-		return ingest.LineUnparsed, nil
+		return h.unparsed(err), nil
 	}
 	if err := ingest.PersistMessage(tx, normalized, h.importedAt); err != nil {
-		return ingest.LineIgnored, err
+		return ingest.LineResult{}, err
 	}
-	return ingest.LineWroteBody, nil
+	return ingest.LineResult{Outcome: ingest.LineWroteBody}, nil
 }
 
-func (h *fileHandler) UnparsedDiagnostic() error { return h.diagnostic }
-
-func (h *fileHandler) setDiagnostic(err error) {
-	h.diagnostic = fmt.Errorf("%s:%d: %w", h.path, h.lineNumber, err)
+func (h *fileHandler) unparsed(err error) ingest.LineResult {
+	return ingest.LineResult{
+		Outcome:    ingest.LineUnparsed,
+		Diagnostic: fmt.Errorf("%s:%d: %w", h.path, h.lineNumber, err),
+	}
 }
 
 func (h *fileHandler) Flush(ingest.ImportTransaction) error { return nil }

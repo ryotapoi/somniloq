@@ -8,7 +8,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
-func TestFileHandler_HandleLineReturnsIgnoredOutcomeOnPersistError(t *testing.T) {
+func TestFileHandler_HandleLineReturnsPersistenceError(t *testing.T) {
 	wantErr := errors.New("write failed")
 	h := &fileHandler{
 		resolveRepoPath: func(string) string { return "/repo" },
@@ -18,13 +18,10 @@ func TestFileHandler_HandleLineReturnsIgnoredOutcomeOnPersistError(t *testing.T)
 		agentNames:      map[string]string{},
 	}
 
-	outcome, err := h.HandleLine(&failingTransaction{err: wantErr}, []byte(`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-07-12T00:00:00Z","cwd":"/repo","message":{"role":"user","content":"hello"}}`))
+	_, err := h.HandleLine(&failingTransaction{err: wantErr}, []byte(`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-07-12T00:00:00Z","cwd":"/repo","message":{"role":"user","content":"hello"}}`))
 
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("HandleLine error = %v, want wrapping %v", err, wantErr)
-	}
-	if outcome != ingest.LineIgnored {
-		t.Errorf("HandleLine outcome = %v, want %v", outcome, ingest.LineIgnored)
 	}
 }
 
