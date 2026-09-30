@@ -111,7 +111,7 @@ somniloq sessions --format json          # TSV の代わりに JSON 配列
 
 出力は TSV 形式: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`, `source`。source は `claude_code` / `codex` / `cursor_agent`。
 
-`logical_day` はクエリ時に `ended_at`（無ければ `started_at`）から計算する。ローカルタイムの `dayBoundary` を基準にした日付で、セッションを途中で分割しない。
+`logical_day` はクエリ時に `ended_at`（無ければ `started_at`）から計算する。ローカル暦日の `dayBoundary` の境界時点より前なら前暦日、境界以降なら当暦日として、セッションを途中で分割しない。
 
 timestamp が未知のセッションは時刻 filter なしでは表示するが、`--since` / `--until` には一致しない。両方の timestamp が未知なら TSV の時刻範囲と Markdown の Started は空欄。
 
@@ -212,7 +212,7 @@ somniloq search --format json "auth バグ"             # JSON で検索結果�
 
 `commandPatterns` は `sessions` のスキップ判定用列だけで使う Go 正規表現のリスト。各 pattern は trim 済みの user message 本文全体に対して評価する。不正な正規表現は壊れた JSON と同じく config 読み込みエラーになり、typo を黙って無効化しない。
 
-`dayBoundary` は論理日の開始時刻をローカルタイムの `HH:MM` で指定する。未指定時は `00:00`。`sessions` / `search` の `--day-boundary` でコマンドごとに上書きできる。date-only の `--since` / `--until` と `sessions` の `logical_day` 列だけに効き、保存済み timestamp は生のままなので、境界を変えても再 import は不要。
+`dayBoundary` は論理日の開始時刻をローカル時計の `HH:MM` で指定する。DST 切り替え日も指定したローカル時刻を使い、date-only の `--since` は指定暦日の境界を包含下限、`--until` は翌暦日の境界を排他上限とする。`logical_day` も同じ境界時点と比較する。欠落・重複するローカル時刻は Go の `time.Date` による解決に従う。未指定時は `00:00`。`sessions` / `search` の `--day-boundary` でコマンドごとに上書きできる。date-only の `--since` / `--until` と `sessions` の `logical_day` 列だけに効き、保存済み timestamp は生のままなので、境界を変えても再 import は不要。
 
 ## 共通オプション
 

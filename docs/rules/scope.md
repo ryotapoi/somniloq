@@ -96,7 +96,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - 表示は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合、デフォルト表示は `repo_path` をそのまま
 - `--short` は alias 非一致時に `filepath.Base(repo_path)`（ハイフン保持）
 - 出力 TSV の列: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`, `source`。source は `claude_code` / `codex` / `cursor_agent`
-- `logical_day` は `ended_at`（無ければ `started_at`）をローカルタイムに変換し、`dayBoundary` を引いた日付（`YYYY-MM-DD`）として出す。セッションを途中で分割せず、表示時に計算する
+- `logical_day` は `ended_at`（無ければ `started_at`）をローカルタイムに変換し、その暦日の `dayBoundary` の境界時点より前なら前暦日、境界以降なら当暦日（`YYYY-MM-DD`）として出す。セッションを途中で分割せず、表示時に計算する
 - `body_size` は非 sidechain メッセージの本文合計サイズ（UTF-8 バイト数）。show が出力する量の予測値として使う（show 前に大きいセッションかを判定する用途）。文字数でなくバイト数なのは、コンテキスト量の感覚と一致させるため。`message_count` は従来どおり sidechain を含む全行数
 - `non_command_user_turn_count` は outline と同じ user turn 母集団（`GetMessages` の sidechain 除外済み全メッセージ列に `assignTurns` を適用し、user メッセージだけを拾う）から、コマンド扱いの user turn を除いた件数。コマンド扱いは、本文を trim した文字列が `/` で始まる場合、または config の `commandPatterns` のいずれかに正規表現一致する場合。CLI はこの値でセッションを除外せず、一覧を読む側がスキップ判断に使う
 - `first_non_command_user_line` は最初の非コマンド user turn の先頭 1 行。抽出は outline の `first_line` と同じく、前後の空白を除去した本文の最初の行。TSV ではタブ・改行を空白に置換する。非コマンド user turn が無ければ空文字
@@ -200,7 +200,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - 表示正規化の対象は project 名を出すコマンド（`sessions` / `show` / `projects` / `search`）。alias グループに一致する `repo_path` / basename は canonical 名だけで表示し、旧名や元のパスを追加フィールドとして出さない
 - `projects` 一覧では、alias により同じ canonical 名になる行を cmd 層で合算する。DB の `repo_path` は書き換えない
 - `commandPatterns` は、`sessions` のスキップ判定用列でコマンド扱いにする user turn を指定する正規表現リスト。各 pattern は trim 済みの user message 本文全体に対して Go の `regexp` で評価する。不正な正規表現は config 読み込みエラーとし、壊れた JSON と同じく黙って無効化しない
-- `dayBoundary` は論理日の開始時刻を `HH:MM` で指定する。未指定時は `00:00`。不正値は config 読み込みエラー。`sessions` / `search` の date-only `--since`/`--until` と `sessions` の `logical_day` 表示だけに使い、DB に焼き込まない
+- `dayBoundary` は論理日の開始時刻をローカル時計の `HH:MM` で指定する。DST 切り替え日も指定したローカル時刻を使い、date-only の `--since` は指定暦日の境界を包含下限、`--until` は翌暦日の境界を排他上限とする。`logical_day` も同じ境界時点と比較する。欠落・重複するローカル時刻は Go の `time.Date` による解決に従う。未指定時は `00:00`。不正値は config 読み込みエラー。`sessions` / `search` の date-only `--since`/`--until` と `sessions` の `logical_day` 表示だけに使い、DB に焼き込まない
 
 ## CLI インターフェース
 

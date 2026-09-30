@@ -53,10 +53,16 @@ func resolveTimeFlag(value string, now time.Time, isUntil bool, loc *time.Locati
 		return "", err
 	}
 	if dateOnly {
-		t = t.Add(boundary.offset)
-	}
-	if isUntil && dateOnly {
-		t = t.AddDate(0, 0, 1)
+		// Preserve the input calendar date even when local midnight is a DST gap.
+		t, err = time.Parse("2006-01-02", value)
+		if err != nil {
+			return "", err
+		}
+		dayOffset := 0
+		if isUntil {
+			dayOffset = 1
+		}
+		t = boundary.onDate(t, dayOffset, loc)
 	}
 	return t.UTC().Format(time.RFC3339Nano), nil
 }
@@ -88,5 +94,19 @@ func sessionLogicalDay(session core.SessionRow, boundary dayBoundary, loc *time.
 	if err != nil {
 		return ""
 	}
-	return t.In(loc).Add(-boundary.offset).Format("2006-01-02")
+	local := t.In(loc)
+	year, month, day := local.Date()
+	if t.Before(boundary.onDate(local, 0, loc)) {
+		day--
+	}
+	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
+}
+
+// onDate constructs a local clock boundary, rather than adding elapsed time
+// to midnight, because DST days need not contain 24 hours.
+func (boundary dayBoundary) onDate(date time.Time, dayOffset int, loc *time.Location) time.Time {
+	year, month, day := date.Date()
+	hour := int(boundary.offset / time.Hour)
+	minute := int(boundary.offset % time.Hour / time.Minute)
+	return time.Date(year, month, day+dayOffset, hour, minute, 0, 0, loc)
 }

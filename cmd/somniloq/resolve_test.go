@@ -177,3 +177,104 @@ func TestResolveTimeFlag_Error(t *testing.T) {
 		})
 	}
 }
+
+func TestDayBoundaryDST(t *testing.T) {
+	boundary := dayBoundary{offset: 4 * time.Hour}
+	for _, tt := range []struct {
+		name, day, previousDay, nextBoundary, boundaryInstant, location string
+	}{
+		{"spring", "2026-03-08", "2026-03-07", "2026-03-09T08:00:00Z", "2026-03-08T08:00:00Z", "America/New_York"},
+		{"fall", "2026-11-01", "2026-10-31", "2026-11-02T09:00:00Z", "2026-11-01T09:00:00Z", "America/New_York"},
+		{"midnight gap", "2026-09-06", "2026-09-05", "2026-09-07T07:00:00Z", "2026-09-06T07:00:00Z", "America/Santiago"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			loc, err := time.LoadLocation(tt.location)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, filter := range []struct {
+				day   string
+				until bool
+				want  string
+			}{
+				{tt.day, false, tt.boundaryInstant},
+				{tt.previousDay, true, tt.boundaryInstant},
+				{tt.day, true, tt.nextBoundary},
+			} {
+				got, err := resolveTimeFlag(filter.day, time.Time{}, filter.until, loc, boundary)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got != filter.want {
+					t.Errorf("date %s until=%v: got %s, want %s", filter.day, filter.until, got, filter.want)
+				}
+			}
+			instant, err := time.Parse(time.RFC3339, tt.boundaryInstant)
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, logical := range []struct {
+				instant time.Time
+				want    string
+			}{
+				{instant.Add(-time.Nanosecond), tt.previousDay},
+				{instant, tt.day},
+				{instant.Add(time.Hour), tt.day},
+			} {
+				session := core.SessionRow{EndedAt: logical.instant.Format(time.RFC3339Nano)}
+				if got := sessionLogicalDay(session, boundary, loc); got != logical.want {
+					t.Errorf("logical day at %s: got %s, want %s", session.EndedAt, got, logical.want)
+				}
+			}
+		})
+	}
+}
+
+func TestDayBoundaryDSTTransitionTimeSharesInstant(t *testing.T) {
+	loc, err := time.LoadLocation("America/New_York")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tt := range []struct {
+		day, previousDay, boundary string
+		hour, minute               int
+	}{
+		{"2026-03-08", "2026-03-07", "02:30", 2, 30},
+		{"2026-11-01", "2026-10-31", "01:30", 1, 30},
+	} {
+		t.Run(tt.day, func(t *testing.T) {
+			boundary, err := parseDayBoundary(tt.boundary)
+			if err != nil {
+				t.Fatal(err)
+			}
+			date, err := time.Parse("2006-01-02", tt.day)
+			if err != nil {
+				t.Fatal(err)
+			}
+			// Go may choose either side of a DST transition; both paths must use that instant.
+			instant := time.Date(date.Year(), date.Month(), date.Day(), tt.hour, tt.minute, 0, 0, loc)
+			wantInstant := instant.UTC().Format(time.RFC3339Nano)
+			for _, filter := range []struct {
+				day   string
+				until bool
+			}{{tt.day, false}, {tt.previousDay, true}} {
+				got, err := resolveTimeFlag(filter.day, time.Time{}, filter.until, loc, boundary)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if got != wantInstant {
+					t.Errorf("date %s until=%v: got %s, want shared instant %s", filter.day, filter.until, got, wantInstant)
+				}
+			}
+			for _, logical := range []struct {
+				instant time.Time
+				want    string
+			}{{instant.Add(-time.Nanosecond), tt.previousDay}, {instant, tt.day}} {
+				session := core.SessionRow{EndedAt: logical.instant.Format(time.RFC3339Nano)}
+				if got := sessionLogicalDay(session, boundary, loc); got != logical.want {
+					t.Errorf("logical day at %s: got %s, want %s", session.EndedAt, got, logical.want)
+				}
+			}
+		})
+	}
+}

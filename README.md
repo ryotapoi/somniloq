@@ -113,7 +113,7 @@ somniloq sessions --format json          # JSON array instead of TSV
 
 Output is TSV: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`, `source` (`claude_code`, `codex`, or `cursor_agent`).
 
-`logical_day` is derived at query time from `ended_at` (or `started_at` when `ended_at` is empty), using the local `dayBoundary`. Sessions are not split across days.
+`logical_day` is derived at query time from `ended_at` (or `started_at` when `ended_at` is empty), by comparing the timestamp with that local calendar day’s `dayBoundary`: before the boundary belongs to the previous calendar day, and at or after it belongs to the current day. Sessions are not split across days.
 
 Sessions with an unknown timestamp remain visible without a time filter, but do not match `--since` or `--until`. When both timestamps are unknown, the TSV time range and Markdown Started value are empty.
 
@@ -214,7 +214,7 @@ Optional config file at `~/.somniloq/config.json` (override with the global `--c
 
 `commandPatterns` is a list of Go regular expressions used only by `sessions` skip-hint columns. Each pattern matches against the trimmed full user message. Invalid regular expressions make config loading fail, the same as broken JSON, so typos do not silently disable the setting.
 
-`dayBoundary` sets the logical day start time as `HH:MM` local time. It defaults to `00:00` and can be overridden per command with `--day-boundary` on `sessions` and `search`. It only changes date-only `--since`/`--until` values and the `sessions` logical-day column; stored timestamps stay raw, so changing the boundary does not require re-import.
+`dayBoundary` sets the logical day start time as `HH:MM` on the local clock, including DST transition days. Date-only `--since` includes the boundary on the specified calendar day, while `--until` excludes the boundary on the next calendar day. `logical_day` compares against the same boundary instant. Missing or repeated local times follow Go’s `time.Date` resolution. It defaults to `00:00` and can be overridden per command with `--day-boundary` on `sessions` and `search`. It only changes date-only `--since`/`--until` values and the `sessions` logical-day column; stored timestamps stay raw, so changing the boundary does not require re-import.
 
 ## Common Options
 
