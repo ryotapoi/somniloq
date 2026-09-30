@@ -20,8 +20,9 @@ func init() {
 			return nil, nil
 		}
 		t, err := time.Parse(time.RFC3339Nano, value)
+		// Keep malformed source timestamps stored, but compare them as unknown.
 		if err != nil {
-			return nil, err
+			return nil, nil
 		}
 		return t.UTC().Format(rfc3339UTCNanosLayout), nil
 	})

@@ -115,6 +115,8 @@ Output is TSV: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, 
 
 Sessions with an unknown timestamp remain visible without a time filter, but do not match `--since` or `--until`. When both timestamps are unknown, the TSV time range and Markdown Started value are empty.
 
+保存済み timestamp が RFC3339 として解釈できない場合、比較上は未知として扱い、時刻 filter には一致させず、NULL と同じ順（昇順で先、降順で後、message 同値は挿入順）に並べる。filter なしでは行・本文を表示し、不正文字列は保存・JSON 出力・時刻表示にそのまま残す。CLI の不正な時刻引数はエラーのまま。
+
 `sessions --imported-since <time>` filters by the inclusive `imported_at` lower bound. It accepts the same relative, local-date, minute-precision, and RFC3339-instant forms as `--since`, but a date starts at local midnight and ignores `--day-boundary`. It combines with `--since`, `--until`, and `--project` using AND. `imported_at` is the UTC, whole-second start time of processing the JSONL file that last saved or updated the session; it is not the time of the overall CLI invocation or the latest invocation, a message-change timestamp, commit time, or an exactly-once consumption watermark. Skipping an unchanged file does not update `imported_at`. Pass the output `source` and `session_id` to `somniloq show --source <source> <session-id>` to read the session.
 
 When `projectAliases` matches a repo path or basename, project output uses only the canonical name.

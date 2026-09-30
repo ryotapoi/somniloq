@@ -75,6 +75,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 
 ### 時刻フィルタの共通規則
 
+- 保存済み timestamp の NULL・空文字列・RFC3339 として解釈できない値は、比較上は時点不明として扱う。範囲 filter には一致せず、filter なしでは行・本文を保持し、並び順は既存の NULL 順（昇順で先、降順で後、message 同値は rowid）に従う。不正な非空文字列は保存・JSON 出力・時刻表示にそのまま残し、時刻を補完しない。CLI の不正な時刻引数はエラーとする。
 - RFC3339 instant 入力の小数秒はミリ秒へ切り捨てず、ナノ秒精度で保持して時点として比較し、offset 表現が異なっても同じ時点なら等しい。`--since` は包含下限、`--until` は排他上限
 
 ### セッション一覧（sessions）
@@ -83,7 +84,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - `--since`/`--until` で時刻フィルタ（相対: `24h`, `7d`、ローカル絶対値: `2026-03-28`, `2026-03-28T15:00`、RFC3339 instant: `2026-03-28T15:00:00Z`, `2026-03-29T00:00:00+09:00`）。絶対日付と分精度日時はローカルタイム。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と日時は `dayBoundary` の影響を受けない。出力のタイムスタンプもローカルタイム（`2006-01-02 15:04` 形式）
 - `--imported-since` は session の `imported_at` を基準にした包含下限。相対時刻、ローカル日付、分精度日時、RFC3339 instant は `--since` と同じ形式で指定できるが、date-only はローカル時刻の 00:00 とし `dayBoundary` を適用しない。`--since` / `--until` / `--project` と併用した場合は AND。`imported_at` はその session を最後に保存更新した JSONL ファイル処理の開始時刻（UTC・秒精度）であり、CLI 呼出し全体や最新の呼出しの時刻、本文差分時刻・commit 完了時刻・無重複消費を保証する watermark ではない。変更なしとしてスキップしたファイルは `imported_at` を更新しない。出力された `source` と `session_id` は `show --source` に渡して会話全体を再参照できる
 - 時刻は `started_at ~ ended_at` の範囲形式で表示。ended_at がない場合は `started_at ~`。両方未知なら空欄
-- `--since` または `--until` を指定した時は、NULL / 空の started_at を一致させない。指定しない一覧では未知 timestamp も表示する
+- `--since` または `--until` を指定した時は、NULL / 空 / 不正な started_at を一致させない。指定しない一覧では未知 timestamp も表示する
 - `--project` は空でない `repo_path` への literal substring マッチ。`%`、`_`、`\` も文字列として扱う。値が config の alias グループに完全一致する場合はグループ全名に展開する（「設定ファイル」節参照）。NULL / 空の repository は条件に一致させない
 - `repo_path` は絶対パスのため、`/` セグメントを跨いだ部分一致（例: `--project Sources/ryot`）も可能
 - 表示は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合、デフォルト表示は `repo_path` をそのまま
@@ -98,7 +99,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 ### プロジェクト一覧（projects）
 
 - プロジェクト一覧をセッション数とともに表示
-- `--since`/`--until` で時刻フィルタ（`started_at` 基準）。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空の started_at は時刻条件に一致しない。date-only は従来どおりローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
+- `--since`/`--until` で時刻フィルタ（`started_at` 基準）。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な started_at は時刻条件に一致しない。date-only は従来どおりローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
 - SQL 側の集約キーは `repo_path` 一本。worktree とサブディレクトリ起動は SQL 側で本体リポジトリの行に集約される
 - 出力 1 列目は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` そのもの
 - alias により同じ canonical 名になる行は cmd 層で session count を合算する
@@ -111,7 +112,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - セッション内容を Markdown で出力
 - `show [--source <source>] <session-id>` は全 source を横断検索する。`--source` には search が出力する内部値 `claude_code` / `codex` / `cursor_agent` または CLI 表記 `claude-code` / `codex` / `cursor-agent` を指定でき、同じ `session_id` が複数 source に存在する場合に対象を選ぶ。未指定時は曖昧エラーとして候補を表示する。`all`、空値、未知値は不正で、`--source` は `--since` / `--until` の一括表示とは併用できない
 - Markdown metadata は Session、Source、Project、Started。Started 行は `started_at ~ ended_at` の時刻範囲で、ended_at がない場合は `started_at ~`、両方未知なら空欄
-- `--since`/`--until` で期間指定して一括表示（`started_at` 基準）。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空の started_at は時刻条件に一致しない。date-only は `projects` と同じくローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
+- `--since`/`--until` で期間指定して一括表示（`started_at` 基準）。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な started_at は時刻条件に一致しない。date-only は `projects` と同じくローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
 - `--summary N` で各セッションの user メッセージ先頭 N 件を表示（`/clear` と `<local-command-caveat>` はスキップ）。`0` または未指定で従来の全文表示
 - `--include-clear` で `/clear`・caveat のスキップを無効化（`--summary >= 1` が前提）
 - `--turn N` / `--turn N..M` で指定ターンだけ表示（両端含む）。1 ターンは user メッセージとそれに続く非 user メッセージ（assistant 応答等）。ターン番号は outline と同一の採番（GetMessages の全メッセージ列に対する採番）を共有する。範囲がセッションのターン数を超える場合は本文なしでセッションヘッダのみ出力し exit 0（エラーにしない）。`--turn ""`（空文字）は不正値としてエラー
@@ -148,7 +149,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - `project` は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` をそのまま
 - snippet はマッチの前後各 40 文字（rune 単位）。前後が切れている場合は `...` を付加。前後の空白は trim し、タブ・改行は空白に置換（TSV 保全）
 - JSON のフィールドは `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet`。`timestamp` は DB 保存値、`snippet` はタブ・改行を置換しない生値（共通仕様は「JSON 出力」節参照）
-- `--since`/`--until` は**メッセージの timestamp 基準**。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空の timestamp は時刻条件に一致しない。sessions / show のセッション開始基準とは異なる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と日時は `dayBoundary` の影響を受けない
+- `--since`/`--until` は**メッセージの timestamp 基準**。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な timestamp は時刻条件に一致しない。sessions / show のセッション開始基準とは異なる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と日時は `dayBoundary` の影響を受けない
 - `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ、alias 展開含む）
 - `--limit N` は最大 N 件を返す。未指定時は無制限、N は 1 以上。`--offset M` は順序付け済みの先頭 M 件を飛ばす。未指定時は 0、M は 0 以上。すべての既存 filter と新しい順（timestamp 降順、同値は rowid 降順）を適用した後にページ化する
 - 同じ query・filter・`--limit` で `--offset` を増やせば続きのページを取得できる。ただし、この保証は DB が固定で、相対時刻 filter を含む場合は解決済みの時刻条件も固定である場合だけ。DB の変更や snapshot はサポートしない
