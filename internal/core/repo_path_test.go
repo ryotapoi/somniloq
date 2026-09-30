@@ -179,3 +179,57 @@ func TestResolveRepoPath_NotGitRepo(t *testing.T) {
 		}
 	})
 }
+
+// Keep Git discovery tests sequential because they clear process-wide GIT_*.
+func linkedWorktree(t *testing.T) (string, string) {
+	t.Helper()
+	unsetAllGitEnv(t)
+	parent, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := filepath.Join(parent, "main repo ")
+	worktree := filepath.Join(parent, "linked tree ")
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	run("init", "-q", repo)
+	run("-C", repo, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "--allow-empty", "-m", "Initial")
+	run("-C", repo, "worktree", "add", "-q", "-b", "linked", worktree)
+	return repo, worktree
+}
+
+func TestResolveRepoPath_LinkedWorktree(t *testing.T) {
+	repo, worktree := linkedWorktree(t)
+	sub := filepath.Join(worktree, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, cwd := range []string{repo, worktree, sub} {
+		if got := ResolveRepoPath(cwd); got != repo {
+			t.Errorf("ResolveRepoPath(%q) = %q, want %q", cwd, got, repo)
+		}
+	}
+}
+
+func TestResolveRepoPath_Submodule(t *testing.T) {
+	repo, _ := linkedWorktree(t)
+	origin := filepath.Join(t.TempDir(), "origin")
+	for _, args := range [][]string{
+		{"init", "-q", origin},
+		{"-C", origin, "-c", "user.name=Test", "-c", "user.email=test@example.com", "commit", "-q", "--allow-empty", "-m", "Initial"},
+		{"-C", repo, "-c", "protocol.file.allow=always", "submodule", "add", "-q", origin, "module"},
+	} {
+		if out, err := exec.Command("git", args...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+	module := filepath.Join(repo, "module")
+	if got := ResolveRepoPath(module); got != module {
+		t.Errorf("ResolveRepoPath(%q) = %q, want submodule root", module, got)
+	}
+}

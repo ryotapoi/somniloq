@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -1075,5 +1076,81 @@ func TestImport_MetaAfterBody_AcrossInvocations(t *testing.T) {
 	}
 	if name != "later-agent" {
 		t.Errorf("agent_name: got %q, want %q", name, "later-agent")
+	}
+}
+
+func TestImport_LinkedWorktreeProjects(t *testing.T) {
+	repo, worktree := linkedWorktree(t)
+	db := testDB(t)
+	claudeRoot, codexRoot := t.TempDir(), t.TempDir()
+	project := filepath.Join(claudeRoot, "project")
+	if err := os.Mkdir(project, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	other := t.TempDir()
+	for i, cwd := range []string{repo, worktree, other} {
+		claude := fmt.Sprintf(`{"type":"user","uuid":"u%d","sessionId":"claude-%d","timestamp":"2026-05-01T00:00:00Z","cwd":%q,"message":{"role":"user","content":"hello"}}`+"\n", i, i, cwd)
+		codex := fmt.Sprintf(`{"timestamp":"2026-05-01T00:00:00Z","type":"session_meta","payload":{"id":"codex-%d","cwd":%q}}
+{"timestamp":"2026-05-01T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
+`, i, cwd)
+		for path, body := range map[string]string{
+			filepath.Join(project, fmt.Sprintf("claude-%d.jsonl", i)):    claude,
+			filepath.Join(codexRoot, fmt.Sprintf("rollout-%d.jsonl", i)): codex,
+		} {
+			if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	}
+	result, err := Import(db, ImportOptions{ProjectsDir: claudeRoot, CodexSessionsDir: codexRoot, CursorProjectsDir: t.TempDir(), Source: ImportSourceAll})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.FilesImported != 6 || len(result.Errors) != 0 || result.UnparsedLines != 0 {
+		t.Fatalf("Import: %+v", result)
+	}
+	// Old non-NULL worktree identities survive unchanged differential import.
+	if _, err := db.db.Exec("UPDATE sessions SET repo_path=? WHERE session_id IN ('claude-1', 'codex-1')", worktree); err != nil {
+		t.Fatal(err)
+	}
+	opts := ImportOptions{ProjectsDir: claudeRoot, CodexSessionsDir: codexRoot, CursorProjectsDir: t.TempDir(), Source: ImportSourceAll}
+	result, err = Import(db, opts)
+	if err != nil || result.FilesSkipped != 6 {
+		t.Fatalf("unchanged import: %+v, %v", result, err)
+	}
+	old, err := db.ListSessions(SessionFilter{Projects: []string{worktree}})
+	if err != nil || len(old) != 2 {
+		t.Fatalf("old identities: %+v, %v", old, err)
+	}
+	// Existing full import rebuilds the saved identity from the surviving logs.
+	opts.Full = true
+	result, err = Import(db, opts)
+	if err != nil || result.FilesImported != 6 {
+		t.Fatalf("full import: %+v, %v", result, err)
+	}
+	projects, err := db.ListProjects(SessionFilter{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]int{}
+	for _, p := range projects {
+		counts[p.RepoPath] = p.SessionCount
+	}
+	if !reflect.DeepEqual(counts, map[string]int{repo: 4, other: 2}) {
+		t.Fatalf("projects = %v", counts)
+	}
+	sessions, err := db.ListSessions(SessionFilter{Projects: []string{repo}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := map[string]bool{}
+	for _, session := range sessions {
+		if session.RepoPath != repo {
+			t.Errorf("%s repo_path = %q", session.SessionID, session.RepoPath)
+		}
+		ids[session.SessionID] = true
+	}
+	if !reflect.DeepEqual(ids, map[string]bool{"claude-0": true, "claude-1": true, "codex-0": true, "codex-1": true}) {
+		t.Fatalf("filtered sessions = %v", ids)
 	}
 }

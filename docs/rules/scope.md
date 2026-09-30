@@ -36,6 +36,12 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
   - 非対話環境（パイプ、CI 等）では `--yes` が必須
   - `--source` 指定時も DB 全体を削除し、指定 source だけを再取り込みする
 
+#### repository の解決と既存データ
+
+Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する。空 cwd は空、`/.claude/worktrees/` を含む cwd は最初の marker より前を優先する。それ以外は Git の top-level と worktree 情報を使い、実在する通常の linked worktree とそのサブディレクトリも本体 repository の root に集約する。通常 repository と submodule はそれぞれ自身の root を使い、Git が解決できない cwd は元の値を保持する。消失した一般 worktree の本体は推測しない。
+
+保存済みの非 NULL `repo_path` は自動補正されず、不変ファイルは差分 import でスキップされる。元ログと対象 worktree が残っていれば `somniloq import --full --yes` で再構築できる。ただし source 制限にかかわらず DB 全体を削除して指定 source だけを再取り込みするため、保持したい全 source の元ログを確認する。`backfill` は NULL のみが対象で、保存済み worktree path の補正には使えない。
+
 #### Codex 用（`somniloq import --source codex`）
 
 - `~/.codex/sessions/` 配下の日付ディレクトリを再帰走査し、rollout JSONL を列挙
@@ -100,7 +106,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 
 - プロジェクト一覧をセッション数とともに表示
 - `--since`/`--until` で時刻フィルタ（`started_at` 基準）。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な started_at は時刻条件に一致しない。date-only は従来どおりローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
-- SQL 側の集約キーは `repo_path` 一本。worktree とサブディレクトリ起動は SQL 側で本体リポジトリの行に集約される
+- SQL 側の集約キーは `repo_path` 一本。本体と worktree・サブディレクトリは取り込み時に同じ `repo_path` へ解決され、その保存値で集約される
 - 出力 1 列目は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` そのもの
 - alias により同じ canonical 名になる行は cmd 層で session count を合算する
 - `--short` は alias 非一致時に `filepath.Base(repo_path)`

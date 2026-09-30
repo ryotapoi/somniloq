@@ -76,6 +76,8 @@ Imports Claude Code JSONL from `~/.claude/projects/`, Codex rollout JSONL from `
 
 `--full` always clears the whole somniloq DB before re-importing. If you run `somniloq import --source codex --full`, Claude Code rows are deleted too, then only Codex logs are imported.
 
+Claude Code と Codex の実在する通常の Git linked worktree は、本体 repository と同じ project に集約する。既存の `/.claude/worktrees/` marker の優先解決も維持する。保存済みの非 NULL worktree path は自動更新されず、不変ログは差分 import でスキップされる。元ログと対象 worktree が残っていれば `somniloq import --full --yes` で再構築できる。DB 全体を削除して指定 source のみを取り込むため、保持したい全 source のログを確認して実行する。`backfill` は NULL のみが対象で、消失した一般 worktree の本体は推測しない。
+
 Errors are non-fatal: lines that cannot be parsed (broken JSON, malformed payloads) are skipped and counted in the summary (`... N unparsed lines`). To make schema changes diagnosable, the first five parse/normalization failures are listed on stderr as `file:line: error`; they do not change the import exit code. Unreadable directories or files are skipped while the rest is still imported; those errors are listed on stderr and make the exit code 1. A missing source directory is treated as an unused source, not an error.
 
 ### backfill
