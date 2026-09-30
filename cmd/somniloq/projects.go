@@ -74,7 +74,7 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	}
 
 	for _, r := range displayRows {
-		if _, err := fmt.Fprintf(out, "%s\t%d\n", r.Project, r.SessionCount); err != nil {
+		if _, err := fmt.Fprintf(out, "%s\t%d\n", sanitizeTSV(r.Project), r.SessionCount); err != nil {
 			return 1, err
 		}
 	}

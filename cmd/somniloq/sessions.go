@@ -112,7 +112,7 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 
 	for i, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
-		proj := resolveProjectDisplayName(r.RepoPath, *flags.short, cfg)
+		proj := sanitizeTSV(resolveProjectDisplayName(r.RepoPath, *flags.short, cfg))
 		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\n",
 			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
 			derived[i].NonCommandUserTurnCount, sanitizeTSV(derived[i].FirstNonCommandUserLine), r.Source); err != nil {
