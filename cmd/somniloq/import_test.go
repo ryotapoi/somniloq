@@ -344,3 +344,39 @@ func TestImportCmd_ScanErrorExitsNonZero(t *testing.T) {
 		t.Errorf("stderr should report the scan error: %q", errOut.String())
 	}
 }
+
+func TestImportCmd_RejectsUnexpectedArgumentsBeforeSideEffects(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"positional", []string{"unexpected"}},
+		{"full yes before positional and source", []string{"--full", "--yes", "unexpected", "--source", "codex"}},
+		{"source before positional", []string{"--source", "codex", "unexpected"}},
+		{"after separator", []string{"--", "unexpected"}},
+		{"before full confirmation", []string{"--full", "unexpected"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			open := func() (*core.DB, error) {
+				t.Fatal("DB must not be opened for unexpected arguments")
+				return nil, nil
+			}
+			in := strings.NewReader("y\n")
+			var out, errOut bytes.Buffer
+			code, err := importCmd(tt.args, open, "", "", "", in, &out, &errOut, true)
+			if code != 1 || err != nil {
+				t.Fatalf("importCmd = (%d, %v), want (1, nil)", code, err)
+			}
+			if out.Len() != 0 {
+				t.Errorf("stdout = %q, want empty", out.String())
+			}
+			if !strings.Contains(errOut.String(), "unexpected arguments") || !strings.Contains(errOut.String(), "usage: somniloq import") {
+				t.Errorf("stderr = %q, want argument diagnostic and usage", errOut.String())
+			}
+			if in.Len() != len("y\n") || strings.Contains(errOut.String(), "Continue?") {
+				t.Errorf("confirmation occurred: unread input = %d, stderr = %q", in.Len(), errOut.String())
+			}
+		})
+	}
+}

@@ -21,7 +21,7 @@
 - [x] Codex の `session_meta` で `id` が欠落・空の場合、後続メッセージを空の session ID に保存しない。複数 rollout の本文が一つの session に混ざらず、不正な metadata が診断されることを確認する。
 - [x] import が保存できる不正な timestamp 1件で `sessions`・`projects`・`show`・`search` が失敗しないようにする。新規取り込みと既存 DB の不正値が、それぞれ他の正常データの参照を妨げないことを確認する。
 - [x] `/.claude/worktrees/` 以外の通常の Git linked worktree から取り込んだ会話も、本体 repository の project に集約する。本体と worktree を跨ぐ一覧・project filter を確認する。
-- [ ] `sessions` と `import` で予期しない位置引数をエラーにする。位置引数の後にあるフラグが黙って無視されず、特に `import --full --yes` の source 制限を誤って外さないことを確認する。
+- [x] `sessions` と `import` で予期しない位置引数をエラーにする。位置引数の後にあるフラグが黙って無視されず、特に `import --full --yes` の source 制限を誤って外さないことを確認する。
 - [ ] DST 切り替え日にも `dayBoundary` を指定したローカル時刻として扱う。`--since` / `--until` の日付条件と `logicalDay` が、春・秋の時刻変更を跨いでも同じ境界で一致することを確認する。
 - [ ] `sessions` と `projects` の TSV 出力で project 名のタブ・改行・CR を処理し、列数と行数を保つ。project alias と repository path 由来の値を確認し、JSON では元の文字列を保持する。
 

@@ -366,3 +366,33 @@ func TestSessionsCmd_InvalidImportedSinceFailsBeforeOpeningDB(t *testing.T) {
 		}
 	}
 }
+
+func TestSessionsCmd_RejectsUnexpectedArgumentsBeforeOpeningDB(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+	}{
+		{"positional", []string{"unexpected"}},
+		{"positional before filter", []string{"unexpected", "--project", "x"}},
+		{"after separator", []string{"--", "unexpected"}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			open := func() (*core.DB, error) {
+				t.Fatal("DB must not be opened for unexpected arguments")
+				return nil, nil
+			}
+			var out, errOut bytes.Buffer
+			code, err := sessionsCmd(tt.args, open, config{}, &out, &errOut)
+			if code != 1 || err != nil {
+				t.Fatalf("sessionsCmd = (%d, %v), want (1, nil)", code, err)
+			}
+			if out.Len() != 0 {
+				t.Errorf("stdout = %q, want empty", out.String())
+			}
+			if !strings.Contains(errOut.String(), "unexpected arguments") || !strings.Contains(errOut.String(), "usage: somniloq sessions") {
+				t.Errorf("stderr = %q, want argument diagnostic and usage", errOut.String())
+			}
+		})
+	}
+}

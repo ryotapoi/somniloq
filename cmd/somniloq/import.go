@@ -41,6 +41,11 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
+	if fs.NArg() != 0 {
+		writeUsageError(errOut, "unexpected arguments")
+		fmt.Fprintln(errOut, "usage: somniloq import [flags]")
+		return 1, nil
+	}
 
 	source, err := parseImportSource(*sourceValue)
 	if err != nil {

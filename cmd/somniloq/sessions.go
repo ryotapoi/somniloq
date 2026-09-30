@@ -49,6 +49,11 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
+	if fs.NArg() != 0 {
+		writeUsageError(errOut, "unexpected arguments")
+		fmt.Fprintln(errOut, "usage: somniloq sessions [flags]")
+		return 1, nil
+	}
 	fs.Visit(func(f *flag.Flag) {
 		if f.Name == "imported-since" {
 			flags.importedSinceSet = true
