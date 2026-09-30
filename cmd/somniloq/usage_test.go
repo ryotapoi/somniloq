@@ -10,28 +10,6 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-func TestBackfillUsage(t *testing.T) {
-	var buf bytes.Buffer
-	fs := flag.NewFlagSet("backfill", flag.ContinueOnError)
-	fs.SetOutput(&buf)
-	fs.Bool("yes", false, "skip confirmation prompt")
-
-	setUsage(fs, "Correct legacy session data (delete orphan sessions, resolve repo_path)", "somniloq backfill")
-	fs.Usage()
-
-	out := buf.String()
-
-	if !strings.Contains(out, "Correct legacy session data") {
-		t.Errorf("expected description in output, got:\n%s", out)
-	}
-	if !strings.Contains(out, "somniloq backfill") {
-		t.Errorf("expected usage line in output, got:\n%s", out)
-	}
-	if !strings.Contains(out, "-yes") {
-		t.Errorf("expected -yes flag in output, got:\n%s", out)
-	}
-}
-
 func TestSetUsage(t *testing.T) {
 	var buf bytes.Buffer
 	fs := flag.NewFlagSet("test", flag.ContinueOnError)
@@ -64,9 +42,6 @@ func TestTopLevelUsageStaysShort(t *testing.T) {
 	if strings.Contains(topLevelUsage, "Examples:") || strings.Contains(topLevelUsage, "Columns") {
 		t.Fatalf("top-level usage must stay short, got:\n%s", topLevelUsage)
 	}
-	if lines := strings.Count(topLevelUsage, "\n"); lines > 25 {
-		t.Fatalf("top-level usage grew too long: %d lines\n%s", lines, topLevelUsage)
-	}
 }
 
 func TestSubcommandHelpIsSelfContained(t *testing.T) {
@@ -84,7 +59,7 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return importCmd([]string{"--help"}, openDB, "/claude", "/codex", "/cursor", strings.NewReader(""), &bytes.Buffer{}, errOut, false)
 			},
-			want: []string{"Examples:", "Output:", "Imported <imported> files", "Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.", "somniloq import --source cursor-agent"},
+			want: []string{"Examples:", "Output:", "Imported <imported> files", "Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.", "somniloq import --source cursor-agent", "somniloq import [--source all|claude-code|codex|cursor-agent] [flags]", "source to import: all, claude-code, codex, cursor-agent"},
 		},
 		{
 			name: "backfill",

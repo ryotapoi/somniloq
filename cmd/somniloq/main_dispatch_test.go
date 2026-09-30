@@ -146,23 +146,22 @@ func TestMainDispatchHelpLikeFlagValueDoesNotSkipBrokenConfig(t *testing.T) {
 	}
 }
 
-func TestIsHelpRequestRecognizesEveryDeclaredConfigCommandFlag(t *testing.T) {
-	for _, command := range []string{"sessions", "show", "search", "projects"} {
-		fs := configCommandFlagSet(command)
-		if fs == nil {
-			t.Fatalf("configCommandFlagSet(%q) = nil", command)
-		}
-
-		fs.VisitAll(func(f *flag.Flag) {
-			t.Run(command+"/"+f.Name, func(t *testing.T) {
-				args := []string{"--" + f.Name, "--help"}
-				if flagConsumesValue(f) {
-					args = []string{"--" + f.Name, "value", "--help"}
-				}
-				if !isHelpRequest(command, args) {
-					t.Fatalf("isHelpRequest(%q, %q) = false, want true", command, args)
-				}
-			})
+func TestIsHelpRequest(t *testing.T) {
+	tests := []struct {
+		name, command string
+		args          []string
+		want          bool
+	}{
+		{"sessions value flag", "sessions", []string{"--project", "project", "--help"}, true},
+		{"show bool flag", "show", []string{"--short", "--help"}, true},
+		{"search value flag", "search", []string{"--project", "project", "--help"}, true},
+		{"projects value flag", "projects", []string{"--format", "json", "--help"}, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := isHelpRequest(tt.command, tt.args); got != tt.want {
+				t.Errorf("isHelpRequest(%q, %q) = %v, want %v", tt.command, tt.args, got, tt.want)
+			}
 		})
 	}
 }

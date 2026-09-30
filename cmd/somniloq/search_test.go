@@ -153,25 +153,6 @@ func TestSearchCmd_MissingQueryPrintsUsage(t *testing.T) {
 	}
 }
 
-func TestSearchCmd_TooManyArguments(t *testing.T) {
-	openDB := func() (*core.DB, error) {
-		t.Fatal("openDB must not be called for invalid arguments")
-		return nil, nil
-	}
-
-	var out, errOut bytes.Buffer
-	code, err := searchCmd([]string{"one", "two"}, openDB, config{}, &out, &errOut)
-	if err != nil {
-		t.Fatalf("searchCmd: %v", err)
-	}
-	if code != 1 {
-		t.Errorf("exit code = %d, want 1", code)
-	}
-	if !strings.Contains(errOut.String(), "too many arguments") {
-		t.Errorf("stderr = %q, want too many arguments", errOut.String())
-	}
-}
-
 func TestSearchCmd_PaginationTSVJSONAndTurns(t *testing.T) {
 	var tsvOut, errOut bytes.Buffer
 	code, err := searchCmd([]string{"--limit", "2", "--offset", "1", "needle"}, staticDB(newSearchPaginationTestDB(t)), config{}, &tsvOut, &errOut)

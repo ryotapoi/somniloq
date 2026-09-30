@@ -22,16 +22,18 @@ func decodeJSONArray(t *testing.T, data []byte) []map[string]any {
 }
 
 func TestSessionsCmd_FormatJSON(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.UTC
+	defer func() { time.Local = oldLocal }()
 	db := newOutlineTestDB(t)
+	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
+	}
+	if err := db.UpdateSessionTitle(core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
+		t.Fatalf("UpdateSessionTitle: %v", err)
+	}
 
-	// Read before sessionsCmd, which closes the DB on exit.
-	rows, err := db.ListSessions(core.SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 session, got %d", len(rows))
-	}
+	insertOutlineMessage(t, db, "sess-1", "raw-first", "user", "first\tline\nmore", "2026-03-28T14:59:00Z", false)
 
 	var out, errOut bytes.Buffer
 	code, err := sessionsCmd([]string{"--format", "json"}, staticDB(db), config{}, &out, &errOut)
@@ -49,15 +51,15 @@ func TestSessionsCmd_FormatJSON(t *testing.T) {
 	want := map[string]any{
 		"source":                  "claude_code",
 		"sessionId":               "sess-1",
-		"project":                 rows[0].RepoPath,
-		"title":                   "",
+		"project":                 "/Users/test/proj",
+		"title":                   "Title\twith\nline",
 		"startedAt":               "2026-03-28T15:00:00Z",
-		"endedAt":                 rows[0].EndedAt,
-		"logicalDay":              sessionLogicalDay(rows[0], dayBoundary{}, time.Local),
-		"messageCount":            float64(rows[0].MessageCount),
-		"bodySize":                float64(rows[0].BodySize),
-		"nonCommandUserTurnCount": float64(2),
-		"firstNonCommandUserLine": "first question",
+		"endedAt":                 "2026-03-28T16:00:00Z",
+		"logicalDay":              "2026-03-28",
+		"messageCount":            float64(5),
+		"bodySize":                float64(86),
+		"nonCommandUserTurnCount": float64(3),
+		"firstNonCommandUserLine": "first\tline",
 	}
 	for k, v := range want {
 		if got[0][k] != v {
@@ -88,8 +90,8 @@ func TestProjectsCmd_FormatJSON(t *testing.T) {
 	if got[0]["sessionCount"] != float64(1) {
 		t.Errorf("sessionCount = %#v, want 1", got[0]["sessionCount"])
 	}
-	if _, ok := got[0]["project"]; !ok {
-		t.Errorf("project field missing: %v", got[0])
+	if got[0]["project"] != "/Users/test/proj" || len(got[0]) != 2 {
+		t.Errorf("project schema/value = %v, want only project and sessionCount", got[0])
 	}
 }
 
@@ -127,6 +129,9 @@ func TestOutlineCmd_FormatJSON(t *testing.T) {
 
 func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 	db := newOutlineTestDB(t)
+	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
+	}
 
 	var out, errOut bytes.Buffer
 	code, err := showCmd([]string{"--format", "json", "sess-1"}, staticDB(db), config{}, &out, &errOut)
@@ -141,8 +146,17 @@ func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 	if len(got) != 1 {
 		t.Fatalf("entries = %d, want 1 (single session still wrapped in an array)", len(got))
 	}
-	if got[0]["sessionId"] != "sess-1" || got[0]["source"] != "claude_code" {
-		t.Errorf("session header = %v", got[0])
+	wantHeader := map[string]any{
+		"sessionId": "sess-1", "source": "claude_code", "project": "/Users/test/proj",
+		"title": "", "startedAt": "2026-03-28T15:00:00Z", "endedAt": "2026-03-28T16:00:00Z",
+	}
+	for key, want := range wantHeader {
+		if got[0][key] != want {
+			t.Errorf("%s = %#v, want %#v", key, got[0][key], want)
+		}
+	}
+	if len(got[0]) != len(wantHeader)+1 {
+		t.Errorf("session fields = %v, want header plus messages", got[0])
 	}
 	msgs, ok := got[0]["messages"].([]any)
 	if !ok {
@@ -155,8 +169,20 @@ func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 	if first["role"] != "user" || first["content"] != "first question\nwith detail" || first["timestamp"] != "2026-03-28T15:00:00Z" {
 		t.Errorf("message 0 = %v", first)
 	}
+	if second := msgs[1].(map[string]any); second["role"] != "assistant" || second["content"] != "answer one" || second["timestamp"] != "2026-03-28T15:01:00Z" {
+		t.Errorf("message 1 = %v, want raw assistant fields", second)
+	}
 	for _, m := range msgs {
-		if m.(map[string]any)["content"] == "sidechain prompt" {
+		message := m.(map[string]any)
+		if len(message) != 3 {
+			t.Errorf("message fields = %v, want only role/content/timestamp", message)
+		}
+		for _, key := range []string{"role", "content", "timestamp"} {
+			if _, ok := message[key]; !ok {
+				t.Errorf("message missing %q: %v", key, message)
+			}
+		}
+		if message["content"] == "sidechain prompt" {
 			t.Error("sidechain message leaked into JSON output")
 		}
 	}
@@ -164,6 +190,9 @@ func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 
 func TestShowCmd_FormatJSON_TurnFilter(t *testing.T) {
 	db := newOutlineTestDB(t)
+	if err := db.UpdateSessionTitle(core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
+		t.Fatalf("UpdateSessionTitle: %v", err)
+	}
 
 	var out, errOut bytes.Buffer
 	code, err := showCmd([]string{"--format", "json", "--turn", "2", "sess-1"}, staticDB(db), config{}, &out, &errOut)
@@ -175,6 +204,9 @@ func TestShowCmd_FormatJSON_TurnFilter(t *testing.T) {
 	}
 
 	got := decodeJSONArray(t, out.Bytes())
+	if got[0]["title"] != "Title\twith\nline" {
+		t.Errorf("title = %#v, want raw custom title", got[0]["title"])
+	}
 	msgs := got[0]["messages"].([]any)
 	if len(msgs) != 1 {
 		t.Fatalf("messages = %d, want 1 (turn 2 only)", len(msgs))

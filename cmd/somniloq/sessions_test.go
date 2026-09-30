@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"encoding/json"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,18 +11,17 @@ import (
 )
 
 func TestSessionsCmd_OutputColumns(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.UTC
+	defer func() { time.Local = oldLocal }()
 	db := newOutlineTestDB(t)
-
-	// The CLI must print exactly what ListSessions returns; the value
-	// semantics (bytes, sidechain exclusion) are pinned by core tests.
-	// Read before sessionsCmd, which closes the DB on exit.
-	rows, err := db.ListSessions(core.SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions: %v", err)
+	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
+		t.Fatalf("UpsertSession: %v", err)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 session, got %d", len(rows))
+	if err := db.UpdateSessionTitle(core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
+		t.Fatalf("UpdateSessionTitle: %v", err)
 	}
+	insertOutlineMessage(t, db, "sess-1", "raw-first", "user", "first\tline\nmore", "2026-03-28T14:59:00Z", false)
 
 	var out, errOut bytes.Buffer
 	code, err := sessionsCmd(nil, staticDB(db), config{}, &out, &errOut)
@@ -34,31 +32,9 @@ func TestSessionsCmd_OutputColumns(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
 	}
 
-	line := strings.TrimSuffix(out.String(), "\n")
-	fields := strings.Split(line, "\t")
-	if len(fields) != 10 {
-		t.Fatalf("fields = %d, want 10 (SessionID, TimeRange, LogicalDay, Project, Title, MessageCount, BodySize, NonCommandUserTurnCount, FirstNonCommandUserLine, Source): %q", len(fields), line)
-	}
-	if want := sessionLogicalDay(rows[0], dayBoundary{}, time.Local); fields[2] != want {
-		t.Errorf("LogicalDay column = %s, want %s", fields[2], want)
-	}
-	if want := strconv.Itoa(rows[0].MessageCount); fields[5] != want {
-		t.Errorf("MessageCount column = %s, want %s", fields[5], want)
-	}
-	if want := strconv.Itoa(rows[0].BodySize); fields[6] != want {
-		t.Errorf("BodySize column = %s, want %s", fields[6], want)
-	}
-	if fields[7] != "2" {
-		t.Errorf("NonCommandUserTurnCount column = %s, want 2", fields[7])
-	}
-	if fields[8] != "first question" {
-		t.Errorf("FirstNonCommandUserLine column = %q, want first question", fields[8])
-	}
-	if fields[9] != string(rows[0].Source) {
-		t.Errorf("Source column = %q, want %q", fields[9], rows[0].Source)
-	}
-	if rows[0].BodySize == 0 {
-		t.Error("fixture BodySize should be non-zero")
+	const want = "sess-1\t2026-03-28 15:00 ~ 2026-03-28 16:00\t2026-03-28\t/Users/test/proj\tTitle with line\t5\t86\t3\tfirst line\tclaude_code\n"
+	if got := out.String(); got != want {
+		t.Errorf("TSV = %q, want %q", got, want)
 	}
 }
 

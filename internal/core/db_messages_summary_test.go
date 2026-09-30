@@ -40,49 +40,11 @@ func TestGetMessages_Empty(t *testing.T) {
 	}
 }
 
-func TestGetMessages_OrderByTimestamp(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	// Insert in reverse order
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "world", Timestamp: "2026-03-28T10:01:00Z"}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
-
-	msgs, err := db.GetMessages(SourceClaudeCode, "s1")
-	if err != nil {
-		t.Fatalf("GetMessages failed: %v", err)
-	}
-	if len(msgs) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(msgs))
-	}
-
-	if msgs[0].UUID != "m1" {
-		t.Errorf("first message UUID: got %s, want m1", msgs[0].UUID)
-	}
-	if msgs[0].Role != "user" {
-		t.Errorf("first message Role: got %s, want user", msgs[0].Role)
-	}
-	if msgs[0].Content != "hello" {
-		t.Errorf("first message Content: got %s, want hello", msgs[0].Content)
-	}
-	if msgs[0].Timestamp != "2026-03-28T10:00:00Z" {
-		t.Errorf("first message Timestamp: got %s, want 2026-03-28T10:00:00Z", msgs[0].Timestamp)
-	}
-
-	if msgs[1].UUID != "m2" {
-		t.Errorf("second message UUID: got %s, want m2", msgs[1].UUID)
-	}
-	if msgs[1].Role != "assistant" {
-		t.Errorf("second message Role: got %s, want assistant", msgs[1].Role)
-	}
-}
-
 func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
 	db := testDB(t)
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "instant-order"}, "2026-03-28T15:00:00Z"))
 	for _, message := range []NormalizedMessage{
-		{Source: SourceClaudeCode, UUID: "latest", SessionID: "instant-order", Role: "user", Content: "latest", Timestamp: "2026-03-28T08:00:00.2Z"},
+		{Source: SourceClaudeCode, UUID: "latest", SessionID: "instant-order", Role: "assistant", Content: "latest", Timestamp: "2026-03-28T08:00:00.2Z"},
 		{Source: SourceClaudeCode, UUID: "tie-first", SessionID: "instant-order", Role: "user", Content: "tie first", Timestamp: "2026-03-28T09:00:00.100+01:00"},
 		{Source: SourceClaudeCode, UUID: "tie-second", SessionID: "instant-order", Role: "user", Content: "tie second", Timestamp: "2026-03-28T08:00:00.1Z"},
 		{Source: SourceClaudeCode, UUID: "earliest", SessionID: "instant-order", Role: "user", Content: "earliest", Timestamp: "2026-03-28T10:00:00+02:00"},
@@ -103,6 +65,9 @@ func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
 			t.Errorf("GetMessages[%d].UUID = %q, want %q", i, messages[i].UUID, uuid)
 		}
 	}
+	if messages[0].Role != "user" || messages[0].Content != "earliest" || messages[0].Timestamp != "2026-03-28T10:00:00+02:00" || messages[3].Role != "assistant" {
+		t.Errorf("message fields = %+v, want raw role/content/timestamp", messages)
+	}
 	if messages[1].Timestamp != "2026-03-28T09:00:00.100+01:00" || messages[2].Timestamp != "2026-03-28T08:00:00.1Z" {
 		t.Errorf("equal-instant stored strings changed: %q, %q", messages[1].Timestamp, messages[2].Timestamp)
 	}
@@ -113,54 +78,6 @@ func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
 	}
 	if len(summary) != 2 || summary[0].UUID != "earliest" || summary[1].UUID != "tie-first" {
 		t.Fatalf("GetSummaryMessages = %+v, want earliest then tie-first", summary)
-	}
-}
-
-func TestGetMessages_EqualTimestampsKeepInsertionOrder(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceCodex, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	// Old-format Codex rollouts inherit the session_meta timestamp for every
-	// record, so all rows tie on timestamp. Insertion (JSONL line) order must
-	// win deterministically: turn numbering is derived from this order.
-	const ts = "2026-03-28T10:00:00Z"
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m1", SessionID: "s1", Role: "user", Content: "first", Timestamp: ts}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "reply", Timestamp: ts}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m3", SessionID: "s1", Role: "user", Content: "second", Timestamp: ts}))
-
-	msgs, err := db.GetMessages(SourceCodex, "s1")
-	if err != nil {
-		t.Fatalf("GetMessages failed: %v", err)
-	}
-	if len(msgs) != 3 {
-		t.Fatalf("expected 3 messages, got %d", len(msgs))
-	}
-	for i, want := range []string{"m1", "m2", "m3"} {
-		if msgs[i].UUID != want {
-			t.Errorf("message[%d] UUID: got %s, want %s", i, msgs[i].UUID, want)
-		}
-	}
-}
-
-func TestGetSummaryMessages_EqualTimestampsKeepInsertionOrder(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceCodex, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	const ts = "2026-03-28T10:00:00Z"
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m1", SessionID: "s1", Role: "user", Content: "first", Timestamp: ts}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m2", SessionID: "s1", Role: "user", Content: "second", Timestamp: ts}))
-
-	msgs, err := db.GetSummaryMessages(SourceCodex, "s1", 1, false)
-	if err != nil {
-		t.Fatalf("GetSummaryMessages failed: %v", err)
-	}
-	if len(msgs) != 1 {
-		t.Fatalf("expected 1 message, got %d", len(msgs))
-	}
-	if msgs[0].UUID != "m1" {
-		t.Errorf("message UUID: got %s, want m1", msgs[0].UUID)
 	}
 }
 
@@ -396,24 +313,5 @@ func TestGetSummaryMessages_LimitZeroReturnsError(t *testing.T) {
 	_, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 0, false)
 	if err == nil {
 		t.Fatal("expected error for limit=0, got nil")
-	}
-}
-
-func TestGetSummaryMessages_MillisecondTimestamp(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00.000Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m_late", SessionID: "s1", Role: "user", Content: "later", Timestamp: "2026-03-28T10:00:00.200Z"}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m_early", SessionID: "s1", Role: "user", Content: "earlier", Timestamp: "2026-03-28T10:00:00.100Z"}))
-
-	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
-	if err != nil {
-		t.Fatalf("GetSummaryMessages failed: %v", err)
-	}
-	if len(msgs) != 1 {
-		t.Fatalf("expected 1 message, got %d", len(msgs))
-	}
-	if msgs[0].UUID != "m_early" {
-		t.Errorf("expected m_early (100ms), got %s", msgs[0].UUID)
 	}
 }

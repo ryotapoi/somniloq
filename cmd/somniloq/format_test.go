@@ -76,11 +76,12 @@ func TestFormatSession_WithTitle(t *testing.T) {
 		Source:       core.SourceClaudeCode,
 		SessionID:    "abc-123",
 		StartedAt:    "2026-03-28T10:00:00Z",
-		CustomTitle:  "Fix login bug",
+		CustomTitle:  "Title\twith\nline",
+		EndedAt:      "2026-03-28T10:30:00Z",
 		MessageCount: 2,
 	}
 	messages := []core.MessageRow{
-		{UUID: "m1", Role: "user", Content: "fix the login", Timestamp: "2026-03-28T10:00:00Z"},
+		{UUID: "m1", Role: "user", Content: "fix\tthe login\nwith detail", Timestamp: "2026-03-28T10:00:00Z"},
 		{UUID: "m2", Role: "assistant", Content: "done", Timestamp: "2026-03-28T10:01:00Z"},
 	}
 	displayName := "-Users-test-proj"
@@ -88,34 +89,12 @@ func TestFormatSession_WithTitle(t *testing.T) {
 	if err := formatSession(&buf, session, displayName, messages, time.UTC); err != nil {
 		t.Fatalf("formatSession failed: %v", err)
 	}
-	got := buf.String()
-
-	if !strings.Contains(got, "## Fix login bug\n") {
-		t.Errorf("expected h2 with custom_title, got:\n%s", got)
-	}
-	if !strings.Contains(got, "- **Session**: `abc-123`") {
-		t.Errorf("expected session ID in metadata, got:\n%s", got)
-	}
-	if !strings.Contains(got, "- **Source**: `claude_code`") {
-		t.Errorf("expected source in metadata, got:\n%s", got)
-	}
-	if !strings.Contains(got, "- **Project**: `-Users-test-proj`") {
-		t.Errorf("expected project in metadata, got:\n%s", got)
-	}
-	if !strings.Contains(got, "- **Started**: `2026-03-28 10:00 ~`") {
-		t.Errorf("expected started_at with time range in metadata, got:\n%s", got)
-	}
-	if !strings.Contains(got, "### User\n") {
-		t.Errorf("expected User heading, got:\n%s", got)
-	}
-	if !strings.Contains(got, "fix the login") {
-		t.Errorf("expected user content, got:\n%s", got)
-	}
-	if !strings.Contains(got, "### Assistant\n") {
-		t.Errorf("expected Assistant heading, got:\n%s", got)
-	}
-	if !strings.Contains(got, "done") {
-		t.Errorf("expected assistant content, got:\n%s", got)
+	const want = "## Title\twith line\n\n" +
+		"- **Session**: `abc-123`\n- **Source**: `claude_code`\n" +
+		"- **Project**: `-Users-test-proj`\n- **Started**: `2026-03-28 10:00 ~ 2026-03-28 10:30`\n" +
+		"\n### User\n\nfix\tthe login\nwith detail\n\n### Assistant\n\ndone\n"
+	if got := buf.String(); got != want {
+		t.Errorf("Markdown = %q, want %q", got, want)
 	}
 }
 
@@ -134,25 +113,6 @@ func TestFormatSession_EmptyTitle(t *testing.T) {
 
 	if !strings.Contains(got, "## abc-123\n") {
 		t.Errorf("expected h2 with session_id fallback, got:\n%s", got)
-	}
-}
-
-func TestFormatSession_TitleWithNewline(t *testing.T) {
-	var buf bytes.Buffer
-
-	session := core.SessionRow{
-		SessionID:   "abc-123",
-		StartedAt:   "2026-03-28T10:00:00Z",
-		CustomTitle: "line1\nline2",
-	}
-
-	if err := formatSession(&buf, session, "-Users-test", nil, time.UTC); err != nil {
-		t.Fatalf("formatSession failed: %v", err)
-	}
-	got := buf.String()
-
-	if !strings.Contains(got, "## line1 line2\n") {
-		t.Errorf("expected newline sanitized in title, got:\n%s", got)
 	}
 }
 

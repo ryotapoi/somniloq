@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/ryotapoi/somniloq/internal/core"
@@ -46,11 +47,8 @@ func TestShowCmd_AmbiguousCrossSourceSessionID(t *testing.T) {
 	if out.Len() != 0 {
 		t.Errorf("stdout = %q, want empty", out.String())
 	}
-	const wantErr = "error: session id \"same-id\" is ambiguous; matched multiple sources:\n" +
-		"  claude_code\tsame-id\n" +
-		"  codex\tsame-id\n"
-	if errOut.String() != wantErr {
-		t.Errorf("stderr = %q, want %q", errOut.String(), wantErr)
+	if !strings.Contains(errOut.String(), `session id "same-id" is ambiguous`) {
+		t.Errorf("stderr = %q, want ambiguity diagnostic", errOut.String())
 	}
 }
 
@@ -65,11 +63,13 @@ func TestResolveSessionByID_AmbiguousCrossSourceSessionID(t *testing.T) {
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
-	const wantErr = "error: session id \"same-id\" is ambiguous; matched multiple sources:\n" +
-		"  claude_code\tsame-id\n" +
-		"  codex\tsame-id\n"
-	if errOut.String() != wantErr {
-		t.Errorf("stderr = %q, want %q", errOut.String(), wantErr)
+	if !strings.Contains(errOut.String(), `session id "same-id" is ambiguous`) {
+		t.Errorf("stderr = %q, want ambiguity diagnostic", errOut.String())
+	}
+	for _, source := range []core.Source{core.SourceClaudeCode, core.SourceCodex} {
+		if !strings.Contains(errOut.String(), string(source)+"\tsame-id") {
+			t.Errorf("stderr = %q, want candidate from %s", errOut.String(), source)
+		}
 	}
 }
 

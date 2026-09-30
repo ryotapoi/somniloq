@@ -273,12 +273,9 @@ func TestProjectsCmd_ProjectAliasDisplayAggregatesCanonical(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
 	}
 
-	got := out.String()
-	if !strings.Contains(got, "somniloq\t2\n") {
-		t.Errorf("projects output should aggregate alias rows under canonical name:\n%s", got)
-	}
-	if strings.Contains(got, "Brimday") || strings.Count(got, "somniloq\t") != 1 {
-		t.Errorf("projects output should not duplicate or leak alias rows:\n%s", got)
+	const want = "somniloq\t2\n/Users/test/other\t1\n"
+	if got := out.String(); got != want {
+		t.Errorf("projects TSV = %q, want alias aggregation and unaliased path %q", got, want)
 	}
 }
 

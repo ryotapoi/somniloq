@@ -31,7 +31,7 @@ CLI 入口を触る前に、まずこの表で「cmd 層」「core 層」「仕�
 
 | コマンド | cmd 入口 | core / ingest 側 | 代表テスト | 仕様ポインタ |
 |---|---|---|---|---|
-| global routing | `cmd/somniloq/main.go` | `internal/core/db.go` の `OpenDB` | `cmd/somniloq/version_test.go`, 各 cmd test | `docs/rules/scope.md` の CLI インターフェース |
+| global routing | `cmd/somniloq/main.go` | `internal/core/db.go` の `OpenDB` | `cmd/somniloq/main_dispatch_test.go`, 各 cmd test | `docs/rules/scope.md` の CLI インターフェース |
 | `import` | `cmd/somniloq/import.go` | `internal/core/import.go`, `internal/ingest/*` | `cmd/somniloq/import*_test.go`, `internal/core/import_test.go`, `internal/core/codex_import_test.go` | `docs/rules/scope.md` の 取り込み |
 | `backfill` | `cmd/somniloq/backfill.go` | `internal/core/migrate_v04.go`, `internal/core/backfill.go` | `cmd/somniloq/backfill_test.go`, `internal/core/backfill_test.go` | `docs/rules/scope.md` の バックフィル |
 | `sessions` | `cmd/somniloq/sessions.go` | `internal/core/db_sessions_projects.go` の `ListSessions` | `cmd/somniloq/sessions_test.go`, `internal/core/db_sessions_projects_test.go` | `docs/rules/scope.md` の セッション一覧 |

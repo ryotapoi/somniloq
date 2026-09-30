@@ -320,23 +320,6 @@ func TestListSessions_ProjectFilterExcludesUnknownRepoPath(t *testing.T) {
 	}
 }
 
-func TestListSessions_RepoPath(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].RepoPath != "/Users/test/Brimday" {
-		t.Errorf("RepoPath: got %q, want %q", rows[0].RepoPath, "/Users/test/Brimday")
-	}
-}
-
 func TestListSessions_RepoPath_NullReturnsEmpty(t *testing.T) {
 	db := testDB(t)
 
@@ -351,23 +334,6 @@ func TestListSessions_RepoPath_NullReturnsEmpty(t *testing.T) {
 	}
 	if rows[0].RepoPath != "" {
 		t.Errorf("RepoPath should be empty for NULL, got %q", rows[0].RepoPath)
-	}
-}
-
-func TestGetSession_RepoPath(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	got, err := db.GetSession(SourceClaudeCode, "s1")
-	if err != nil {
-		t.Fatalf("GetSession failed: %v", err)
-	}
-	if got == nil {
-		t.Fatal("expected non-nil session")
-	}
-	if got.RepoPath != "/Users/test/Brimday" {
-		t.Errorf("RepoPath: got %q, want %q", got.RepoPath, "/Users/test/Brimday")
 	}
 }
 
@@ -578,23 +544,6 @@ func TestListSessions_UntilFilter_MillisecondTimestamp(t *testing.T) {
 	}
 }
 
-func TestListSessions_EndedAt(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].EndedAt != "2026-03-28T10:30:00Z" {
-		t.Errorf("EndedAt: got %q, want %q", rows[0].EndedAt, "2026-03-28T10:30:00Z")
-	}
-}
-
 func TestListSessions_EndedAt_Null(t *testing.T) {
 	db := testDB(t)
 
@@ -652,51 +601,6 @@ func TestListSessions_BodySizeZeroWithoutMessages(t *testing.T) {
 	}
 	if rows[0].BodySize != 0 {
 		t.Errorf("BodySize: got %d, want 0", rows[0].BodySize)
-	}
-}
-
-func TestGetSession_Found(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpdateSessionTitle(SourceClaudeCode, "s1", "my session", "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
-
-	got, err := db.GetSession(SourceClaudeCode, "s1")
-	if err != nil {
-		t.Fatalf("GetSession failed: %v", err)
-	}
-	if got == nil {
-		t.Fatal("expected non-nil session")
-	}
-	if got.SessionID != "s1" {
-		t.Errorf("SessionID: got %s, want s1", got.SessionID)
-	}
-	if got.StartedAt != "2026-03-28T10:00:00Z" {
-		t.Errorf("StartedAt: got %s, want 2026-03-28T10:00:00Z", got.StartedAt)
-	}
-	if got.CustomTitle != "my session" {
-		t.Errorf("CustomTitle: got %q, want %q", got.CustomTitle, "my session")
-	}
-	if got.MessageCount != 1 {
-		t.Errorf("MessageCount: got %d, want 1", got.MessageCount)
-	}
-}
-
-func TestGetSession_EndedAt(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
-
-	got, err := db.GetSession(SourceClaudeCode, "s1")
-	if err != nil {
-		t.Fatalf("GetSession failed: %v", err)
-	}
-	if got == nil {
-		t.Fatal("expected non-nil session")
-	}
-	if got.EndedAt != "2026-03-28T10:30:00Z" {
-		t.Errorf("EndedAt: got %q, want %q", got.EndedAt, "2026-03-28T10:30:00Z")
 	}
 }
 
@@ -770,7 +674,7 @@ func TestSessionRowQueryPaths_ReturnAllFields(t *testing.T) {
 	want := SessionRow{
 		Source:       SourceClaudeCode,
 		SessionID:    "s1",
-		CWD:          "/Users/test/project",
+		CWD:          "/Users/test/project/worktree",
 		RepoPath:     "/Users/test/project",
 		StartedAt:    "2026-03-28T10:00:00Z",
 		EndedAt:      "2026-03-28T10:30:00Z",
@@ -1101,40 +1005,6 @@ func TestListProjects_NullStartedAt(t *testing.T) {
 	}
 	if rows[0].RepoPath != "/Users/test/normal" {
 		t.Errorf("expected /Users/test/normal, got %s", rows[0].RepoPath)
-	}
-}
-
-func TestListSessions_CWD(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", CWD: "/Users/test/proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].CWD != "/Users/test/proj" {
-		t.Errorf("CWD: got %q, want %q", rows[0].CWD, "/Users/test/proj")
-	}
-}
-
-func TestGetSession_CWD(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", CWD: "/Users/test/proj", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	got, err := db.GetSession(SourceClaudeCode, "s1")
-	if err != nil {
-		t.Fatalf("GetSession failed: %v", err)
-	}
-	if got == nil {
-		t.Fatal("expected non-nil session")
-	}
-	if got.CWD != "/Users/test/proj" {
-		t.Errorf("CWD: got %q, want %q", got.CWD, "/Users/test/proj")
 	}
 }
 
