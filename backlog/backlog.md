@@ -17,7 +17,7 @@
 
 ### v0.12.3 不具合修正
 
-- [ ] 追記中の JSONL の未完成な最終行を import した後、同じ行が完成しても差分取り込みで失われないようにする。Claude Code・Codex・Cursor Agent の差分再開位置を確認し、完成済みで改行のない最終行を取り込める既存の挙動も維持する。
+- [x] 追記中の JSONL の未完成な最終行を import した後、同じ行が完成しても差分取り込みで失われないようにする。Claude Code・Codex・Cursor Agent の差分再開位置を確認し、完成済みで改行のない最終行を取り込める既存の挙動も維持する。
 - [ ] Codex の `session_meta` で `id` が欠落・空の場合、後続メッセージを空の session ID に保存しない。複数 rollout の本文が一つの session に混ざらず、不正な metadata が診断されることを確認する。
 - [ ] import が保存できる不正な timestamp 1件で `sessions`・`projects`・`show`・`search` が失敗しないようにする。新規取り込みと既存 DB の不正値が、それぞれ他の正常データの参照を妨げないことを確認する。
 - [ ] `/.claude/worktrees/` 以外の通常の Git linked worktree から取り込んだ会話も、本体 repository の project に集約する。本体と worktree を跨ぐ一覧・project filter を確認する。

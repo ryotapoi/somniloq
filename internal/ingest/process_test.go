@@ -382,6 +382,7 @@ func (h errorOutcomeHandler) HandleLine(ImportTransaction, []byte) (LineResult, 
 func (h errorOutcomeHandler) Flush(ImportTransaction) error { return nil }
 
 type processRecordingTx struct {
+	state             ImportState
 	importStateWrites int
 	commits           int
 	rollbacks         int
@@ -393,9 +394,52 @@ func (t *processRecordingTx) UpsertSession(SessionMeta, string) error { return n
 
 func (t *processRecordingTx) InsertMessage(NormalizedMessage) error { return nil }
 
-func (t *processRecordingTx) UpsertImportState(ImportState) error {
+func (t *processRecordingTx) UpsertImportState(state ImportState) error {
+	t.state = state
 	t.importStateWrites++
 	return t.upsertErr
+}
+
+func TestProcessJSONL_FinalLineResumeBoundary(t *testing.T) {
+	const prefix = "prior-body\n"
+	for _, tt := range []struct {
+		name        string
+		line        string
+		outcome     LineOutcome
+		wantAdvance bool
+	}{
+		{"unparsed without LF", "broken", LineUnparsed, false},
+		{"unparsed with LF", "broken\n", LineUnparsed, true},
+		{"body without LF", "body", LineWroteBody, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "session.jsonl")
+			contents := prefix + tt.line
+			if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			tx := &processRecordingTx{}
+			result, err := ProcessJSONL(func() (ImportTransaction, error) { return tx, nil }, SourceClaudeCode,
+				errorOutcomeHandler{result: LineResult{Outcome: tt.outcome}}, path, int64(len(prefix)), int64(len(contents)), "2026-10-01T00:00:00Z")
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantOffset := int64(len(prefix))
+			if tt.wantAdvance {
+				wantOffset = int64(len(contents))
+			}
+			if tx.state.LastOffset != wantOffset || tx.state.FileSize != int64(len(contents)) || tx.commits != 1 {
+				t.Fatalf("saved state = %+v, commits = %d; want offset %d and observed size %d", tx.state, tx.commits, wantOffset, len(contents))
+			}
+			wantUnparsed := 0
+			if tt.outcome == LineUnparsed {
+				wantUnparsed = 1
+			}
+			if result.UnparsedLines != wantUnparsed {
+				t.Errorf("UnparsedLines = %d, want %d", result.UnparsedLines, wantUnparsed)
+			}
+		})
+	}
 }
 
 func (t *processRecordingTx) Commit() error {

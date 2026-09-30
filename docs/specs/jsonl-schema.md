@@ -6,6 +6,12 @@ Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造
 
 `import` の CLI `--source` はユーザー向け表記として `all|claude-code|codex|cursor-agent` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex|cursor_agent` を保存する。`show` / `outline` の session 選択用 `--source` は、DB 内部値または `claude-code` / `codex` / `cursor-agent` を受け取り、`all` は受け取らない。
 
+## 共通の末尾行と差分再開
+
+末尾改行のない正常な JSON レコードは、その import で取り込む。末尾改行がなく unparsed となった行は診断に数えるが、差分再開位置をその行頭に残し、追記でファイルサイズが増えたら同じ物理行を再処理する。改行済みの unparsed 行では再開位置を進める。本文のない prefix は従来どおり保存境界を進めず、本文が現れたときに読み直す。
+
+旧実装で既に行途中の再開位置を保存した DB の過去の欠落は、自動回復しない。元のログが残っていれば既存の `import --full` で再構築できる。ただし、この操作は source 制限にかかわらず DB 全体をクリアしてから指定 source を取り込み直すため、保持したい source とログの有無を確認して実行する。
+
 ## Claude Code
 
 ### ファイルの場所

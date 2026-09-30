@@ -116,6 +116,7 @@ func processJSONL(newTransaction NewImportTransaction, source Source, handler Fi
 	// import_state only advances after a body record was committed, so a
 	// positive offset proves a sessions row already exists for this file.
 	hasBody := offset > 0
+	var unparsedTailBytes int64
 	consumed, err := ForEachLine(f, -1, func(line []byte) error {
 		lineResult, herr := handler.HandleLine(tx, line)
 		if herr != nil {
@@ -127,6 +128,11 @@ func processJSONL(newTransaction NewImportTransaction, source Source, handler Fi
 		case LineWroteBody:
 			hasBody = true
 		case LineUnparsed:
+			// An unterminated final line may still be appended to. Retry it
+			// from its start, while accepting valid JSON without a trailing LF.
+			if line[len(line)-1] != '\n' {
+				unparsedTailBytes = int64(len(line))
+			}
 			result.UnparsedLines++
 			if lineResult.Diagnostic != nil && len(result.UnparsedDiagnostics) < MaxUnparsedDiagnostics {
 				result.UnparsedDiagnostics = append(result.UnparsedDiagnostics, lineResult.Diagnostic)
@@ -150,7 +156,7 @@ func processJSONL(newTransaction NewImportTransaction, source Source, handler Fi
 		JSONLPath:  path,
 		Source:     source,
 		FileSize:   fileSize,
-		LastOffset: offset + consumed,
+		LastOffset: offset + consumed - unparsedTailBytes,
 		ImportedAt: importedAt,
 	}); err != nil {
 		return result, fmt.Errorf("upsert import state: %w", err)
