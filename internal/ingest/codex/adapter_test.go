@@ -64,6 +64,65 @@ func TestAdapter_ProcessFileMalformedSessionMetaContinues(t *testing.T) {
 	}
 }
 
+func TestAdapter_RejectsEmptySessionIDsAcrossRollouts(t *testing.T) {
+	const message = `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}` + "\n"
+	tx := &recordingTransaction{}
+	adapter := NewAdapter(func(string) string { return "/repo" })
+	for _, payload := range []string{`{"cwd":"/repo"}`, `{"id":""}`, `{"id":null}`, `{"id":"valid"}`} {
+		path := filepath.Join(t.TempDir(), "rollout.jsonl")
+		contents := "\n" + `{"type":"session_meta","payload":` + payload + "}\n" + message
+		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		result, err := adapter.ProcessFile(func() (ingest.ImportTransaction, error) { return tx, nil }, path, 0, int64(len(contents)), "2026-07-12T00:00:00Z")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if payload == `{"id":"valid"}` {
+			if result.UnparsedLines != 0 {
+				t.Errorf("valid metadata: unparsed = %d, want 0", result.UnparsedLines)
+			}
+			continue
+		}
+		if result.UnparsedLines != 1 || len(result.UnparsedDiagnostics) != 1 {
+			t.Fatalf("payload %s: unparsed = %d, diagnostics = %v", payload, result.UnparsedLines, result.UnparsedDiagnostics)
+		}
+		if got, want := result.UnparsedDiagnostics[0].Error(), path+":2: session_meta payload.id is missing or empty"; got != want {
+			t.Errorf("diagnostic = %q, want %q", got, want)
+		}
+		if len(tx.sessions) != 0 || len(tx.messages) != 0 {
+			t.Fatalf("invalid rollout persisted sessions/messages: %v / %v", tx.sessions, tx.messages)
+		}
+	}
+	if len(tx.sessions) != 1 || tx.sessions[0].SessionID != "valid" || len(tx.messages) != 1 || tx.messages[0].SessionID != "valid" {
+		t.Fatalf("persisted sessions/messages = %v / %v, want only valid session", tx.sessions, tx.messages)
+	}
+}
+
+func TestAdapter_InvalidSessionMetaPrefixRecoversAtValidMetadata(t *testing.T) {
+	const prefix = `{"type":"session_meta","payload":{"id":""}}
+`
+	const suffix = `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"ignored"}]}}
+{"type":"session_meta","payload":{"id":"valid"}}
+{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"kept"}]}}
+`
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	if err := os.WriteFile(path, []byte(prefix+suffix), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	tx := &recordingTransaction{}
+	result, err := NewAdapter(func(string) string { return "/repo" }).ProcessFile(func() (ingest.ImportTransaction, error) { return tx, nil }, path, int64(len(prefix)), int64(len(prefix+suffix)), "2026-07-12T00:00:00Z")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.UnparsedLines != 0 || len(result.UnparsedDiagnostics) != 0 {
+		t.Errorf("prefix metadata diagnosed again: %+v", result)
+	}
+	if len(tx.sessions) != 1 || tx.sessions[0].SessionID != "valid" || len(tx.messages) != 1 || tx.messages[0].Content != "kept" || tx.messages[0].SessionID != "valid" {
+		t.Fatalf("persisted sessions/messages = %v / %v, want only message after valid metadata", tx.sessions, tx.messages)
+	}
+}
+
 func TestAdapter_UsesOriginalSessionTimestampAfterTimestampedMessage(t *testing.T) {
 	const sessionTimestamp = "2026-07-12T00:00:00Z"
 	const contents = `{"timestamp":"2026-07-12T00:00:00Z","type":"session_meta","payload":{"id":"s1","cwd":"/repo"}}
@@ -153,11 +212,15 @@ func (t *failingTransaction) Commit() error { return nil }
 func (t *failingTransaction) Rollback() error { return nil }
 
 type recordingTransaction struct {
+	sessions []ingest.SessionMeta
 	messages []ingest.NormalizedMessage
 	commits  int
 }
 
-func (*recordingTransaction) UpsertSession(ingest.SessionMeta, string) error { return nil }
+func (t *recordingTransaction) UpsertSession(meta ingest.SessionMeta, _ string) error {
+	t.sessions = append(t.sessions, meta)
+	return nil
+}
 
 func (t *recordingTransaction) InsertMessage(message ingest.NormalizedMessage) error {
 	t.messages = append(t.messages, message)

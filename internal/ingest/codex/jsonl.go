@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"strconv"
 	"strings"
 
@@ -51,6 +52,9 @@ func parseSessionMeta(rec *RawRecord, resolveRepoPath ingest.RepoResolver) (*ing
 	var payload SessionMetaPayload
 	if err := json.Unmarshal(rec.Payload, &payload); err != nil {
 		return nil, err
+	}
+	if payload.ID == "" {
+		return nil, errors.New("session_meta payload.id is missing or empty")
 	}
 	return &ingest.SessionMeta{
 		Source:    ingest.SourceCodex,

@@ -94,6 +94,8 @@ id, timestamp, cwd, originator, cli_version, source, model_provider, git
 - `cwd` から `ResolveRepoPath` で `repo_path` を解決する
 - `git.branch` は存在する場合のみ `git_branch` に保存する
 - `cli_version` は `version` に保存する
+- `id` が欠落・空文字列・`null` の `session_meta` は unparsed とし、path・物理行・原因を診断する。有効な metadata がまだない rollout の後続本文は保存しない。差分取り込みの prefix 復元でも同じ検証を適用する。
+- 既存 DB に保存済みの空 ID の session / message は自動修復しない。元のログが残っていれば `import --full` で再構築できる。DB 全体の削除と source 選択については「共通の末尾行と差分再開」の注意に従う。
 
 #### response_item.payload の保存対象
 
