@@ -32,12 +32,9 @@
 
 ### v1.0.0 公開機能の整理
 
-- [ ] `outline` と `show --summary` に、trim 済みの user message 全文へ同じ Go 正規表現を適用する除外を導入する。
+- [ ] 公開の `backfill` コマンドと専用の旧データ修正・移行コードを削除し、関連する help・仕様・README・テストを更新する。利用者は実質プロジェクト所有者のみであるため削除を確定し、旧 DB 利用者向けの専用アップグレード手段は追加しない。一般的な schema 管理は維持する。
+- [ ] user message の除外を `excludeUserMessagePatterns` に統一し、`outline` と `show --summary` に trim 済みの全文へ同じ Go 正規表現を適用する共有 matcher を導入する。
   - config の `excludeUserMessagePatterns` を未設定なら除外なしとし、繰り返し指定できる CLI pattern は OR で評価して指定時に config のパターン一覧全体を置き換える。全除外をその呼び出しだけ無効化する指定を設け、override と無効化の併用はエラーにする（空正規表現を無効化の意味にしない）。不正な regex もエラーにする。
-  - 除外は first line・件数制限より先に適用し、`outline` は元の turn 番号を維持、summary は除外後の先頭 N 件を表示する。保存 DB、全文 `show` / `--turn` / `--tail`、`search`、`sessions` の一覧には適用しない。
-  - summary 固定の `/clear`・caveat 除外と `--include-clear` は新しい除外指定へ移し、移行例を示す。`sessions` 用の `commandPatterns`、slash-prefix 判定、`nonCommandUserTurnCount`、`firstNonCommandUserLine` は維持する。dayBoundary・logicalDay と summary 自体の廃止は含めない。関連する docs・help・README・config/output の移行案内を更新し、設定と CLI の優先順位、共有 matcher と順序、元の turn ID、不正 regex を自動検証する。
-
-### 優先度低（対応要否未確定）
-
-- [ ] 公開の `backfill` コマンドと専用の旧データ修正・移行コードを維持する価値と、削除時の旧 DB 利用者への影響を確認し、削除するか判断する。削除する場合は、元ログを失った旧 DB も含めたアップグレード手順を先に確定し、関連する help・仕様・README・テストを更新する。継続する場合は、並行 import による `repo_path` 更新との競合への対応要否を判断する。新たな自動移行や一般的な schema 管理の削除は前提にしない。
-- [ ] `sessions` の `nonCommandUserTurnCount` と `firstNonCommandUserLine` の実利用と維持コストを確認し、削除するか判断する。削除する場合のみ、`commandPatterns` と slash-prefix 判定、関連する出力契約・設定・ドキュメント・テストを整理し、公開出力の変更に適切なリリースを決める。
+  - 除外は first line・件数制限より先に適用し、`outline` は元の turn 番号を維持、summary は除外後の先頭 N 件を表示する。保存 DB、全文 `show` / `--turn` / `--tail`、`search` には適用しない。user message の除外を理由に `sessions` の一覧行を除外しない。
+  - summary 固定の `/clear`・caveat 除外と `--include-clear` は廃止し、新しい除外指定への移行例を示す。`sessions` 用の `commandPatterns`、slash-prefix 判定、`nonCommandUserTurnCount`、`firstNonCommandUserLine` とその算出処理も廃止し、TSV・JSON の公開出力から該当項目を削除する。`sessions` に独自の除外ルールは残さず、user message の除外処理は共有 matcher を使う。
+  - 公開出力・設定の変更は v1.0.0 で行う。dayBoundary・logicalDay と summary 自体の廃止は含めない。関連する docs・help・README・config/output の移行案内とテストを更新し、設定と CLI の優先順位、共有 matcher と順序、元の turn ID、不正 regex、廃止項目が TSV・JSON に残らないことを自動検証する。
