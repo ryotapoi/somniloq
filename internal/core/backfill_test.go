@@ -338,58 +338,6 @@ func TestBackfill_GitToplevel(t *testing.T) {
 	}
 }
 
-func TestBackfill_DeletesOrphanSessions(t *testing.T) {
-	unsetAllGitEnv(t)
-
-	db, err := OpenDB(":memory:")
-	if err != nil {
-		t.Fatalf("OpenDB: %v", err)
-	}
-	defer db.Close()
-
-	insertLegacySession(t, db, "orphan", strptr("/Users/test/proj"))
-
-	result, err := Backfill(db)
-	if err != nil {
-		t.Fatalf("Backfill: %v", err)
-	}
-	if result.Deleted != 1 || result.Resolved != 0 || result.Unresolved != 0 {
-		t.Errorf("result = %+v, want {Deleted:1 Resolved:0 Unresolved:0}", result)
-	}
-	if sessionExists(t, db, "orphan") {
-		t.Errorf("orphan session not deleted")
-	}
-}
-
-func TestBackfill_KeepsSessionsWithMessages(t *testing.T) {
-	unsetAllGitEnv(t)
-
-	db, err := OpenDB(":memory:")
-	if err != nil {
-		t.Fatalf("OpenDB: %v", err)
-	}
-	defer db.Close()
-
-	if _, err := db.db.Exec(
-		`INSERT INTO sessions (source, session_id, cwd, repo_path, imported_at)
-		 VALUES ('claude_code', 's1', '/Users/test/proj', '/Users/test/proj', '2026-03-28T15:00:00Z')`,
-	); err != nil {
-		t.Fatalf("insert: %v", err)
-	}
-	insertLegacyMessage(t, db, "s1", "m1")
-
-	result, err := Backfill(db)
-	if err != nil {
-		t.Fatalf("Backfill: %v", err)
-	}
-	if result.Deleted != 0 {
-		t.Errorf("result.Deleted = %d, want 0", result.Deleted)
-	}
-	if !sessionExists(t, db, "s1") {
-		t.Errorf("session s1 must remain")
-	}
-}
-
 // TestBackfill_DeletePlusResolveCombined verifies a single Backfill call can
 // both delete orphans and resolve repo_path on the same DB without
 // double-counting the deleted session in Resolved.

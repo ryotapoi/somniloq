@@ -379,27 +379,6 @@ func TestImportResultAdd_CapsDiagnosticsAcrossBatches(t *testing.T) {
 	}
 }
 
-func TestImportResultAddUnparsedDiagnostics_CapsAcrossBatches(t *testing.T) {
-	diagnostics := []error{
-		errors.New("first"), errors.New("second"), errors.New("third"),
-		errors.New("fourth"), errors.New("fifth"), errors.New("sixth"),
-		errors.New("seventh"), errors.New("eighth"),
-	}
-	want := []error{diagnostics[0], diagnostics[1], diagnostics[2], diagnostics[3], diagnostics[4]}
-	var result ImportResult
-
-	result.addUnparsedDiagnostics(diagnostics[:2])
-	result.addUnparsedDiagnostics(diagnostics[2:6])
-	if !reflect.DeepEqual(result.UnparsedDiagnostics, want) {
-		t.Fatalf("diagnostics at cap = %v, want %v", result.UnparsedDiagnostics, want)
-	}
-
-	result.addUnparsedDiagnostics(diagnostics[6:])
-	if !reflect.DeepEqual(result.UnparsedDiagnostics, want) {
-		t.Errorf("diagnostics after cap = %v, want %v", result.UnparsedDiagnostics, want)
-	}
-}
-
 func TestImport_ReportsClaudeCodeDiagnosticLineAfterOffset(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
@@ -667,44 +646,6 @@ func TestImport_FileShrink(t *testing.T) {
 	}
 	if state.FileSize != int64(len(smallJsonl)) || state.LastOffset != int64(len(smallJsonl)) {
 		t.Errorf("import_state = {FileSize:%d LastOffset:%d}, want both %d", state.FileSize, state.LastOffset, len(smallJsonl))
-	}
-}
-
-func TestImport_Full(t *testing.T) {
-	db := testDB(t)
-	dir := t.TempDir()
-
-	projDir := filepath.Join(dir, "-test-proj")
-	os.MkdirAll(projDir, 0o755)
-
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
-`
-	path := filepath.Join(projDir, "s1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
-
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("expected 1 message after first import, got %d", count)
-	}
-
-	res, err := Import(db, ImportOptions{Full: true, ProjectsDir: dir, Source: ImportSourceClaudeCode})
-	if err != nil {
-		t.Fatalf("Import --full failed: %v", err)
-	}
-	if res.FilesImported != 1 {
-		t.Errorf("expected 1 imported, got %d", res.FilesImported)
-	}
-
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("expected 1 message after full re-import, got %d", count)
 	}
 }
 

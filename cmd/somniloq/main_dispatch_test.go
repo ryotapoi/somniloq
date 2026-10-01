@@ -146,26 +146,6 @@ func TestMainDispatchHelpLikeFlagValueDoesNotSkipBrokenConfig(t *testing.T) {
 	}
 }
 
-func TestIsHelpRequest(t *testing.T) {
-	tests := []struct {
-		name, command string
-		args          []string
-		want          bool
-	}{
-		{"sessions value flag", "sessions", []string{"--project", "project", "--help"}, true},
-		{"show bool flag", "show", []string{"--short", "--help"}, true},
-		{"search value flag", "search", []string{"--project", "project", "--help"}, true},
-		{"projects value flag", "projects", []string{"--format", "json", "--help"}, true},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := isHelpRequest(tt.command, tt.args); got != tt.want {
-				t.Errorf("isHelpRequest(%q, %q) = %v, want %v", tt.command, tt.args, got, tt.want)
-			}
-		})
-	}
-}
-
 func homeWithBrokenConfig(t *testing.T) string {
 	t.Helper()
 

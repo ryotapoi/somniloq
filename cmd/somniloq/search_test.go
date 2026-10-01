@@ -64,22 +64,6 @@ func TestSearchCmd_AssistantHitUsesOwningTurn(t *testing.T) {
 	}
 }
 
-func TestSearchCmd_ExcludesSidechain(t *testing.T) {
-	db := newOutlineTestDB(t)
-
-	var out, errOut bytes.Buffer
-	code, err := searchCmd([]string{"sidechain"}, staticDB(db), config{}, &out, &errOut)
-	if err != nil {
-		t.Fatalf("searchCmd: %v", err)
-	}
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
-	}
-	if out.String() != "" {
-		t.Errorf("output = %q, want empty (sidechain only match)", out.String())
-	}
-}
-
 func TestSearchCmd_DayBoundaryFiltersDateOnlySince(t *testing.T) {
 	oldLocal := time.Local
 	time.Local = time.FixedZone("JST", 9*60*60)

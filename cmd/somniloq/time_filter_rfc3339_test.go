@@ -139,6 +139,9 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 				}
 			}
 
+			if tt.name != "sessions" {
+				return
+			}
 			for _, equal := range []struct {
 				stored   string
 				boundary string

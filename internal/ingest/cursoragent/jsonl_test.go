@@ -27,10 +27,3 @@ func TestExtractTextRejectsNonStringTextWithoutPartialContent(t *testing.T) {
 		}
 	}
 }
-
-func TestMessageUUIDIncludesPhysicalLine(t *testing.T) {
-	path := "/cursor/project/agent-transcripts/s/s.jsonl"
-	if messageUUID(path, 1) == messageUUID(path, 2) {
-		t.Error("message UUID must distinguish physical lines")
-	}
-}

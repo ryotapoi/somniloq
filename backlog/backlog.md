@@ -24,7 +24,7 @@
 - [x] `sessions` と `import` で予期しない位置引数をエラーにする。位置引数の後にあるフラグが黙って無視されず、特に `import --full --yes` の source 制限を誤って外さないことを確認する。
 - [x] DST 切り替え日にも `dayBoundary` を指定したローカル時刻として扱う。`--since` / `--until` の日付条件と `logicalDay` が、春・秋の時刻変更を跨いでも同じ境界で一致することを確認する。
 - [x] `sessions` と `projects` の TSV 出力で project 名のタブ・改行・CR を処理し、列数と行数を保つ。project alias と repository path 由来の値を確認し、JSON では元の文字列を保持する。
-- [ ] `simplify-tests` skill を実施する。
+- [x] `simplify-tests` skill を実施する。
 
 ### v1.0.0 公開機能の整理
 

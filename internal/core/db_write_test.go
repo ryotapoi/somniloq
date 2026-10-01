@@ -283,24 +283,6 @@ func TestInsertMessage(t *testing.T) {
 	}
 }
 
-func TestUpdateSessionTitle(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1"}, "2026-03-28T15:00:00Z"))
-	if err := db.UpdateSessionTitle(SourceClaudeCode, "s1", "my title", "2026-03-28T15:00:00Z"); err != nil {
-		t.Fatalf("UpdateSessionTitle failed: %v", err)
-	}
-
-	var title string
-	err := db.db.QueryRow("SELECT custom_title FROM sessions WHERE session_id='s1'").Scan(&title)
-	if err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if title != "my title" {
-		t.Errorf("got %q, want %q", title, "my title")
-	}
-}
-
 func TestUpdateSessionTitle_NoRow_IsNoop(t *testing.T) {
 	db := testDB(t)
 

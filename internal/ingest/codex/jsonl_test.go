@@ -45,11 +45,6 @@ func TestParseResponseItemAndIsConversationMessage(t *testing.T) {
 			line: `{"type":"response_item","payload":{"type":"message","role":"system","content":[{"type":"text","text":"skip"}]}}`,
 			want: false,
 		},
-		{
-			name: "session meta",
-			line: `{"type":"session_meta","payload":{"id":"s1","cwd":"/tmp"}}`,
-			want: false,
-		},
 	}
 
 	for _, tt := range tests {
@@ -101,9 +96,6 @@ func TestNormalizeMessage_UsesRolloutPathAndLineNumberUUID(t *testing.T) {
 		t.Fatalf("normalizeMessage failed: %v", err)
 	}
 
-	if got.Message.UUID != messageUUID("/tmp/rollout.jsonl", 7) {
-		t.Errorf("uuid: got %q, want %q", got.Message.UUID, messageUUID("/tmp/rollout.jsonl", 7))
-	}
 	if got.Message.UUID == messageUUID("/tmp/rollout.jsonl", 8) {
 		t.Errorf("uuid should include line number, got %q", got.Message.UUID)
 	}

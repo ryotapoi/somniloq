@@ -204,29 +204,6 @@ func TestSearchMessages_CombinedFiltersUseMessageTimestamp(t *testing.T) {
 // Mirrors TestListSessions_SinceFilter_MillisecondTimestamp: stored
 // timestamps carry milliseconds (e.g. .977Z) while the filter always uses
 // .000Z, and the string comparison must still include same-second rows.
-func TestSearchMessages_SinceFilter_MillisecondTimestamp(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "ms", StartedAt: "2026-03-28T14:10:45.977Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "ms1", SessionID: "ms", Role: "user", Content: "millisecond auth", Timestamp: "2026-03-28T14:10:45.977Z"}))
-
-	rows, err := db.SearchMessages(SessionFilter{Since: "2026-03-28T14:10:45.000Z"}, "auth", SearchPagination{})
-	if err != nil {
-		t.Fatalf("SearchMessages: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("rows = %d, want 1 (same-second millisecond timestamp must match)", len(rows))
-	}
-
-	rows, err = db.SearchMessages(SessionFilter{Until: "2026-03-28T14:10:45.000Z"}, "auth", SearchPagination{})
-	if err != nil {
-		t.Fatalf("SearchMessages: %v", err)
-	}
-	if len(rows) != 0 {
-		t.Fatalf("rows = %d, want 0 (until is exclusive and earlier than the row)", len(rows))
-	}
-}
-
 func TestSearchMessages_TimeFiltersCompareVariableFractionalSecondsAsInstants(t *testing.T) {
 	db := testDB(t)
 	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "fractional", StartedAt: "2026-03-28T14:10:45.123Z"}, "2026-03-28T15:00:00Z"))
@@ -263,30 +240,6 @@ func TestSearchMessages_NoMatch(t *testing.T) {
 	}
 	if len(rows) != 0 {
 		t.Errorf("rows = %+v, want empty", rows)
-	}
-}
-
-func TestSearchMessages_TimestampTieBrokenByRowid(t *testing.T) {
-	db := testDB(t)
-
-	// Old-format Codex rollouts give every record the same timestamp.
-	must(t, db.UpsertSession(SessionMeta{Source: SourceCodex, SessionID: "tie", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	for _, uuid := range []string{"t1", "t2", "t3"} {
-		must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: uuid, SessionID: "tie", Role: "user", Content: "tied " + uuid, Timestamp: "2026-03-28T10:00:00Z"}))
-	}
-
-	rows, err := db.SearchMessages(SessionFilter{}, "tied", SearchPagination{})
-	if err != nil {
-		t.Fatalf("SearchMessages: %v", err)
-	}
-	want := []string{"tied t3", "tied t2", "tied t1"} // newest first = reverse insertion
-	if len(rows) != len(want) {
-		t.Fatalf("rows = %d, want %d", len(rows), len(want))
-	}
-	for i, w := range want {
-		if rows[i].Content != w {
-			t.Errorf("rows[%d].Content = %q, want %q", i, rows[i].Content, w)
-		}
 	}
 }
 

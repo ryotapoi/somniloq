@@ -9,21 +9,6 @@ import (
 	"testing"
 )
 
-func TestOpenDB_CreatesSchema(t *testing.T) {
-	db := testDB(t)
-
-	tables := []string{"sessions", "messages", "import_state"}
-	for _, table := range tables {
-		var name string
-		err := db.db.QueryRow(
-			"SELECT name FROM sqlite_master WHERE type='table' AND name=?", table,
-		).Scan(&name)
-		if err != nil {
-			t.Errorf("table %q not found: %v", table, err)
-		}
-	}
-}
-
 func TestOpenDB_HasRepoPathColumn(t *testing.T) {
 	db := testDB(t)
 

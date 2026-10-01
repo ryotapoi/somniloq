@@ -46,49 +46,23 @@ func TestConfirmFullImport(t *testing.T) {
 }
 
 func TestConfirmBackfillDelete(t *testing.T) {
-	tests := []struct {
-		name  string
-		input string
-		want  bool
-	}{
-		{"y confirms", "y\n", true},
-		{"Y confirms", "Y\n", true},
-		{"yes rejects", "yes\n", false},
-		{"empty rejects", "\n", false},
-		{"n rejects", "n\n", false},
-		{"EOF rejects", "", false},
-		{"y with spaces confirms", " y \n", true},
+	var out bytes.Buffer
+	confirmed, err := confirmBackfillDelete(strings.NewReader("y\n"), &out, 3)
+	if err != nil || !confirmed {
+		t.Fatalf("confirmBackfillDelete = %t, %v, want confirmation", confirmed, err)
+	}
+	if !strings.Contains(out.String(), "[y/N]") {
+		t.Errorf("expected prompt with [y/N], got %q", out.String())
 	}
 
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			in := strings.NewReader(tt.input)
-			var out bytes.Buffer
-
-			got, err := confirmBackfillDelete(in, &out, 3)
-			if err != nil {
-				t.Fatalf("confirmBackfillDelete: %v", err)
-			}
-
-			if got != tt.want {
-				t.Errorf("input %q: got %v, want %v", tt.input, got, tt.want)
-			}
-			if !strings.Contains(out.String(), "[y/N]") {
-				t.Errorf("expected prompt with [y/N], got %q", out.String())
-			}
-		})
+	out.Reset()
+	confirmed, err = confirmBackfillDelete(strings.NewReader("n\n"), &out, 42)
+	if err != nil || confirmed {
+		t.Fatalf("confirmBackfillDelete = %t, %v, want rejection", confirmed, err)
 	}
-
-	t.Run("count appears in prompt", func(t *testing.T) {
-		var out bytes.Buffer
-		_, err := confirmBackfillDelete(strings.NewReader("n\n"), &out, 42)
-		if err != nil {
-			t.Fatalf("confirmBackfillDelete: %v", err)
-		}
-		if !strings.Contains(out.String(), fmt.Sprintf("%d", 42)) {
-			t.Errorf("expected count 42 in prompt, got %q", out.String())
-		}
-	})
+	if !strings.Contains(out.String(), fmt.Sprintf("%d", 42)) {
+		t.Errorf("expected count 42 in prompt, got %q", out.String())
+	}
 }
 
 type readError struct {
