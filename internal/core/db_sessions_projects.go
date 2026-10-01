@@ -32,41 +32,16 @@ type SessionFilter struct {
 	Projects []string
 }
 
-// The body-size sum counts bytes (OCTET_LENGTH; LENGTH on TEXT would count
+// Keep these selected columns in the same order as scanSessionRow. The
+// body-size sum counts bytes (OCTET_LENGTH; LENGTH on TEXT would count
 // characters) and skips sidechain rows so the value predicts what `show`
 // prints. MessageCount keeps counting every row.
-type sessionRowColumn struct {
-	selectExpr string
-	scanTarget func(*SessionRow) any
-}
-
-// sessionRowColumns is the single definition of the column order for every
-// query that produces SessionRow values. sessionRowSelect and scanSessionRow
-// are both derived from it, so their positions cannot drift apart.
-var sessionRowColumns = []sessionRowColumn{
-	{"s.source", func(r *SessionRow) any { return &r.Source }},
-	{"s.session_id", func(r *SessionRow) any { return &r.SessionID }},
-	{"COALESCE(s.cwd, '')", func(r *SessionRow) any { return &r.CWD }},
-	{"COALESCE(s.repo_path, '')", func(r *SessionRow) any { return &r.RepoPath }},
-	{"COALESCE(s.started_at, '')", func(r *SessionRow) any { return &r.StartedAt }},
-	{"COALESCE(s.ended_at, '')", func(r *SessionRow) any { return &r.EndedAt }},
-	{"COALESCE(s.custom_title, '')", func(r *SessionRow) any { return &r.CustomTitle }},
-	{"COUNT(m.uuid)", func(r *SessionRow) any { return &r.MessageCount }},
-	{"COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.is_sidechain = 0), 0)", func(r *SessionRow) any { return &r.BodySize }},
-}
-
-var sessionRowSelect = `
-	SELECT ` + strings.Join(sessionRowSelectExpressions(), ", ") + `
+const sessionRowSelect = `
+	SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''),
+	       COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''),
+	       COUNT(m.uuid), COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.is_sidechain = 0), 0)
 	FROM sessions s
 	LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id`
-
-func sessionRowSelectExpressions() []string {
-	expressions := make([]string, len(sessionRowColumns))
-	for i, column := range sessionRowColumns {
-		expressions[i] = column.selectExpr
-	}
-	return expressions
-}
 
 // rowScanner abstracts *sql.Row and *sql.Rows so scanSessionRow serves both
 // single-row and multi-row queries.
@@ -76,11 +51,17 @@ type rowScanner interface {
 
 func scanSessionRow(row rowScanner) (SessionRow, error) {
 	var r SessionRow
-	targets := make([]any, len(sessionRowColumns))
-	for i, column := range sessionRowColumns {
-		targets[i] = column.scanTarget(&r)
-	}
-	if err := row.Scan(targets...); err != nil {
+	if err := row.Scan(
+		&r.Source,
+		&r.SessionID,
+		&r.CWD,
+		&r.RepoPath,
+		&r.StartedAt,
+		&r.EndedAt,
+		&r.CustomTitle,
+		&r.MessageCount,
+		&r.BodySize,
+	); err != nil {
 		return SessionRow{}, err
 	}
 	return r, nil

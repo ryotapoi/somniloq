@@ -54,12 +54,6 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 		fmt.Fprintln(errOut, "usage: somniloq sessions [flags]")
 		return 1, nil
 	}
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "imported-since" {
-			flags.importedSinceSet = true
-		}
-	})
-
 	if err := validateFormat(*flags.format, "tsv", "json"); err != nil {
 		return 1, err
 	}
@@ -76,7 +70,7 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 	if err != nil {
 		return 1, err
 	}
-	if flags.importedSinceSet {
+	if flagWasProvided(fs, "imported-since") {
 		importedSince, err := resolveImportedSince(*flags.importedSince, now, time.Local)
 		if err != nil {
 			return 1, err
@@ -125,7 +119,6 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 type sessionsFlags struct {
 	since, until, importedSince, dayBoundary, project, format *string
 	short                                                     *bool
-	importedSinceSet                                          bool
 }
 
 func newSessionsFlagSet() (*flag.FlagSet, sessionsFlags) {

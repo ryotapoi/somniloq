@@ -104,5 +104,3 @@ func (h *fileHandler) unparsed(err error) ingest.LineResult {
 		Diagnostic: fmt.Errorf("%s:%d: %w", h.path, h.lineNumber, err),
 	}
 }
-
-func (h *fileHandler) Flush(ingest.ImportTransaction) error { return nil }

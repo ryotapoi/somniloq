@@ -75,6 +75,8 @@ type fileHandler struct {
 	agentNames      map[string]string
 }
 
+var _ ingest.FileFlusher = (*fileHandler)(nil)
+
 func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, path string, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
 	if a.resolveRepoPath == nil {
 		return ingest.ProcessResult{}, errors.New("resolve repo path is nil")

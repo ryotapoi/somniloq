@@ -59,12 +59,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	// Detect --turn via Visit so an explicit empty value (e.g. an unset shell
 	// variable) is rejected by parseTurnRange instead of silently showing the
 	// whole session.
-	turnSet := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "turn" {
-			turnSet = true
-		}
-	})
+	turnSet := flagWasProvided(fs, "turn")
 	if turnSet && *flags.tail > 0 {
 		return 1, errors.New("specify either --turn or --tail, not both")
 	}
@@ -94,12 +89,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	}
 
 	sessionID := fs.Arg(0)
-	sourceSet := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "source" {
-			sourceSet = true
-		}
-	})
+	sourceSet := flagWasProvided(fs, "source")
 	var source *core.Source
 	if sourceSet {
 		parsed, err := parseSessionSource(*flags.source)

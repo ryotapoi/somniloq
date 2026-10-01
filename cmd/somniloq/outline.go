@@ -59,12 +59,7 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), out, errOut io.W
 		fmt.Fprintln(errOut, outlineUsage)
 		return 1, nil
 	}
-	sourceSet := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == "source" {
-			sourceSet = true
-		}
-	})
+	sourceSet := flagWasProvided(fs, "source")
 	var source *core.Source
 	if sourceSet {
 		parsed, err := parseSessionSource(*sourceValue)

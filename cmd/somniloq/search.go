@@ -157,14 +157,6 @@ func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 	return fs, flags
 }
 
-func flagWasProvided(fs *flag.FlagSet, name string) bool {
-	found := false
-	fs.Visit(func(f *flag.Flag) {
-		found = found || f.Name == name
-	})
-	return found
-}
-
 type searchSessionKey struct {
 	source    core.Source
 	sessionID string

@@ -71,17 +71,21 @@ type FileHandler interface {
 	// error the result carries no meaning: the runner aborts the file and rolls
 	// back, discarding the entire result.
 	HandleLine(tx ImportTransaction, line []byte) (LineResult, error)
-	// Flush writes metadata buffered during HandleLine. It runs at EOF, only
-	// when a body record has been written.
+}
+
+// FileFlusher is an optional FileHandler capability for writing metadata
+// buffered during HandleLine. ProcessJSONL invokes it at EOF only when a body
+// record has been written.
+type FileFlusher interface {
 	Flush(tx ImportTransaction) error
 }
 
 // ProcessJSONL runs the shared skeleton of an incremental JSONL import: it
 // feeds every line after offset to handler inside one transaction, then
-// flushes buffered metadata, advances import_state, and commits. If no body
-// record has ever been written for the file, it commits nothing and keeps the
-// old offset so the next import re-reads the meta-only prefix once a body
-// record finally appears.
+// flushes buffered metadata when handler implements FileFlusher, advances
+// import_state, and commits. If no body record has ever been written for the
+// file, it commits nothing and keeps the old offset so the next import
+// re-reads the meta-only prefix once a body record finally appears.
 func ProcessJSONL(newTransaction NewImportTransaction, source Source, handler FileHandler, path string, offset, fileSize int64, importedAt string) (ProcessResult, error) {
 	return processJSONL(newTransaction, source, handler, path, offset, fileSize, importedAt, func(path string) (readSeekCloser, error) {
 		return os.Open(path)
@@ -148,8 +152,10 @@ func processJSONL(newTransaction NewImportTransaction, source Source, handler Fi
 		return result, nil
 	}
 
-	if err := handler.Flush(tx); err != nil {
-		return result, err
+	if flusher, ok := handler.(FileFlusher); ok {
+		if err := flusher.Flush(tx); err != nil {
+			return result, err
+		}
 	}
 
 	if err := tx.UpsertImportState(ImportState{

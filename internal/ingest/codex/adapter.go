@@ -130,10 +130,6 @@ func (h *fileHandler) unparsed(err error) ingest.LineResult {
 	}
 }
 
-func (h *fileHandler) Flush(tx ingest.ImportTransaction) error {
-	return nil
-}
-
 func (h *fileHandler) applySessionMeta(rec *RawRecord) error {
 	meta, err := parseSessionMeta(rec, h.resolveRepoPath)
 	if err != nil {

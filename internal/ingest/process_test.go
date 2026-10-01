@@ -246,8 +246,6 @@ func (ignoredHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) 
 	return LineResult{Outcome: LineIgnored}, nil
 }
 
-func (ignoredHandler) Flush(ImportTransaction) error { return nil }
-
 type diagnosticHandler struct{ line int }
 
 func (diagnosticHandler) Begin(string, int64) error { return nil }
@@ -257,8 +255,6 @@ func (h *diagnosticHandler) HandleLine(ImportTransaction, []byte) (LineResult, e
 	return LineResult{Outcome: LineUnparsed, Diagnostic: errors.New("line " + strconv.Itoa(h.line))}, nil
 }
 
-func (diagnosticHandler) Flush(ImportTransaction) error { return nil }
-
 type beginErrorHandler struct{ err error }
 
 func (h beginErrorHandler) Begin(string, int64) error { return h.err }
@@ -266,8 +262,6 @@ func (h beginErrorHandler) Begin(string, int64) error { return h.err }
 func (beginErrorHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) {
 	return LineResult{Outcome: LineIgnored}, nil
 }
-
-func (beginErrorHandler) Flush(ImportTransaction) error { return nil }
 
 type bodyHandler struct{ lines int }
 
@@ -277,8 +271,6 @@ func (h *bodyHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) 
 	h.lines++
 	return LineResult{Outcome: LineWroteBody}, nil
 }
-
-func (*bodyHandler) Flush(ImportTransaction) error { return nil }
 
 type failingPersistenceHandler struct {
 	bodyHandler
@@ -378,8 +370,6 @@ func (h errorOutcomeHandler) Begin(string, int64) error { return nil }
 func (h errorOutcomeHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) {
 	return h.result, h.err
 }
-
-func (h errorOutcomeHandler) Flush(ImportTransaction) error { return nil }
 
 type processRecordingTx struct {
 	state             ImportState

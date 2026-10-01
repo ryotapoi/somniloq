@@ -34,7 +34,7 @@ SQLite の変更目的から入口を選ぶ。schema・migration・書き込み�
 
 ## query と表示
 
-- session 行の SELECT / scan 列を変える: `internal/core/db_sessions_projects.go` の `sessionRowColumns` を入口に、そこから導出する `sessionRowSelectExpressions` / `sessionRowSelect` と `scanSessionRow` を辿る。直接の利用箇所は `ListSessions` / `GetSession` / `LookupSessionsByID`。表示への影響は `cmd/somniloq/sessions.go`、`cmd/somniloq/show.go`、`cmd/somniloq/session_resolution.go` と `cmd/somniloq/jsonout.go` で確認する。`ListProjects` は同じファイル内の別の集約 query。
+- session 行の SELECT / scan 列を変える: `internal/core/db_sessions_projects.go` の `sessionRowSelect` と `scanSessionRow` を合わせて読み、列順の対応を確認する。直接の利用箇所は `ListSessions` / `GetSession` / `LookupSessionsByID` で、複数行の読み取りは `scanSessionRows` を共有する。表示への影響は `cmd/somniloq/sessions.go`、`cmd/somniloq/show.go`、`cmd/somniloq/session_resolution.go` と `cmd/somniloq/jsonout.go` で確認する。`ListProjects` は同じファイル内の別の集約 query。
 - session / project の絞り込みや集約を変える: `ListSessions` と `ListProjects` の別経路を読み、共通の時刻条件は `timeFilterConditions`、session の project 条件は `projectsCondition` を確認する。検索への影響は `internal/core/db_search.go` の `SearchMessages` まで辿る。
 - 本文の取得や順序を変える: `internal/core/db_messages_summary.go` の `GetMessages` / `GetSummaryMessages` を読み、表示とターンへの影響は [Display and turns](display-and-turns.md) を辿る。
 
