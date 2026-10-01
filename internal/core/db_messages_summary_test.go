@@ -1,6 +1,8 @@
 package core
 
 import (
+	"reflect"
+	"strings"
 	"testing"
 )
 
@@ -190,5 +192,42 @@ func TestGetSummaryMessages_LimitZeroReturnsError(t *testing.T) {
 	_, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 0, false)
 	if err == nil {
 		t.Fatal("expected error for limit=0, got nil")
+	}
+}
+
+func TestGetTurnMessages_NumberingPopulationWithoutBodies(t *testing.T) {
+	db := testDB(t)
+	for _, source := range []Source{SourceClaudeCode, SourceCodex, SourceCursorAgent} {
+		must(t, db.UpsertSession(SessionMeta{Source: source, SessionID: "shared"}, "2026-03-28T15:00:00Z"))
+	}
+	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "other"}, "2026-03-28T15:00:00Z"))
+	for _, message := range []NormalizedMessage{
+		{Source: SourceClaudeCode, SessionID: "shared", UUID: "latest", Role: "assistant", Timestamp: "2026-03-28T08:00:00.100000001Z"},
+		{Source: SourceClaudeCode, SessionID: "shared", UUID: "tie-user", Role: "user", Timestamp: "2026-03-28T09:00:00.100+01:00"},
+		{Source: SourceClaudeCode, SessionID: "shared", UUID: "tie-reply", Role: "assistant", Timestamp: "2026-03-28T08:00:00.1Z"},
+		{Source: SourceClaudeCode, SessionID: "shared", UUID: "unknown", Role: "assistant"},
+		{Source: SourceClaudeCode, SessionID: "shared", UUID: "invalid", Role: "user", Timestamp: "invalid"},
+		{Source: SourceClaudeCode, SessionID: "shared", UUID: "earliest", Role: "user", Timestamp: "2026-03-28T10:00:00+02:00"},
+		{Source: SourceClaudeCode, SessionID: "shared", UUID: "sidechain", Role: "user", IsSidechain: true},
+		{Source: SourceClaudeCode, SessionID: "other", UUID: "other", Role: "user"},
+		{Source: SourceCodex, SessionID: "shared", UUID: "codex", Role: "user"},
+		{Source: SourceCursorAgent, SessionID: "shared", UUID: "cursor", Role: "assistant"},
+	} {
+		message.Content = strings.Repeat("large body", 1000)
+		must(t, db.InsertMessage(message))
+	}
+	for _, tt := range []struct {
+		source Source
+		want   []MessageRow
+	}{
+		{SourceClaudeCode, []MessageRow{{UUID: "unknown", Role: "assistant"}, {UUID: "invalid", Role: "user"}, {UUID: "earliest", Role: "user"}, {UUID: "tie-user", Role: "user"}, {UUID: "tie-reply", Role: "assistant"}, {UUID: "latest", Role: "assistant"}}},
+		{SourceCodex, []MessageRow{{UUID: "codex", Role: "user"}}},
+		{SourceCursorAgent, []MessageRow{{UUID: "cursor", Role: "assistant"}}},
+	} {
+		got, err := db.GetTurnMessages(tt.source, "shared")
+		must(t, err)
+		if !reflect.DeepEqual(got, tt.want) {
+			t.Errorf("GetTurnMessages(%s) = %+v, want %+v", tt.source, got, tt.want)
+		}
 	}
 }

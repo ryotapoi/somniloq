@@ -167,7 +167,7 @@ func searchTurnsByUUID(db *core.DB, cache map[searchSessionKey]map[string]int, s
 	if turns, ok := cache[key]; ok {
 		return turns, nil
 	}
-	messages, err := db.GetMessages(source, sessionID)
+	messages, err := db.GetTurnMessages(source, sessionID)
 	if err != nil {
 		return nil, err
 	}

@@ -20,8 +20,8 @@ type turnMessage struct {
 // is unreachable through turn ranges.
 //
 // This numbering is the contract behind every turn-based view (`outline`,
-// turn-range addressing in `show`): callers must pass the full GetMessages
-// output (chronological, sidechain excluded) so all consumers derive
+// turn-range addressing in `show`): callers must pass the full message
+// population (chronological, sidechain excluded) so all consumers derive
 // identical numbers.
 func assignTurns(messages []core.MessageRow) []turnMessage {
 	result := make([]turnMessage, len(messages))

@@ -237,3 +237,35 @@ func TestSearchSnippet_NoPanicOnAdversarialContent(t *testing.T) {
 		})
 	}
 }
+
+func TestSearchCmd_FilteredAssistantRetainsFullConversationTurn(t *testing.T) {
+	db, err := core.OpenDB(":memory:")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "filtered"}, "2026-03-28T15:00:00Z"); err != nil {
+		t.Fatal(err)
+	}
+	for i, m := range []core.NormalizedMessage{
+		{Role: "assistant", Content: "preface"},
+		{Role: "user", Content: "first question", Timestamp: "2026-03-28T10:00:00Z"},
+		{Role: "user", Content: "second question", Timestamp: "2026-03-28T10:01:00Z"},
+		{Role: "user", Content: "sidechain question", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: true},
+		{Role: "assistant", Content: "needle answer", Timestamp: "2026-03-28T10:01:00Z"},
+	} {
+		m.Source, m.SessionID, m.UUID = core.SourceClaudeCode, "filtered", fmt.Sprintf("filtered-%d", i)
+		if err := db.InsertMessage(m); err != nil {
+			t.Fatal(err)
+		}
+	}
+	var out, errOut bytes.Buffer
+	code, err := searchCmd([]string{"--since", "2026-03-28T10:01:00Z", "--limit", "1", "needle"}, staticDB(db), config{}, &out, &errOut)
+	if code != 0 || err != nil || errOut.Len() != 0 {
+		t.Fatalf("search = %d, %v, stderr %q", code, err, errOut.String())
+	}
+	want := fmt.Sprintf("filtered\t2\t%s\t\tneedle answer\tclaude_code\n", formatLocalTime("2026-03-28T10:01:00Z", time.Local))
+	if out.String() != want {
+		t.Fatalf("output = %q, want %q", out.String(), want)
+	}
+}

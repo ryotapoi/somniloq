@@ -39,6 +39,36 @@ func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) 
 	return scanMessages(rows, "get messages")
 }
 
+// GetTurnMessages returns only UUID and role for turn numbering. Content and
+// Timestamp remain empty; ordering and sidechain exclusion match GetMessages.
+func (d *DB) GetTurnMessages(source Source, sessionID string) ([]MessageRow, error) {
+	rows, err := d.execer().Query(`
+		SELECT uuid, role
+		FROM messages
+		WHERE source = ? AND session_id = ?
+		  AND is_sidechain = 0
+		ORDER BY rfc3339_utc_nanos(timestamp) ASC, rowid ASC`,
+		string(source), sessionID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("get turn messages: query: %w", err)
+	}
+	defer rows.Close()
+
+	result := []MessageRow{}
+	for rows.Next() {
+		var m MessageRow
+		if err := rows.Scan(&m.UUID, &m.Role); err != nil {
+			return nil, fmt.Errorf("get turn messages: scan row: %w", err)
+		}
+		result = append(result, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("get turn messages: iterate rows: %w", err)
+	}
+	return result, nil
+}
+
 // Prefixes of user message content that mark synthetic entries inserted by
 // Claude Code itself (a /clear command echo and the caveat block that
 // accompanies commands like /clear and shell `!` invocations). They are
