@@ -5,6 +5,9 @@ sources:
   - docs/decisions/0014-project-alias-config.md
   - cmd/somniloq/config.go
   - cmd/somniloq/filter.go
+  - cmd/somniloq/sessions.go
+  - cmd/somniloq/show.go
+  - cmd/somniloq/turn.go
   - cmd/somniloq/shorten.go
   - cmd/somniloq/projects.go
   - cmd/somniloq/search.go
@@ -27,24 +30,26 @@ sources:
 
 ## project filter と alias
 
-- config 読み込みは `cmd/somniloq/config.go`。missing file は空 config、invalid JSON は error。
-- alias 展開は `config.expandProject`。完全一致したときだけ canonical + old names に展開する。
-- `cmd/somniloq/filter.go` の `buildSessionFilter` が time flag と project alias をまとめて `core.SessionFilter` にする。`sessions` / `search` は date-only filter に `dayBoundary` を渡し、`show` / `projects` は従来どおり 00:00 境界で呼ぶ。
-- SQL 条件は `internal/core/db_sessions_projects.go` の `projectsCondition`。空でない repo_path の substring LIKE を OR でつなぎ、NULL / 空 repo_path は `%` を含む条件にも一致させない。
-- ユーザー入力の `%`、`_`、`\` は `escapeLikeLiteral` でエスケープしてから LIKE する。`search` の query と `--project` に wildcard モードはない。
+設定形式と alias の契約は `docs/rules/scope.md` の「設定ファイル（config）」、filter の対象は各コマンド節を読む。
+
+- 設定の読み込みは `cmd/somniloq/config.go` の `loadConfig`。filter への受け渡しは `cmd/somniloq/filter.go` の `buildSessionFilter` / `buildSessionFilterAt` から `config.expandProject` を辿る。
+- 展開後の `core.SessionFilter.Projects` は `internal/core/db_sessions_projects.go` の `sessionFilterConditions` → `projectsCondition` → `escapeLikeLiteral` へ進む。条件を変える際は `ListSessions` と `internal/core/db_search.go` の `SearchMessages` を併せて確認する。
+- alias の表示への波及は下の「集約と表示」を読む。filter の展開と表示名の解決は別の入口を持つ。
 
 ## commandPatterns
 
-- `commandPatterns` は `cmd/somniloq/config.go` で読み、invalid regexp は config error にする。壊れた JSON / typo を黙って無効化しない方針に揃える。
-- 評価は `commandMatcher`。trim 済み user message 本文が `/` 始まり、または regexp に一致したら command 扱い。
-- 利用箇所は `cmd/somniloq/sessions.go` の skip hint 列だけ。セッション自体は CLI では除外しない。
+判定規則は `docs/rules/scope.md` の「設定ファイル（config）」、出力列の契約は「セッション一覧（sessions）」を参照する。
+
+- `cmd/somniloq/config.go` の `loadConfig` / `newCommandMatcher` が `compileCommandPatterns` を使い、`commandMatcher.isCommand` が本文を判定する。
+- 利用側は `cmd/somniloq/sessions.go` の `deriveSessionUserTurnSummaries` → `summarizeNonCommandUserTurns`。判定対象のターンを変える場合は `cmd/somniloq/turn.go` の `assignTurns` / `userTurnMessages` と [Display and turns](display-and-turns.md) を併せて確認する。
 
 ## dayBoundary
 
-- `dayBoundary` は `cmd/somniloq/config.go` の任意設定。形式は `HH:MM`、未指定は `00:00`。invalid value は config error にする。
-- `--day-boundary` は `sessions` / `search` だけにあり、config の `dayBoundary` を上書きする。
-- `cmd/somniloq/filter.go` の `resolveTimeFlag` は date-only (`YYYY-MM-DD`) のときだけ境界を足す。相対 duration と `YYYY-MM-DDThh:mm` は影響を受けない。
-- `sessions` の `logical_day` / `logicalDay` は `sessionLogicalDay` で `ended_at` 優先、無ければ `started_at` を使い、ローカル時刻から境界分を引いた `YYYY-MM-DD`。DB には保存しない。
+境界時刻・DST の契約は `docs/rules/scope.md` の「設定ファイル（config）」、filter と表示への適用は「セッション一覧（sessions）」と「検索（search）」を読む。
+
+- `cmd/somniloq/config.go` の `resolveDayBoundary` / `parseDayBoundary` から、sessions / search の filter 構築へ値が渡る。呼び出し側を変える際は、`show.go` / `projects.go` が渡す `dayBoundary{}` との違いも確認する。
+- 日付 filter は `cmd/somniloq/filter.go` の `resolveTimeFlag`、論理日表示は同ファイルの `sessionLogicalDay` が入口。両者はローカル暦日の境界を作る `dayBoundary.onDate` を共有するため、境界の変更は両経路を併せて確認する。
+- DST を含む境界の検証入口は `cmd/somniloq/resolve_test.go`。表示への受け渡しは `cmd/somniloq/sessions.go` の TSV / JSON 両経路を読む。
 
 ## 集約と表示
 

@@ -42,7 +42,12 @@ JSONL 取り込みを変えるときの読む順序。仕様そのものは `doc
 - Codex: `internal/ingest/codex/adapter.go` の `Begin` が offset 前の prefix から `session_meta` を復元する。差分取り込みで追記分だけ読むと meta を失うため。
 - Codex の message UUID は `internal/ingest/codex/jsonl.go` の path + line number。line number は blank line も数える。
 - Cursor Agent: `internal/ingest/cursoragent/adapter.go` が transcript path から session を導出し、offset 前の改行数を `Begin` で復元する。未知 metadata、path と物理行に基づく identity、再処理時の重複・順序は `docs/specs/jsonl-schema.md` の Cursor Agent 節を先に確認し、`internal/ingest/cursoragent/jsonl.go` を読む。
-- `LineUnparsed` は壊れた JSON / malformed payload の計上用。adapter は物理行番号付きの原因を添え、`ProcessResult` と `ImportResult` は import run ごとに encounter order の先頭 5 件だけを保持する。CLI は既存の非致命 import error と同じ stderr へ出すが、parse/normalize 診断だけでは exit code を変えない。未知 type や意図的に無視する record は `LineIgnored`。
+
+## parse / 正規化診断の経路
+
+計上対象、表示件数、exit code の契約は `docs/rules/scope.md` の「エラー処理と取り込みサマリ（source 共通）」を参照する。
+
+source 固有の adapter が `LineUnparsed` と行番号付きの診断を返し、`internal/ingest/process.go` の `ProcessJSONL` がファイル単位の `ProcessResult` にまとめる。`internal/core/import.go` の `importWithAdapter` はこれを `ImportResult` に集約し、`Import` が source 間の結果を `ImportResult.add` で合流させる。診断の上限制御を変える際は、ファイル側の `MaxUnparsedDiagnostics` と、取り込み全体へ集約する `ImportResult.addUnparsedDiagnostics` を併せて確認する。最終的な stderr 出力は `cmd/somniloq/import.go` を読む。
 
 ## 変更時のテスト入口
 
