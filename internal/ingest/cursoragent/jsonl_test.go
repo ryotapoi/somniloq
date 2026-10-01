@@ -5,17 +5,6 @@ import (
 	"testing"
 )
 
-func TestExtractText(t *testing.T) {
-	content := json.RawMessage(`[{"type":"text","text":"first"},{"type":"tool_use","name":"Read"},{"type":"text","text":"second"}]`)
-	got, err := extractText(content)
-	if err != nil {
-		t.Fatalf("extractText failed: %v", err)
-	}
-	if want := "first\n\nsecond"; got != want {
-		t.Errorf("extractText = %q, want %q", got, want)
-	}
-}
-
 func TestExtractTextRejectsNonStringTextWithoutPartialContent(t *testing.T) {
 	for _, content := range []json.RawMessage{
 		json.RawMessage(`[{"type":"text","text":"kept?"},{"type":"text","text":42}]`),

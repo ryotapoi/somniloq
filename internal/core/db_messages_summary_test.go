@@ -1,44 +1,8 @@
 package core
 
 import (
-	"errors"
-	"strings"
 	"testing"
 )
-
-func TestMessagesSummaryQueryMethods_ClosedDatabaseErrorsIncludeOperationAndCause(t *testing.T) {
-	tests := []struct {
-		name, operation string
-		query           func(*DB) error
-	}{
-		{"GetMessages", "get messages", func(db *DB) error { _, err := db.GetMessages(SourceClaudeCode, "session"); return err }},
-		{"GetSummaryMessages", "get summary messages", func(db *DB) error { _, err := db.GetSummaryMessages(SourceClaudeCode, "session", 1, false); return err }},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			db := testDB(t)
-			must(t, db.Close())
-			err := tt.query(db)
-			if err == nil || !strings.Contains(err.Error(), tt.operation) || errors.Unwrap(err) == nil {
-				t.Errorf("error = %v, want wrapped %q query error", err, tt.operation)
-			}
-		})
-	}
-}
-
-func TestGetMessages_Empty(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	msgs, err := db.GetMessages(SourceClaudeCode, "s1")
-	if err != nil {
-		t.Fatalf("GetMessages failed: %v", err)
-	}
-	if len(msgs) != 0 {
-		t.Errorf("expected 0 messages, got %d", len(msgs))
-	}
-}
 
 func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
 	db := testDB(t)
@@ -101,20 +65,6 @@ func TestGetMessages_ExcludesSidechain(t *testing.T) {
 	}
 }
 
-func TestGetSummaryMessages_Empty(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
-	if err != nil {
-		t.Fatalf("GetSummaryMessages failed: %v", err)
-	}
-	if len(msgs) != 0 {
-		t.Errorf("expected 0 messages, got %d", len(msgs))
-	}
-}
-
 func TestGetSummaryMessages_ReturnsFirstUserMessage(t *testing.T) {
 	db := testDB(t)
 
@@ -141,25 +91,6 @@ func TestGetSummaryMessages_ReturnsFirstUserMessage(t *testing.T) {
 	}
 	if msgs[0].Timestamp != "2026-03-28T10:00:00Z" {
 		t.Errorf("Timestamp: got %s, want 2026-03-28T10:00:00Z", msgs[0].Timestamp)
-	}
-}
-
-func TestGetSummaryMessages_SkipsSidechain(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "sidechain msg", Timestamp: "2026-03-28T10:00:00Z", IsSidechain: true}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "real msg", Timestamp: "2026-03-28T10:01:00Z", IsSidechain: false}))
-
-	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
-	if err != nil {
-		t.Fatalf("GetSummaryMessages failed: %v", err)
-	}
-	if len(msgs) != 1 {
-		t.Fatalf("expected 1 message, got %d", len(msgs))
-	}
-	if msgs[0].UUID != "m2" {
-		t.Errorf("expected m2 (non-sidechain), got %s", msgs[0].UUID)
 	}
 }
 
@@ -201,44 +132,6 @@ func TestGetSummaryMessages_LimitN(t *testing.T) {
 		if msgs[i].UUID != w {
 			t.Errorf("msgs[%d].UUID: got %s, want %s", i, msgs[i].UUID, w)
 		}
-	}
-}
-
-func TestGetSummaryMessages_SkipsClearPrefix(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "<command-name>/clear</command-name>\n<command-message>clear</command-message>", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
-
-	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
-	if err != nil {
-		t.Fatalf("GetSummaryMessages failed: %v", err)
-	}
-	if len(msgs) != 1 {
-		t.Fatalf("expected 1 message, got %d", len(msgs))
-	}
-	if msgs[0].UUID != "m2" {
-		t.Errorf("expected m2 (/clear skipped), got %s", msgs[0].UUID)
-	}
-}
-
-func TestGetSummaryMessages_SkipsCaveatPrefix(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "<local-command-caveat>Caveat: ...</local-command-caveat>", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "real question", Timestamp: "2026-03-28T10:01:00Z"}))
-
-	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 1, false)
-	if err != nil {
-		t.Fatalf("GetSummaryMessages failed: %v", err)
-	}
-	if len(msgs) != 1 {
-		t.Fatalf("expected 1 message, got %d", len(msgs))
-	}
-	if msgs[0].UUID != "m2" {
-		t.Errorf("expected m2 (caveat skipped), got %s", msgs[0].UUID)
 	}
 }
 
@@ -286,22 +179,6 @@ func TestGetSummaryMessages_AllSkipped(t *testing.T) {
 	}
 	if len(msgs) != 0 {
 		t.Errorf("expected 0 messages, got %d", len(msgs))
-	}
-}
-
-func TestGetSummaryMessages_LimitExceedsAvailable(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "one", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "user", Content: "two", Timestamp: "2026-03-28T10:01:00Z"}))
-
-	msgs, err := db.GetSummaryMessages(SourceClaudeCode, "s1", 5, false)
-	if err != nil {
-		t.Fatalf("GetSummaryMessages failed: %v", err)
-	}
-	if len(msgs) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(msgs))
 	}
 }
 

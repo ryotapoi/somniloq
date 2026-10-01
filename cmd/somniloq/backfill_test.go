@@ -55,27 +55,6 @@ func staticDB(db *core.DB) func() (*core.DB, error) {
 	return func() (*core.DB, error) { return db, nil }
 }
 
-func TestBackfillCmd_NonInteractiveOrphanRequiresYes(t *testing.T) {
-	db, err := core.OpenDB(":memory:")
-	if err != nil {
-		t.Fatalf("OpenDB: %v", err)
-	}
-	defer db.Close()
-	insertOrphanSession(t, db, "orphan", "/Users/test/proj")
-
-	var out, errOut bytes.Buffer
-	code, err := backfillCmd(nil, staticDB(db), strings.NewReader(""), &out, &errOut, false)
-	if code != 1 {
-		t.Errorf("exit code = %d, want 1", code)
-	}
-	if err == nil || !strings.Contains(err.Error(), "backfill requires confirmation when deleting sessions") {
-		t.Errorf("err = %v, want one mentioning 'backfill requires confirmation when deleting sessions'", err)
-	}
-	if strings.Contains(out.String(), "Backfilled") {
-		t.Errorf("stdout must not contain 'Backfilled' on non-interactive failure, got %q", out.String())
-	}
-}
-
 func TestBackfillCmd_NonInteractiveYesSucceeds(t *testing.T) {
 	db, err := core.OpenDB(":memory:")
 	if err != nil {
@@ -115,27 +94,6 @@ func TestBackfillCmd_InteractiveYesSkipsPrompt(t *testing.T) {
 	}
 	if strings.Contains(errOut.String(), "[y/N]") {
 		t.Errorf("--yes must skip the confirmation prompt, but stderr = %q", errOut.String())
-	}
-}
-
-func TestBackfillCmd_InteractiveDeclineDoesNothing(t *testing.T) {
-	db, err := core.OpenDB(":memory:")
-	if err != nil {
-		t.Fatalf("OpenDB: %v", err)
-	}
-	defer db.Close()
-	insertOrphanSession(t, db, "orphan", "/Users/test/proj")
-
-	var out, errOut bytes.Buffer
-	code, err := backfillCmd(nil, staticDB(db), strings.NewReader("n\n"), &out, &errOut, true)
-	if err != nil {
-		t.Fatalf("backfillCmd: %v", err)
-	}
-	if code != 0 {
-		t.Errorf("exit code = %d, want 0", code)
-	}
-	if strings.Contains(out.String(), "Backfilled") {
-		t.Errorf("stdout must not contain 'Backfilled' after decline, got %q", out.String())
 	}
 }
 

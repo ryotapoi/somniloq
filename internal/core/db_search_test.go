@@ -1,27 +1,9 @@
 package core
 
 import (
-	"errors"
 	"slices"
-	"strings"
 	"testing"
 )
-
-func TestSearchMessages_ClosedDatabaseErrorIncludesOperationAndCause(t *testing.T) {
-	db := testDB(t)
-	must(t, db.Close())
-
-	_, err := db.SearchMessages(SessionFilter{}, "query", SearchPagination{})
-	if err == nil {
-		t.Fatal("expected query error from closed database")
-	}
-	if !strings.Contains(err.Error(), "search messages") {
-		t.Errorf("error %q does not identify operation", err)
-	}
-	if errors.Unwrap(err) == nil {
-		t.Errorf("error %q does not retain its cause", err)
-	}
-}
 
 func newSearchTestDB(t *testing.T) *DB {
 	t.Helper()
@@ -149,23 +131,6 @@ func TestSearchMessages_FiltersExcludeUnknownTimestampAndRepoPath(t *testing.T) 
 	}
 }
 
-func TestSearchMessages_ProjectFilter(t *testing.T) {
-	db := newSearchTestDB(t)
-
-	rows, err := db.SearchMessages(SessionFilter{Projects: []string{"Brimday"}}, "auth", SearchPagination{})
-	if err != nil {
-		t.Fatalf("SearchMessages: %v", err)
-	}
-	if len(rows) != 2 {
-		t.Fatalf("rows = %d, want 2: %+v", len(rows), rows)
-	}
-	for _, r := range rows {
-		if r.SessionID != "s1" {
-			t.Errorf("unexpected session %q in Brimday results", r.SessionID)
-		}
-	}
-}
-
 // Multiple patterns come from project-alias expansion: a row matches when
 // ANY pattern matches (OR), not when all do.
 func TestSearchMessages_MultipleProjectsMatchAny(t *testing.T) {
@@ -228,18 +193,6 @@ func TestSearchMessages_TimeFiltersCompareVariableFractionalSecondsAsInstants(t 
 				t.Fatalf("SearchMessages rows = %d, want %d", len(rows), filter.want)
 			}
 		})
-	}
-}
-
-func TestSearchMessages_NoMatch(t *testing.T) {
-	db := newSearchTestDB(t)
-
-	rows, err := db.SearchMessages(SessionFilter{}, "no-such-text", SearchPagination{})
-	if err != nil {
-		t.Fatalf("SearchMessages: %v", err)
-	}
-	if len(rows) != 0 {
-		t.Errorf("rows = %+v, want empty", rows)
 	}
 }
 

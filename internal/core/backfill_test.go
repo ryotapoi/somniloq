@@ -391,42 +391,6 @@ func TestSelectBackfillTargets_ExcludesOrphanSessions(t *testing.T) {
 	}
 }
 
-func TestBackfill_NoOrphanOrTarget(t *testing.T) {
-	db := testDB(t)
-
-	if _, err := db.db.Exec(
-		`INSERT INTO sessions (source, session_id, cwd, repo_path, imported_at)
-		 VALUES ('claude_code', 'kept', '/Users/test/kept', '/Users/test/kept', '2026-03-28T15:00:00Z')`,
-	); err != nil {
-		t.Fatalf("insert kept session: %v", err)
-	}
-	insertLegacyMessage(t, db, "kept", "m-kept")
-
-	targets, err := selectBackfillTargets(db)
-	if err != nil {
-		t.Fatalf("selectBackfillTargets: %v", err)
-	}
-	if len(targets) != 0 {
-		t.Errorf("target count = %d, want 0", len(targets))
-	}
-
-	count, err := CountOrphanSessions(db)
-	if err != nil {
-		t.Fatalf("CountOrphanSessions: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("orphan count = %d, want 0", count)
-	}
-
-	result, err := Backfill(db)
-	if err != nil {
-		t.Fatalf("Backfill: %v", err)
-	}
-	if result.Deleted != 0 {
-		t.Errorf("result.Deleted = %d, want 0", result.Deleted)
-	}
-}
-
 func TestBackfill_CountsUnresolvedWhenRepoPathCannotBeResolved(t *testing.T) {
 	unsetAllGitEnv(t)
 

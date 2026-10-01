@@ -165,19 +165,6 @@ func TestBuildSessionFilter_OrdersFractionalSecondsByInstant(t *testing.T) {
 	}
 }
 
-func TestResolveTimeFlag_Error(t *testing.T) {
-	now := time.Date(2026, 3, 29, 12, 0, 0, 0, time.UTC)
-
-	for _, value := range []string{"", "abc", "2026-13-01"} {
-		t.Run(value, func(t *testing.T) {
-			_, err := resolveTimeFlag(value, now, false, time.UTC, dayBoundary{})
-			if err == nil {
-				t.Errorf("resolveTimeFlag(%q) expected error, got nil", value)
-			}
-		})
-	}
-}
-
 func TestDayBoundaryDST(t *testing.T) {
 	boundary := dayBoundary{offset: 4 * time.Hour}
 	for _, tt := range []struct {

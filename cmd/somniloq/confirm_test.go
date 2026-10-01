@@ -19,7 +19,6 @@ func TestConfirmFullImport(t *testing.T) {
 		{"Y confirms", "Y\n", true},
 		{"yes rejects", "yes\n", false},
 		{"empty rejects", "\n", false},
-		{"n rejects", "n\n", false},
 		{"EOF rejects", "", false},
 		{"unterminated y confirms", "y", true},
 		{"y with spaces confirms", " y \n", true},

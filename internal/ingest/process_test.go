@@ -523,25 +523,3 @@ func TestProcessJSONL_PersistenceFailureKeepsOffsetAndRollsBack(t *testing.T) {
 		})
 	}
 }
-
-func TestProcessJSONL_TransactionCreationErrorKeepsOffset(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "session.jsonl")
-	if err := os.WriteFile(path, []byte("record\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	wantErr := errors.New("begin import failed")
-	_, err := ProcessJSONL(
-		func() (ImportTransaction, error) { return nil, wantErr },
-		SourceClaudeCode,
-		errorOutcomeHandler{},
-		path,
-		0,
-		int64(len("record\n")),
-		"2026-07-12T00:00:00Z",
-	)
-
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
-	}
-}

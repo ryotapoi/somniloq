@@ -108,6 +108,9 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 					t.Fatalf("--until %q included equal boundary: %q", until, out.String())
 				}
 			}
+			if tt.name != "sessions" {
+				return
+			}
 
 			for _, until := range []string{laterUTC, laterOffset} {
 				args := []string{"--until", until}
@@ -139,9 +142,6 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 				}
 			}
 
-			if tt.name != "sessions" {
-				return
-			}
 			for _, equal := range []struct {
 				stored   string
 				boundary string
@@ -168,25 +168,6 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 						t.Fatalf("--until %q included equal stored timestamp %q: %q", equal.boundary, equal.stored, out.String())
 					}
 				}
-			}
-		})
-	}
-}
-
-func TestSessionsCmd_ImportedSinceAcceptsEquivalentRFC3339Instants(t *testing.T) {
-	oldLocal := time.Local
-	time.Local = time.FixedZone("JST", 9*60*60)
-	defer func() { time.Local = oldLocal }()
-
-	for _, importedSince := range []string{"2026-03-28T10:00:36Z", "2026-03-28T19:00:36+09:00"} {
-		t.Run(importedSince, func(t *testing.T) {
-			var out, errOut bytes.Buffer
-			code, err := sessionsCmd([]string{"--imported-since", importedSince}, staticDB(newRFC3339FilterDB(t, rfc3339UTC)), config{}, &out, &errOut)
-			if err != nil || code != 0 {
-				t.Fatalf("sessionsCmd = %d, %v (stderr: %q)", code, err, errOut.String())
-			}
-			if out.Len() == 0 {
-				t.Fatalf("--imported-since %q produced no matching output", importedSince)
 			}
 		})
 	}

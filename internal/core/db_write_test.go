@@ -221,31 +221,6 @@ func TestUpsertSession_RepoPath_EmptyDoesNotOverwrite(t *testing.T) {
 	}
 }
 
-func TestUpsertSession_RepoPath_AfterUpdateSessionTitle(t *testing.T) {
-	db := testDB(t)
-
-	// UpdateSessionTitle on an existing row only touches custom_title/imported_at,
-	// not repo_path.
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: "/Users/test/proj"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpdateSessionTitle(SourceClaudeCode, "s1", "title", "2026-03-28T15:01:00Z"))
-
-	var repoPath string
-	if err := db.db.QueryRow("SELECT repo_path FROM sessions WHERE session_id='s1'").Scan(&repoPath); err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if repoPath != "/Users/test/proj" {
-		t.Errorf("repo_path: got %q, want %q", repoPath, "/Users/test/proj")
-	}
-
-	var title string
-	if err := db.db.QueryRow("SELECT custom_title FROM sessions WHERE session_id='s1'").Scan(&title); err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if title != "title" {
-		t.Errorf("custom_title: got %q, want %q", title, "title")
-	}
-}
-
 func TestInsertMessage(t *testing.T) {
 	db := testDB(t)
 

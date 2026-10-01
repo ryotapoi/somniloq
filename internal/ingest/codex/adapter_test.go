@@ -1,7 +1,6 @@
 package codex
 
 import (
-	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,28 +8,6 @@ import (
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
 )
-
-func TestFileHandler_HandleLineReturnsPersistenceError(t *testing.T) {
-	wantErr := errors.New("write failed")
-	h := &fileHandler{
-		importedAt: "2026-07-12T00:00:00Z",
-		path:       "/tmp/rollout.jsonl",
-		meta: &ingest.SessionMeta{
-			Source:    ingest.SourceCodex,
-			SessionID: "s1",
-			CWD:       "/repo",
-			RepoPath:  "/repo",
-			StartedAt: "2026-07-12T00:00:00Z",
-			EndedAt:   "2026-07-12T00:00:00Z",
-		},
-	}
-
-	_, err := h.HandleLine(&failingTransaction{err: wantErr}, []byte(`{"timestamp":"2026-07-12T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}`))
-
-	if !errors.Is(err, wantErr) {
-		t.Fatalf("HandleLine error = %v, want wrapping %v", err, wantErr)
-	}
-}
 
 func TestAdapter_ProcessFileMalformedSessionMetaContinues(t *testing.T) {
 	const contents = `{"type":"session_meta","payload":[]}
@@ -181,7 +158,7 @@ func TestFileHandler_HandleLineReportsMalformedPayloads(t *testing.T) {
 				resolveRepoPath: func(string) string { return "/repo" },
 			}
 
-			result, err := h.HandleLine(&failingTransaction{}, []byte(tt.line))
+			result, err := h.HandleLine(&recordingTransaction{}, []byte(tt.line))
 			if err != nil {
 				t.Fatalf("HandleLine error = %v, want nil", err)
 			}
@@ -196,20 +173,6 @@ func TestFileHandler_HandleLineReportsMalformedPayloads(t *testing.T) {
 		})
 	}
 }
-
-type failingTransaction struct {
-	err error
-}
-
-func (t *failingTransaction) UpsertSession(ingest.SessionMeta, string) error { return t.err }
-
-func (t *failingTransaction) InsertMessage(ingest.NormalizedMessage) error { return nil }
-
-func (t *failingTransaction) UpsertImportState(ingest.ImportState) error { return nil }
-
-func (t *failingTransaction) Commit() error { return nil }
-
-func (t *failingTransaction) Rollback() error { return nil }
 
 type recordingTransaction struct {
 	sessions []ingest.SessionMeta

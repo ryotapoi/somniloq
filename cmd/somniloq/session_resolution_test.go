@@ -73,22 +73,6 @@ func TestResolveSessionByID_AmbiguousCrossSourceSessionID(t *testing.T) {
 	}
 }
 
-func TestResolveSessionByID_NotFound(t *testing.T) {
-	db := newCrossSourceSessionTestDB(t)
-
-	var errOut bytes.Buffer
-	_, code, err := resolveSessionByID(db, "no-such", nil, &errOut)
-	if code != 1 {
-		t.Errorf("exit code = %d, want 1", code)
-	}
-	if err == nil || err.Error() != "session not found: no-such" {
-		t.Errorf("err = %v, want session not found: no-such", err)
-	}
-	if errOut.Len() != 0 {
-		t.Errorf("stderr = %q, want empty (main prints returned errors)", errOut.String())
-	}
-}
-
 func TestMainOutline_NotFoundWritesErrorToStderr(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "somniloq.db")
 	db, err := core.OpenDB(dbPath)

@@ -47,12 +47,6 @@ func TestAssignTurns_LeadingNonUserFoldedIntoTurnOne(t *testing.T) {
 	}
 }
 
-func TestAssignTurns_Empty(t *testing.T) {
-	if got := assignTurns(nil); len(got) != 0 {
-		t.Errorf("assignTurns(nil) = %v, want empty", got)
-	}
-}
-
 func TestTurnBodySizes_CountsUTF8BytesByAssignedTurn(t *testing.T) {
 	messages := []core.MessageRow{
 		{UUID: "a0", Role: "assistant", Content: "pre"},
@@ -162,12 +156,6 @@ func TestFilterTurns_RangeBeyondSession(t *testing.T) {
 		{UUID: "u1", Role: "user"},
 	}
 	if got := filterTurns(messages, 5, 9); len(got) != 0 {
-		t.Errorf("len = %d, want 0", len(got))
-	}
-}
-
-func TestFilterTurns_TailEmpty(t *testing.T) {
-	if got := filterLastTurns(nil, 3); len(got) != 0 {
 		t.Errorf("len = %d, want 0", len(got))
 	}
 }

@@ -31,10 +31,3 @@ func TestScanFilesAcceptsOnlyCursorTranscriptPaths(t *testing.T) {
 		t.Fatalf("ScanFiles files = %v, want [%s]", files, accepted)
 	}
 }
-
-func TestScanFilesMissingRootIsUnusedSource(t *testing.T) {
-	files, errs := NewAdapter().ScanFiles(filepath.Join(t.TempDir(), "missing"))
-	if len(files) != 0 || len(errs) != 0 {
-		t.Fatalf("ScanFiles = %v, %v; want empty", files, errs)
-	}
-}

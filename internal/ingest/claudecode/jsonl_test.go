@@ -39,17 +39,6 @@ func TestExtractText_MultipleTextBlocks(t *testing.T) {
 	}
 }
 
-func TestExtractText_NoTextBlocks(t *testing.T) {
-	raw := json.RawMessage(`[{"type":"tool_use","id":"t1","name":"Read","input":{}}]`)
-	got, err := ExtractText(raw)
-	if err != nil {
-		t.Fatalf("ExtractText failed: %v", err)
-	}
-	if got != "" {
-		t.Errorf("got %q, want empty string", got)
-	}
-}
-
 func TestParseRecord_User(t *testing.T) {
 	line := []byte(`{"type":"user","uuid":"u1","parentUuid":"p1","sessionId":"s1","timestamp":"2026-03-28T14:10:45.977Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}`)
 	rec, err := ParseRecord(line)

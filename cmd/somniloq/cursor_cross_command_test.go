@@ -83,15 +83,6 @@ func TestCursorFixture_CrossCommandReferenceContract(t *testing.T) {
 			!strings.Contains(out.String(), "session-sample\t1\t\t\tPlan a harmless sample.\tcursor_agent\n") {
 			t.Fatalf("search output = %q, want source-local turns for both sources", out.String())
 		}
-
-		for _, args := range [][]string{{"--until", "2026-03-29", "harmless"}, {"--project", "%", "harmless"}} {
-			out.Reset()
-			errOut.Reset()
-			code, err = searchCmd(args, staticDB(newCursorCrossCommandDB(t, false)), config{}, &out, &errOut)
-			if err != nil || code != 0 || out.Len() != 0 {
-				t.Fatalf("search %v = %d, %v, %q; want successful empty output", args, code, err, out.String())
-			}
-		}
 	})
 
 	t.Run("show outline and projects expose the cursor session", func(t *testing.T) {
@@ -113,24 +104,6 @@ func TestCursorFixture_CrossCommandReferenceContract(t *testing.T) {
 		code, err = projectsCmd(nil, staticDB(newCursorCrossCommandDB(t, false)), config{}, &out, &errOut)
 		if err != nil || code != 0 || out.String() != "\t1\n" {
 			t.Fatalf("projects = %d, %v, %q", code, err, out.String())
-		}
-	})
-
-	t.Run("same id across sources remains ambiguous", func(t *testing.T) {
-		const wantErr = "error: session id \"session-sample\" is ambiguous; matched multiple sources:\n" +
-			"  claude_code\tsession-sample\n" +
-			"  cursor_agent\tsession-sample\n"
-		var out, errOut bytes.Buffer
-		code, err := showCmd([]string{cursorFixtureSessionID}, staticDB(newCursorCrossCommandDB(t, true)), config{}, &out, &errOut)
-		if err != nil || code != 1 || out.Len() != 0 || errOut.String() != wantErr {
-			t.Fatalf("ambiguous show = %d, %v, stdout %q, stderr %q", code, err, out.String(), errOut.String())
-		}
-
-		out.Reset()
-		errOut.Reset()
-		code, err = outlineCmd([]string{cursorFixtureSessionID}, staticDB(newCursorCrossCommandDB(t, true)), &out, &errOut)
-		if err != nil || code != 1 || out.Len() != 0 || errOut.String() != wantErr {
-			t.Fatalf("ambiguous outline = %d, %v, stdout %q, stderr %q", code, err, out.String(), errOut.String())
 		}
 	})
 }

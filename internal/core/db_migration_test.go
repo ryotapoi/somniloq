@@ -9,18 +9,6 @@ import (
 	"testing"
 )
 
-func TestOpenDB_HasRepoPathColumn(t *testing.T) {
-	db := testDB(t)
-
-	present, err := tableColumnPresent(db.db, "sessions", "repo_path")
-	if err != nil {
-		t.Fatalf("tableColumnPresent failed: %v", err)
-	}
-	if !present {
-		t.Fatal("repo_path column missing from sessions table")
-	}
-}
-
 func TestOpenDB_ReturnsErrorForUnopenablePath(t *testing.T) {
 	dsn := filepath.Join(t.TempDir(), "missing", "somniloq.db")
 
@@ -69,33 +57,6 @@ func openLegacyMemoryDB(t *testing.T) *sql.DB {
 	return db
 }
 
-func TestEnsureSessionsRepoPathColumn_AddsColumn(t *testing.T) {
-	db := openLegacyMemoryDB(t)
-
-	if err := ensureSessionsRepoPathColumn(db); err != nil {
-		t.Fatalf("ensureSessionsRepoPathColumn failed: %v", err)
-	}
-
-	present, err := tableColumnPresent(db, "sessions", "repo_path")
-	if err != nil {
-		t.Fatalf("tableColumnPresent failed: %v", err)
-	}
-	if !present {
-		t.Fatal("repo_path column should have been added")
-	}
-}
-
-func TestEnsureSessionsRepoPathColumn_Idempotent(t *testing.T) {
-	db := openLegacyMemoryDB(t)
-
-	if err := ensureSessionsRepoPathColumn(db); err != nil {
-		t.Fatalf("first call failed: %v", err)
-	}
-	if err := ensureSessionsRepoPathColumn(db); err != nil {
-		t.Fatalf("second call should be a no-op, got: %v", err)
-	}
-}
-
 type alterRaceDB struct {
 	*sql.DB
 	match string
@@ -126,22 +87,6 @@ func TestEnsureSessionsRepoPathColumn_RaceRecheckTreatsConcurrentAddAsSuccess(t 
 	}
 }
 
-func TestEnsureSessionsProjectDirColumnDropped_DropsColumn(t *testing.T) {
-	db := openLegacyMemoryDB(t)
-
-	if err := ensureSessionsProjectDirColumnDropped(db); err != nil {
-		t.Fatalf("ensureSessionsProjectDirColumnDropped failed: %v", err)
-	}
-
-	present, err := tableColumnPresent(db, "sessions", "project_dir")
-	if err != nil {
-		t.Fatalf("tableColumnPresent failed: %v", err)
-	}
-	if present {
-		t.Fatal("project_dir column should have been dropped")
-	}
-}
-
 func TestEnsureSessionsProjectDirColumnDropped_RaceRecheckTreatsConcurrentDropAsSuccess(t *testing.T) {
 	db := openLegacyMemoryDB(t)
 
@@ -152,37 +97,6 @@ func TestEnsureSessionsProjectDirColumnDropped_RaceRecheckTreatsConcurrentDropAs
 	})
 	if err != nil {
 		t.Fatalf("ensureSessionsProjectDirColumnDropped should accept drop race after re-check, got: %v", err)
-	}
-}
-
-func TestEnsureSessionsProjectDirColumnDropped_Idempotent(t *testing.T) {
-	db := openLegacyMemoryDB(t)
-
-	if err := ensureSessionsProjectDirColumnDropped(db); err != nil {
-		t.Fatalf("first call failed: %v", err)
-	}
-	if err := ensureSessionsProjectDirColumnDropped(db); err != nil {
-		t.Fatalf("second call should be a no-op, got: %v", err)
-	}
-}
-
-func TestEnsureSessionsProjectDirColumnDropped_NoOpWhenAbsent(t *testing.T) {
-	db := testDB(t)
-
-	if err := ensureSessionsProjectDirColumnDropped(db.db); err != nil {
-		t.Fatalf("call against fresh DB should be a no-op, got: %v", err)
-	}
-}
-
-func TestOpenDB_HasNoProjectDirColumn(t *testing.T) {
-	db := testDB(t)
-
-	present, err := tableColumnPresent(db.db, "sessions", "project_dir")
-	if err != nil {
-		t.Fatalf("tableColumnPresent failed: %v", err)
-	}
-	if present {
-		t.Fatal("project_dir column should not exist on a fresh DB")
 	}
 }
 

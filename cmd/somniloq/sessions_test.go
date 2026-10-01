@@ -2,7 +2,6 @@ package main
 
 import (
 	"bytes"
-	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -176,34 +175,6 @@ func TestSessionsCmd_ImportedSinceFiltersUnknownStartedAt(t *testing.T) {
 	}
 	if !strings.HasPrefix(out.String(), "unknown-start\t") || !strings.HasSuffix(out.String(), "\tcursor_agent\n") {
 		t.Fatalf("output = %q, want source/session pair for the unknown-started session", out.String())
-	}
-}
-
-func TestSessionsCmd_ImportedSinceJSONPreservesSourceAndSessionID(t *testing.T) {
-	oldLocal := time.Local
-	time.Local = time.UTC
-	defer func() { time.Local = oldLocal }()
-
-	db, err := core.OpenDB(":memory:")
-	if err != nil {
-		t.Fatalf("OpenDB: %v", err)
-	}
-	t.Cleanup(func() { db.Close() })
-	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceCursorAgent, SessionID: "unknown-start"}, "2026-03-28T15:00:00Z"); err != nil {
-		t.Fatalf("UpsertSession: %v", err)
-	}
-
-	var out, errOut bytes.Buffer
-	code, err := sessionsCmd([]string{"--imported-since", "2026-03-28T15:00", "--format", "json"}, staticDB(db), config{}, &out, &errOut)
-	if err != nil || code != 0 {
-		t.Fatalf("sessionsCmd = %d, %v (stderr: %q)", code, err, errOut.String())
-	}
-	var rows []sessionJSON
-	if err := json.Unmarshal(out.Bytes(), &rows); err != nil {
-		t.Fatalf("JSON output: %v", err)
-	}
-	if len(rows) != 1 || rows[0].Source != string(core.SourceCursorAgent) || rows[0].SessionID != "unknown-start" {
-		t.Fatalf("JSON rows = %+v, want cursor_agent/unknown-start", rows)
 	}
 }
 

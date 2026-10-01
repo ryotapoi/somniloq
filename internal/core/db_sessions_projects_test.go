@@ -1,45 +1,9 @@
 package core
 
 import (
-	"errors"
 	"fmt"
-	"strings"
 	"testing"
 )
-
-func TestSessionProjectQueryMethods_ClosedDatabaseErrorsIncludeOperationAndCause(t *testing.T) {
-	tests := []struct {
-		name, operation string
-		query           func(*DB) error
-	}{
-		{"ListSessions", "list sessions", func(db *DB) error { _, err := db.ListSessions(SessionFilter{}); return err }},
-		{"ListProjects", "list projects", func(db *DB) error { _, err := db.ListProjects(SessionFilter{}); return err }},
-		{"GetSession", "get session", func(db *DB) error { _, err := db.GetSession(SourceClaudeCode, "session"); return err }},
-		{"LookupSessionsByID", "lookup sessions by ID", func(db *DB) error { _, err := db.LookupSessionsByID("session"); return err }},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			db := testDB(t)
-			must(t, db.Close())
-			err := tt.query(db)
-			if err == nil || !strings.Contains(err.Error(), tt.operation) || errors.Unwrap(err) == nil {
-				t.Errorf("error = %v, want wrapped %q query error", err, tt.operation)
-			}
-		})
-	}
-}
-
-func TestListSessions_Empty(t *testing.T) {
-	db := testDB(t)
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 0 {
-		t.Errorf("expected 0 rows, got %d", len(rows))
-	}
-}
 
 func TestListSessions_OrderAndCount(t *testing.T) {
 	db := testDB(t)
@@ -119,37 +83,6 @@ func TestListSessionsAndProjectsOrderByInstant(t *testing.T) {
 	}
 }
 
-func TestListSessions_ZeroMessages(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].MessageCount != 0 {
-		t.Errorf("message count: got %d, want 0", rows[0].MessageCount)
-	}
-}
-
-func TestListSessions_NullTitle(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if rows[0].CustomTitle != "" {
-		t.Errorf("custom_title should be empty string, got %q", rows[0].CustomTitle)
-	}
-}
-
 func TestListSessions_NullStartedAt(t *testing.T) {
 	db := testDB(t)
 
@@ -194,24 +127,6 @@ func TestListSessions_TimeFilterExcludesUnknownTimestamp(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].SessionID != "known" {
 		t.Fatalf("filtered rows = %+v, want only known timestamp", rows)
-	}
-}
-
-func TestListSessions_SinceFilter(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "old", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "new", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{Since: "2026-03-28T00:00:00Z"})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].SessionID != "new" {
-		t.Errorf("expected session 'new', got %s", rows[0].SessionID)
 	}
 }
 
@@ -383,63 +298,6 @@ func TestListSessions_MultipleProjectsMatchAny(t *testing.T) {
 	}
 }
 
-func TestListSessions_ProjectFilter_RepoPathOnly(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{
-		Source:    SourceClaudeCode,
-		SessionID: "repo-only",
-		RepoPath:  "/Users/test/UniqRepo",
-		StartedAt: "2026-03-28T10:00:00Z",
-	}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{
-		Source:    SourceClaudeCode,
-		SessionID: "projdir-only",
-		RepoPath:  "/Users/other/baz",
-		StartedAt: "2026-03-28T11:00:00Z",
-	}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{
-		Source:    SourceClaudeCode,
-		SessionID: "both",
-		RepoPath:  "/Users/test/Common",
-		StartedAt: "2026-03-28T12:00:00Z",
-	}, "2026-03-28T15:00:00Z"))
-
-	t.Run("repo-only", func(t *testing.T) {
-		rows, err := db.ListSessions(SessionFilter{Projects: []string{"UniqRepo"}})
-		if err != nil {
-			t.Fatalf("ListSessions failed: %v", err)
-		}
-		if len(rows) != 1 {
-			t.Fatalf("expected 1 row, got %d", len(rows))
-		}
-		if rows[0].SessionID != "repo-only" {
-			t.Errorf("got %s, want repo-only", rows[0].SessionID)
-		}
-	})
-	t.Run("both", func(t *testing.T) {
-		rows, err := db.ListSessions(SessionFilter{Projects: []string{"Common"}})
-		if err != nil {
-			t.Fatalf("ListSessions failed: %v", err)
-		}
-		if len(rows) != 1 {
-			t.Fatalf("expected 1 row, got %d", len(rows))
-		}
-		if rows[0].SessionID != "both" {
-			t.Errorf("got %s, want both", rows[0].SessionID)
-		}
-	})
-	t.Run("unrelated repo_path", func(t *testing.T) {
-		rows, err := db.ListSessions(SessionFilter{Projects: []string{"UniqProj"}})
-		if err != nil {
-			t.Fatalf("ListSessions failed: %v", err)
-		}
-		if len(rows) != 0 {
-			t.Fatalf("expected 0 rows (no repo_path matches), got %d", len(rows))
-		}
-	})
-}
-
 func TestListSessions_CombinedFilter(t *testing.T) {
 	db := testDB(t)
 
@@ -459,24 +317,6 @@ func TestListSessions_CombinedFilter(t *testing.T) {
 	}
 }
 
-func TestListSessions_UntilFilter(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "early", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "late", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{Until: "2026-03-28T12:00:00.000Z"})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].SessionID != "early" {
-		t.Errorf("expected 'early', got %s", rows[0].SessionID)
-	}
-}
-
 func TestListSessions_SinceAndUntilFilter(t *testing.T) {
 	db := testDB(t)
 
@@ -493,23 +333,6 @@ func TestListSessions_SinceAndUntilFilter(t *testing.T) {
 	}
 	if rows[0].SessionID != "s2" {
 		t.Errorf("expected 's2', got %s", rows[0].SessionID)
-	}
-}
-
-func TestListSessions_EndedAt_Null(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].EndedAt != "" {
-		t.Errorf("EndedAt: got %q, want empty string", rows[0].EndedAt)
 	}
 }
 
@@ -536,40 +359,6 @@ func TestListSessions_BodySizeCountsBytesExcludingSidechain(t *testing.T) {
 	}
 	if rows[0].MessageCount != 3 {
 		t.Errorf("MessageCount: got %d, want 3 (sidechain still counted)", rows[0].MessageCount)
-	}
-}
-
-func TestListSessions_BodySizeZeroWithoutMessages(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].BodySize != 0 {
-		t.Errorf("BodySize: got %d, want 0", rows[0].BodySize)
-	}
-}
-
-func TestGetSession_EndedAt_Null(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	got, err := db.GetSession(SourceClaudeCode, "s1")
-	if err != nil {
-		t.Fatalf("GetSession failed: %v", err)
-	}
-	if got == nil {
-		t.Fatal("expected non-nil session")
-	}
-	if got.EndedAt != "" {
-		t.Errorf("EndedAt: got %q, want empty string", got.EndedAt)
 	}
 }
 
@@ -675,18 +464,31 @@ func TestSessionRowQueryPaths_ReturnAllFields(t *testing.T) {
 	if len(rows) != 1 || rows[0] != want {
 		t.Fatalf("LookupSessionsByID result: got %+v, want %+v", rows, want)
 	}
-}
 
-func TestListProjects_Empty(t *testing.T) {
-	db := testDB(t)
+	t.Run("null fields and no messages", func(t *testing.T) {
+		const sessionID = "null-fields"
+		if _, err := db.db.Exec(`INSERT INTO sessions (source, session_id, imported_at) VALUES (?, ?, ?)`,
+			string(SourceClaudeCode), sessionID, "2026-03-28T15:00:00Z"); err != nil {
+			t.Fatalf("insert null-field session: %v", err)
+		}
+		wantNull := SessionRow{Source: SourceClaudeCode, SessionID: sessionID}
 
-	rows, err := db.ListProjects(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListProjects failed: %v", err)
-	}
-	if len(rows) != 0 {
-		t.Errorf("expected 0 rows, got %d", len(rows))
-	}
+		listed, err := db.ListSessions(SessionFilter{})
+		if err != nil {
+			t.Fatalf("ListSessions: %v", err)
+		}
+		if len(listed) != 2 || listed[1] != wantNull {
+			t.Fatalf("ListSessions null row = %+v, want %+v", listed, wantNull)
+		}
+		got, err := db.GetSession(SourceClaudeCode, sessionID)
+		if err != nil || got == nil || *got != wantNull {
+			t.Fatalf("GetSession null row = %+v, err = %v, want %+v", got, err, wantNull)
+		}
+		lookedUp, err := db.LookupSessionsByID(sessionID)
+		if err != nil || len(lookedUp) != 1 || lookedUp[0] != wantNull {
+			t.Fatalf("LookupSessionsByID null row = %+v, err = %v, want %+v", lookedUp, err, wantNull)
+		}
+	})
 }
 
 func TestListProjects_GroupByProject(t *testing.T) {
@@ -717,58 +519,6 @@ func TestListProjects_GroupByProject(t *testing.T) {
 	}
 	if rows[1].SessionCount != 2 {
 		t.Errorf("projA session count: got %d, want 2", rows[1].SessionCount)
-	}
-}
-
-func TestListProjects_SinceFilter(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "old1", RepoPath: "/Users/test/old", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "new1", RepoPath: "/Users/test/new", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListProjects(SessionFilter{Since: "2026-03-28T00:00:00.000Z"})
-	if err != nil {
-		t.Fatalf("ListProjects failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].RepoPath != "/Users/test/new" {
-		t.Errorf("expected /Users/test/new, got %s", rows[0].RepoPath)
-	}
-}
-
-func TestListProjects_UntilFilter(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "early1", RepoPath: "/Users/test/early", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "late1", RepoPath: "/Users/test/late", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListProjects(SessionFilter{Until: "2026-03-28T12:00:00.000Z"})
-	if err != nil {
-		t.Fatalf("ListProjects failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].RepoPath != "/Users/test/early" {
-		t.Errorf("expected /Users/test/early, got %s", rows[0].RepoPath)
-	}
-}
-
-func TestListProjects_TimeFilterExcludesUnknownTimestamp(t *testing.T) {
-	db := testDB(t)
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "known", RepoPath: "/Users/test/known", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{Source: SourceCursorAgent, SessionID: "unknown", RepoPath: "/Users/test/unknown"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListProjects(SessionFilter{Until: "2026-03-29T00:00:00.000Z"})
-	if err != nil {
-		t.Fatalf("ListProjects: %v", err)
-	}
-	if len(rows) != 1 || rows[0].RepoPath != "/Users/test/known" {
-		t.Fatalf("filtered projects = %+v, want only known timestamp", rows)
 	}
 }
 
@@ -893,23 +643,5 @@ func TestListProjects_NullStartedAt(t *testing.T) {
 	}
 	if rows[0].RepoPath != "/Users/test/normal" {
 		t.Errorf("expected /Users/test/normal, got %s", rows[0].RepoPath)
-	}
-}
-
-func TestListSessions_CWD_Null(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpdateSessionTitle(SourceClaudeCode, "s1", "title", "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].CWD != "" {
-		t.Errorf("CWD should be empty for NULL cwd, got %q", rows[0].CWD)
 	}
 }

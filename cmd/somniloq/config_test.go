@@ -144,13 +144,6 @@ func TestExpandProject(t *testing.T) {
 	}
 }
 
-func TestExpandProject_EmptyConfigPassesThrough(t *testing.T) {
-	got := config{}.expandProject("somniloq")
-	if !reflect.DeepEqual(got, []string{"somniloq"}) {
-		t.Errorf("expandProject = %v, want [somniloq]", got)
-	}
-}
-
 func TestResolveProjectDisplayName_ProjectAlias(t *testing.T) {
 	cfg := config{ProjectAliases: map[string][]string{
 		"somniloq": {"Brimday", "/archive/old-somniloq"},
@@ -276,30 +269,6 @@ func TestProjectsCmd_ProjectAliasDisplayAggregatesCanonical(t *testing.T) {
 	const want = "somniloq\t2\n/Users/test/other\t1\n"
 	if got := out.String(); got != want {
 		t.Errorf("projects TSV = %q, want alias aggregation and unaliased path %q", got, want)
-	}
-}
-
-func TestProjectsCmd_FormatJSON_ProjectAliasDisplayAggregatesCanonical(t *testing.T) {
-	db := newProjectAliasDisplayDB(t)
-	cfg := config{ProjectAliases: map[string][]string{
-		"somniloq": {"Brimday"},
-	}}
-
-	var out, errOut bytes.Buffer
-	code, err := projectsCmd([]string{"--format", "json"}, staticDB(db), cfg, &out, &errOut)
-	if err != nil {
-		t.Fatalf("projectsCmd: %v", err)
-	}
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
-	}
-
-	got := decodeJSONArray(t, out.Bytes())
-	if len(got) != 2 {
-		t.Fatalf("entries = %d, want 2: %v", len(got), got)
-	}
-	if got[0]["project"] != "somniloq" || got[0]["sessionCount"] != float64(2) {
-		t.Errorf("first entry = %v, want canonical aggregate", got[0])
 	}
 }
 

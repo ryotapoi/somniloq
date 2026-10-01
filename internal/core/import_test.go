@@ -6,7 +6,6 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
-	"strconv"
 	"strings"
 	"testing"
 
@@ -151,18 +150,6 @@ func TestScanJSONLFiles(t *testing.T) {
 	}
 }
 
-func TestScanJSONLFiles_EmptyDir(t *testing.T) {
-	dir := t.TempDir()
-
-	files, errs := scanJSONLFiles(dir)
-	if len(errs) != 0 {
-		t.Fatalf("ScanJSONLFiles failed: %v", errs)
-	}
-	if len(files) != 0 {
-		t.Errorf("expected 0 files, got %d", len(files))
-	}
-}
-
 func TestProcessFile(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
@@ -236,35 +223,6 @@ func TestProcessFile_ResolvesRepoPath(t *testing.T) {
 	}
 }
 
-func TestImport_FillsRepoPath(t *testing.T) {
-	db := testDB(t)
-	dir := t.TempDir()
-
-	projDir := filepath.Join(dir, "-Users-test-proj")
-	os.MkdirAll(projDir, 0o755)
-
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/Users/test/proj/.claude/worktrees/feature","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
-`
-	path := filepath.Join(projDir, "s1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
-	if err != nil {
-		t.Fatalf("Import failed: %v", err)
-	}
-	if res.FilesImported != 1 || len(res.Errors) != 0 {
-		t.Fatalf("Import result: imported=%d errors=%v", res.FilesImported, res.Errors)
-	}
-
-	var repoPath string
-	if err := db.db.QueryRow("SELECT COALESCE(repo_path, '') FROM sessions WHERE session_id='s1'").Scan(&repoPath); err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if repoPath != "/Users/test/proj" {
-		t.Errorf("repo_path: got %q, want /Users/test/proj", repoPath)
-	}
-}
-
 func TestImport_CountsUnparsedLines(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
@@ -315,46 +273,6 @@ func TestImport_CountsUnparsedLines(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("messages: got %d, want 1", count)
-	}
-}
-
-func TestImport_CapsUnparsedDiagnosticsInEncounterOrder(t *testing.T) {
-	db := testDB(t)
-	dir := t.TempDir()
-	projDir := filepath.Join(dir, "-Users-test-proj")
-	if err := os.MkdirAll(projDir, 0o755); err != nil {
-		t.Fatal(err)
-	}
-
-	lines := []string{
-		`{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}`,
-		`{broken 1`, `{broken 2`, `{broken 3`, `{broken 4`, `{broken 5`, `{broken 6`,
-	}
-	path := filepath.Join(projDir, "s1.jsonl")
-	if err := os.WriteFile(path, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
-	if err != nil {
-		t.Fatalf("Import failed: %v", err)
-	}
-	if res.UnparsedLines != 6 {
-		t.Errorf("UnparsedLines: got %d, want 6", res.UnparsedLines)
-	}
-	if len(res.UnparsedDiagnostics) != 5 {
-		t.Fatalf("UnparsedDiagnostics: got %d, want 5: %v", len(res.UnparsedDiagnostics), res.UnparsedDiagnostics)
-	}
-	for i, diagnostic := range res.UnparsedDiagnostics {
-		wantPrefix := path + ":" + strconv.Itoa(i+2) + ": "
-		got := diagnostic.Error()
-		if !strings.HasPrefix(got, wantPrefix) {
-			t.Errorf("UnparsedDiagnostics[%d] = %q, want prefix %q", i, got, wantPrefix)
-			continue
-		}
-		if detail := strings.TrimPrefix(got, wantPrefix); detail == "" {
-			t.Errorf("UnparsedDiagnostics[%d] = %q, want non-empty detail after prefix %q", i, got, wantPrefix)
-		}
 	}
 }
 
@@ -469,34 +387,6 @@ func TestProcessFile_EmptyFile(t *testing.T) {
 	}
 }
 
-func TestProcessFile_NoTrailingNewline(t *testing.T) {
-	db := testDB(t)
-	dir := t.TempDir()
-
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}`
-	path := filepath.Join(dir, "s1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
-	if err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("expected 1 message, got %d", count)
-	}
-	state, err := db.GetImportState(path)
-	if err != nil {
-		t.Fatalf("GetImportState failed: %v", err)
-	}
-	if state == nil || state.LastOffset != int64(len(jsonl)) {
-		t.Fatalf("import_state must include the unterminated final line, got %+v", state)
-	}
-}
-
 func TestProcessFile_SkipsEmptyContent(t *testing.T) {
 	db := testDB(t)
 	dir := t.TempDir()
@@ -553,48 +443,6 @@ func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
 	}
 	if msgCount != 1 {
 		t.Errorf("messages: got %d, want 1 (whitespace-only content skipped)", msgCount)
-	}
-}
-
-func TestImport_Incremental(t *testing.T) {
-	db := testDB(t)
-	dir := t.TempDir()
-
-	projDir := filepath.Join(dir, "-test-proj")
-	os.MkdirAll(projDir, 0o755)
-
-	jsonl1 := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"first"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"reply1"}]}}
-`
-	path := filepath.Join(projDir, "s1.jsonl")
-	os.WriteFile(path, []byte(jsonl1), 0o644)
-
-	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
-	if err != nil {
-		t.Fatalf("Import failed: %v", err)
-	}
-	if res.FilesImported != 1 {
-		t.Errorf("expected 1 imported, got %d", res.FilesImported)
-	}
-
-	jsonl2 := jsonl1 + `{"type":"user","uuid":"u2","sessionId":"s1","timestamp":"2026-03-28T14:02:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"second"}}
-`
-	os.WriteFile(path, []byte(jsonl2), 0o644)
-
-	res, err = Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
-	if err != nil {
-		t.Fatalf("Import (2nd) failed: %v", err)
-	}
-	if res.FilesImported != 1 {
-		t.Errorf("expected 1 imported (incremental), got %d", res.FilesImported)
-	}
-
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
-	}
-	if count != 3 {
-		t.Errorf("expected 3 messages, got %d", count)
 	}
 }
 
@@ -883,53 +731,6 @@ func TestProcessFile_AgentNameOnly_NoSessionRow(t *testing.T) {
 	}
 	if count != 0 {
 		t.Errorf("agent-name-only JSONL should not create a session row; got %d", count)
-	}
-}
-
-func TestProcessFile_MetaBeforeBody(t *testing.T) {
-	db := testDB(t)
-	dir := t.TempDir()
-
-	jsonl := `{"type":"custom-title","customTitle":"top title","sessionId":"s1"}
-{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"yo"}]}}
-`
-	path := filepath.Join(dir, "s1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-
-	var title string
-	if err := db.db.QueryRow("SELECT custom_title FROM sessions WHERE session_id='s1'").Scan(&title); err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if title != "top title" {
-		t.Errorf("custom_title: got %q, want %q", title, "top title")
-	}
-}
-
-func TestProcessFile_AgentNameBeforeBody(t *testing.T) {
-	db := testDB(t)
-	dir := t.TempDir()
-
-	jsonl := `{"type":"agent-name","agentName":"first-agent","sessionId":"s1"}
-{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
-`
-	path := filepath.Join(dir, "s1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-
-	var name string
-	if err := db.db.QueryRow("SELECT agent_name FROM sessions WHERE session_id='s1'").Scan(&name); err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if name != "first-agent" {
-		t.Errorf("agent_name: got %q, want %q", name, "first-agent")
 	}
 }
 

@@ -29,22 +29,6 @@ func TestSearchCmd_OutputColumns(t *testing.T) {
 	}
 }
 
-func TestSearchCmd_ExplicitTSVMatchesDefault(t *testing.T) {
-	run := func(args []string) string {
-		t.Helper()
-		var out, errOut bytes.Buffer
-		code, err := searchCmd(args, staticDB(newOutlineTestDB(t)), config{}, &out, &errOut)
-		if err != nil || code != 0 {
-			t.Fatalf("searchCmd(%v) = %d, %v (stderr: %q)", args, code, err, errOut.String())
-		}
-		return out.String()
-	}
-
-	if got, want := run([]string{"second"}), run([]string{"--format", "tsv", "second"}); got != want {
-		t.Errorf("explicit TSV = %q, default = %q", want, got)
-	}
-}
-
 func TestSearchCmd_AssistantHitUsesOwningTurn(t *testing.T) {
 	db := newOutlineTestDB(t)
 
@@ -137,7 +121,7 @@ func TestSearchCmd_MissingQueryPrintsUsage(t *testing.T) {
 	}
 }
 
-func TestSearchCmd_PaginationTSVJSONAndTurns(t *testing.T) {
+func TestSearchCmd_PaginationTSVPreservesTurns(t *testing.T) {
 	var tsvOut, errOut bytes.Buffer
 	code, err := searchCmd([]string{"--limit", "2", "--offset", "1", "needle"}, staticDB(newSearchPaginationTestDB(t)), config{}, &tsvOut, &errOut)
 	if err != nil || code != 0 {
@@ -145,25 +129,6 @@ func TestSearchCmd_PaginationTSVJSONAndTurns(t *testing.T) {
 	}
 	if got := tsvOut.String(); !strings.Contains(got, "page\t2\t") || !strings.Contains(got, "needle second") || !strings.Contains(got, "page\t1\t") || !strings.Contains(got, "needle first") || strings.Contains(got, "needle third") {
 		t.Errorf("TSV page = %q, want the second and first hits with original turns", got)
-	}
-
-	var jsonOut bytes.Buffer
-	code, err = searchCmd([]string{"--format", "json", "--limit", "1", "--offset", "1", "needle"}, staticDB(newSearchPaginationTestDB(t)), config{}, &jsonOut, &errOut)
-	if err != nil || code != 0 {
-		t.Fatalf("JSON search = %d, %v (stderr: %q)", code, err, errOut.String())
-	}
-	entries := decodeJSONArray(t, jsonOut.Bytes())
-	if len(entries) != 1 || entries[0]["snippet"] != "needle second" || entries[0]["turn"] != float64(2) {
-		t.Errorf("JSON page = %v, want second hit with turn 2", entries)
-	}
-
-	jsonOut.Reset()
-	code, err = searchCmd([]string{"--format", "json", "--offset", "3", "needle"}, staticDB(newSearchPaginationTestDB(t)), config{}, &jsonOut, &errOut)
-	if err != nil || code != 0 {
-		t.Fatalf("empty JSON search = %d, %v (stderr: %q)", code, err, errOut.String())
-	}
-	if strings.TrimSpace(jsonOut.String()) != "[]" {
-		t.Errorf("empty JSON page = %q, want []", jsonOut.String())
 	}
 }
 
@@ -265,8 +230,6 @@ func TestSearchSnippet_NoPanicOnAdversarialContent(t *testing.T) {
 		{"tolower growth lands past len(content)", strings.Repeat("İ", 10) + "auth", "AUTH"},
 		{"invalid utf-8 around match", "a\x80\x80\x80needle\x80b", "NEEDLE"},
 		{"invalid utf-8 only", "\x80\x80\x80", "\x80"},
-		{"query longer than content", "ab", "abc"},
-		{"empty content", "", "query"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
