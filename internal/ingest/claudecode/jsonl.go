@@ -2,6 +2,7 @@ package claudecode
 
 import (
 	"encoding/json"
+	"errors"
 	"strings"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
@@ -44,6 +45,13 @@ func ParseRecord(line []byte) (*RawRecord, error) {
 }
 
 func NormalizeRecord(rec *RawRecord, repoPath string) (*ingest.NormalizedRecord, error) {
+	if rec.SessionID == "" {
+		return nil, errors.New("sessionId is missing or empty")
+	}
+	if rec.UUID == "" {
+		return nil, errors.New("uuid is missing or empty")
+	}
+
 	msg, err := ParseMessage(rec)
 	if err != nil {
 		return nil, err

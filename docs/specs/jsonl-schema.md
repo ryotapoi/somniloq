@@ -45,6 +45,9 @@ Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造
 type, message, sessionId, cwd, timestamp, gitBranch, uuid, parentUuid, version, userType, isSidechain
 ```
 
+- `user` / `assistant` の `sessionId` と `uuid` は非空値を必須とする。欠落・空文字列・`null` の行は unparsed とし、path・物理行・欠落フィールドを診断する。その行は本文の有無にかかわらず session / message を保存・更新せず、前後の正常行の取り込みは継続する。ID の推測生成は行わない。
+- 既存 DB に保存済みの空 ID の session / message は自動修復しない。元のログが残っていれば `import --full` で再構築できる。DB 全体の削除と source 選択については「共通の末尾行と差分再開」の注意に従う。
+
 #### バージョンで増減するフィールド（v2.1.37〜v2.1.86 で確認）
 
 出たり消えたりする。未知フィールドは無視する設計にすること。

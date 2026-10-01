@@ -2,6 +2,8 @@ package claudecode
 
 import (
 	"encoding/json"
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -77,5 +79,46 @@ func TestParseRecord_Assistant(t *testing.T) {
 	}
 	if msg.ParentUUID != nil {
 		t.Errorf("expected nil parentUuid, got %v", msg.ParentUUID)
+	}
+}
+
+func TestNormalizeRecord_RequiredIDs(t *testing.T) {
+	for _, field := range []string{"sessionId", "uuid"} {
+		for _, value := range []string{"missing", `""`, "null"} {
+			t.Run(field+"/"+value, func(t *testing.T) {
+				ids := map[string]json.RawMessage{
+					"sessionId": json.RawMessage(`"s1"`),
+					"uuid":      json.RawMessage(`"u1"`),
+				}
+				if value == "missing" {
+					delete(ids, field)
+				} else {
+					ids[field] = json.RawMessage(value)
+				}
+				rawIDs, err := json.Marshal(ids)
+				if err != nil {
+					t.Fatal(err)
+				}
+				line := fmt.Sprintf(`{"type":"user","message":{"role":"user","content":"hello"},%s}`, rawIDs[1:len(rawIDs)-1])
+				rec, err := ParseRecord([]byte(line))
+				if err != nil {
+					t.Fatal(err)
+				}
+				normalized, err := NormalizeRecord(rec, "")
+				if err == nil || !strings.Contains(err.Error(), field) || normalized != nil {
+					t.Fatalf("NormalizeRecord = %+v, %v; want error identifying %s", normalized, err, field)
+				}
+			})
+		}
+	}
+
+	// Nonempty IDs are preserved without format validation or trimming.
+	rec := &RawRecord{SessionID: " s1 ", UUID: " u1 ", Message: json.RawMessage(`{"role":"user","content":"hello"}`)}
+	normalized, err := NormalizeRecord(rec, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if normalized.Session.SessionID != rec.SessionID || normalized.Message.SessionID != rec.SessionID || normalized.Message.UUID != rec.UUID {
+		t.Fatalf("IDs changed: %+v", normalized)
 	}
 }

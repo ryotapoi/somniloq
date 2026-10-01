@@ -896,3 +896,98 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 		t.Fatalf("filtered sessions = %v", ids)
 	}
 }
+
+func TestImport_ClaudeCodeMissingIDs(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "-test-proj")
+	must(t, os.MkdirAll(projDir, 0o755))
+	path := filepath.Join(projDir, "s1.jsonl")
+	before := `{"type":"user","uuid":"u1","sessionId":"s1","cwd":"/nonexistent/valid","gitBranch":"main","version":"good","timestamp":"2026-03-28T14:00:00Z","message":{"role":"user","content":"before"}}` + "\n"
+	after := `{"type":"assistant","uuid":"a1","sessionId":"s1","cwd":"/nonexistent/valid","gitBranch":"main","version":"good","timestamp":"2026-03-28T14:01:00Z","message":{"role":"assistant","content":"after"}}` + "\n"
+	jsonl := before + `{"type":"user","uuid":"bad-user","message":{"role":"user","content":"bad"}}
+{"type":"assistant","sessionId":"s1","cwd":"/nonexistent/invalid","gitBranch":"bad","version":"bad","timestamp":"2099-01-01T00:00:00Z","message":{"role":"assistant","content":"bad"}}
+{"type":"user","sessionId":"new-session","uuid":"","message":{"role":"user","content":""}}
+{"type":"assistant","sessionId":null,"uuid":"bad-assistant","message":{"role":"assistant","content":"bad"}}
+` + after
+	must(t, os.WriteFile(path, []byte(jsonl), 0o644))
+	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	must(t, err)
+	if res.FilesImported != 1 || res.FilesFailed != 0 || len(res.Errors) != 0 || res.UnparsedLines != 4 || len(res.UnparsedDiagnostics) != 4 {
+		t.Fatalf("Import result: %+v", res)
+	}
+	for i, field := range []string{"sessionId", "uuid", "uuid", "sessionId"} {
+		got := res.UnparsedDiagnostics[i].Error()
+		if !strings.HasPrefix(got, fmt.Sprintf("%s:%d: ", path, i+2)) || !strings.Contains(got, field) {
+			t.Errorf("diagnostic %d = %q; want physical line and %s", i, got, field)
+		}
+	}
+
+	var sessionID, cwd, branch, version, started, ended string
+	must(t, db.db.QueryRow("SELECT session_id, cwd, git_branch, version, started_at, ended_at FROM sessions").Scan(&sessionID, &cwd, &branch, &version, &started, &ended))
+	if sessionID != "s1" || cwd != "/nonexistent/valid" || branch != "main" || version != "good" || started != "2026-03-28T14:00:00Z" || ended != "2026-03-28T14:01:00Z" {
+		t.Fatalf("session was contaminated: %q %q %q %q %q %q", sessionID, cwd, branch, version, started, ended)
+	}
+	var sessions int
+	must(t, db.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&sessions))
+	if sessions != 1 {
+		t.Fatalf("sessions = %d, want 1", sessions)
+	}
+
+	assertMessages := func(want []string) {
+		t.Helper()
+		rows, err := db.db.Query("SELECT uuid, session_id, role, content FROM messages ORDER BY rowid")
+		must(t, err)
+		defer rows.Close()
+		var got []string
+		for rows.Next() {
+			var uuid, sid, role, content string
+			must(t, rows.Scan(&uuid, &sid, &role, &content))
+			got = append(got, strings.Join([]string{uuid, sid, role, content}, ":"))
+		}
+		must(t, rows.Err())
+		if !reflect.DeepEqual(got, want) {
+			t.Fatalf("messages = %v, want %v", got, want)
+		}
+	}
+	assertMessages([]string{"u1:s1:user:before", "a1:s1:assistant:after"})
+
+	// Append a duplicate with changed content to prove INSERT OR IGNORE is
+	// exercised, followed by a new message to prove incremental continuation.
+	duplicate := strings.Replace(before, `"before"`, `"replacement"`, 1)
+	appended := jsonl + duplicate + `{"type":"user","uuid":"u2","sessionId":"s1","timestamp":"2026-03-28T14:02:00Z","message":{"role":"user","content":"appended"}}` + "\n"
+	must(t, os.WriteFile(path, []byte(appended), 0o644))
+	res, err = Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	must(t, err)
+	if res.FilesImported != 1 || res.FilesFailed != 0 || len(res.Errors) != 0 || res.UnparsedLines != 0 {
+		t.Fatalf("incremental Import result: %+v", res)
+	}
+	assertMessages([]string{"u1:s1:user:before", "a1:s1:assistant:after", "u2:s1:user:appended"})
+}
+
+func TestImport_ClaudeCodeInvalidIDsOnly(t *testing.T) {
+	db := testDB(t)
+	dir := t.TempDir()
+	projDir := filepath.Join(dir, "-test-proj")
+	must(t, os.MkdirAll(projDir, 0o755))
+	path := filepath.Join(projDir, "invalid.jsonl")
+	must(t, os.WriteFile(path, []byte(`{"type":"user","sessionId":"new-session","message":{"role":"user","content":""}}
+`), 0o644))
+	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	must(t, err)
+	if res.UnparsedLines != 1 || res.FilesFailed != 0 || len(res.Errors) != 0 {
+		t.Fatalf("Import result: %+v", res)
+	}
+	for _, table := range []string{"sessions", "messages"} {
+		var count int
+		must(t, db.db.QueryRow("SELECT COUNT(*) FROM "+table).Scan(&count))
+		if count != 0 {
+			t.Errorf("%s = %d, want 0", table, count)
+		}
+	}
+	state, err := db.GetImportState(path)
+	must(t, err)
+	if state != nil {
+		t.Fatalf("invalid-only file advanced body save boundary: %+v", state)
+	}
+}
