@@ -26,6 +26,10 @@
 - [x] `sessions` と `projects` の TSV 出力で project 名のタブ・改行・CR を処理し、列数と行数を保つ。project alias と repository path 由来の値を確認し、JSON では元の文字列を保持する。
 - [x] `simplify-tests` skill を実施する。
 
+### v0.12.4 コード整理
+
+- [ ] CLI・DB・取り込み処理の責務と依存関係を見直し、現在の契約を保ったまま保守負担を下げられる箇所を整理する。着手時に対象と完了条件を定め、有効な候補の実装・検証まで完了する。
+
 ### v1.0.0 公開機能の整理
 
 - [ ] `outline` と `show --summary` に、trim 済みの user message 全文へ同じ Go 正規表現を適用する除外を導入する。
