@@ -66,21 +66,21 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return sessionsCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "logical_day", "non_command_user_turn_count", "firstNonCommandUserLine", "-imported-since", "show --source <source> <session-id>"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "logical_day", "body_size", "source: internal source identifier", "-imported-since", "show --source <source> <session-id>"},
 		},
 		{
 			name: "show",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return showCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Output (markdown):", "messages fields: role, content, timestamp", "--source accepts", "somniloq show --turn 40..60 <session-id>"},
+			want: []string{"Examples:", "Output (markdown):", "messages fields: role, content, timestamp", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --turn 40..60 <session-id>"},
 		},
 		{
 			name: "outline",
 			run: func(errOut *bytes.Buffer) (int, error) {
-				return outlineCmd([]string{"--help"}, openDB, &bytes.Buffer{}, errOut)
+				return outlineCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "body_size", "Recommended long-session flow", "--source accepts", "somniloq show --turn 12..18 <session-id>"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "body_size", "Recommended long-session flow", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --turn 12..18 <session-id>"},
 		},
 		{
 			name: "search",

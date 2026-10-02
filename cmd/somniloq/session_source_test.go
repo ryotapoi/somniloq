@@ -40,7 +40,7 @@ func TestSessionSourceValidationDoesNotOpenDB(t *testing.T) {
 		{
 			name: "outline all source",
 			run: func(openDB func() (*core.DB, error)) (int, error) {
-				return outlineCmd([]string{"--source", "all", "same-id"}, openDB, &bytes.Buffer{}, &bytes.Buffer{})
+				return outlineCmd([]string{"--source", "all", "same-id"}, openDB, config{}, &bytes.Buffer{}, &bytes.Buffer{})
 			},
 		},
 		{
@@ -87,7 +87,7 @@ func TestSessionSourceSelectsOnlyRequestedSource(t *testing.T) {
 	db = newSourceSelectionTestDB(t)
 	out.Reset()
 	errOut.Reset()
-	code, err = outlineCmd([]string{"--source", "claude-code", "same-id"}, staticDB(db), &out, &errOut)
+	code, err = outlineCmd([]string{"--source", "claude-code", "same-id"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil || code != 0 || !strings.Contains(out.String(), "claude question") || strings.Contains(out.String(), "codex question") {
 		t.Fatalf("outline = %d, %v, %q (stderr %q)", code, err, out.String(), errOut.String())
 	}

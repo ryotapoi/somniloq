@@ -2,7 +2,6 @@ package core
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 )
 
@@ -67,56 +66,6 @@ func (d *DB) GetTurnMessages(source Source, sessionID string) ([]MessageRow, err
 		return nil, fmt.Errorf("get turn messages: iterate rows: %w", err)
 	}
 	return result, nil
-}
-
-// Prefixes of user message content that mark synthetic entries inserted by
-// Claude Code itself (a /clear command echo and the caveat block that
-// accompanies commands like /clear and shell `!` invocations). They are
-// skipped by GetSummaryMessages so that --summary surfaces real user input.
-//
-// When adding a new prefix, check it does not contain SQLite LIKE wildcards
-// (`%` or `_`). If it does, the LIKE clauses in GetSummaryMessages need
-// `ESCAPE '\'` and the pattern must escape those characters.
-const (
-	clearCommandPrefix       = "<command-name>/clear</command-name>"
-	localCommandCaveatPrefix = "<local-command-caveat>"
-)
-
-// GetSummaryMessages returns the first `limit` user messages of the session
-// in chronological order, intended for --summary output. Returns an error if
-// limit <= 0.
-//
-// Always filters to role='user' and is_sidechain=0. By default, also skips
-// entries whose content starts with clearCommandPrefix or
-// localCommandCaveatPrefix; includeClear=true disables that prefix skip only.
-func (d *DB) GetSummaryMessages(source Source, sessionID string, limit int, includeClear bool) ([]MessageRow, error) {
-	if limit <= 0 {
-		return nil, errors.New("limit must be >= 1")
-	}
-
-	query := `
-		SELECT uuid, role, content, timestamp
-		FROM messages
-		WHERE source = ? AND session_id = ?
-		  AND role = 'user'
-		  AND is_sidechain = 0`
-	args := []any{string(source), sessionID}
-	if !includeClear {
-		query += `
-		  AND content NOT LIKE ?
-		  AND content NOT LIKE ?`
-		args = append(args, clearCommandPrefix+"%", localCommandCaveatPrefix+"%")
-	}
-	query += `
-		ORDER BY rfc3339_utc_nanos(timestamp) ASC, rowid ASC
-		LIMIT ?`
-	args = append(args, limit)
-
-	rows, err := d.execer().Query(query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("get summary messages: query: %w", err)
-	}
-	return scanMessages(rows, "get summary messages")
 }
 
 func scanMessages(rows *sql.Rows, operation string) ([]MessageRow, error) {

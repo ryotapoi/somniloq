@@ -17,12 +17,10 @@ const sessionsHelpDetails = `Columns (TSV, in order):
   custom_title: session title with tabs/newlines flattened, empty when unavailable.
   message_count: stored message rows, including sidechain rows.
   body_size: UTF-8 byte size of non-sidechain message bodies; use this to choose outline/show ranges.
-  non_command_user_turn_count: user turns from outline numbering after excluding slash commands and config commandPatterns.
-  first_non_command_user_line: first line of the first non-command user turn.
   source: internal source identifier: claude_code, codex, or cursor_agent.
 
 JSON fields:
-  source, sessionId, project, title, startedAt, endedAt, logicalDay, messageCount, bodySize, nonCommandUserTurnCount, firstNonCommandUserLine
+  source, sessionId, project, title, startedAt, endedAt, logicalDay, messageCount, bodySize
 
 Notes:
   --since/--until and --imported-since accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
@@ -59,10 +57,6 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 	if err := validateFormat(*flags.format, "tsv", "json"); err != nil {
 		return 1, err
 	}
-	matcher, err := newCommandMatcher(cfg)
-	if err != nil {
-		return 1, err
-	}
 	boundary, err := resolveDayBoundary(*flags.dayBoundary, cfg)
 	if err != nil {
 		return 1, err
@@ -90,15 +84,10 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 	if err != nil {
 		return 1, err
 	}
-	derived, err := deriveSessionUserTurnSummaries(db, rows, matcher)
-	if err != nil {
-		return 1, err
-	}
-
 	if *flags.format == "json" {
 		entries := make([]sessionJSON, len(rows))
 		for i, r := range rows {
-			entries[i] = newSessionJSON(r, resolveProjectDisplayName(r.RepoPath, *flags.short, cfg), sessionLogicalDay(r, boundary, time.Local), derived[i])
+			entries[i] = newSessionJSON(r, resolveProjectDisplayName(r.RepoPath, *flags.short, cfg), sessionLogicalDay(r, boundary, time.Local))
 		}
 		if err := writeJSON(out, entries); err != nil {
 			return 1, err
@@ -106,12 +95,12 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 		return 0, nil
 	}
 
-	for i, r := range rows {
+	for _, r := range rows {
 		title := sanitizeTSV(r.CustomTitle)
 		proj := sanitizeTSV(resolveProjectDisplayName(r.RepoPath, *flags.short, cfg))
-		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\t%s\n",
+		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\n",
 			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
-			derived[i].NonCommandUserTurnCount, sanitizeTSV(derived[i].FirstNonCommandUserLine), r.Source); err != nil {
+			r.Source); err != nil {
 			return 1, err
 		}
 	}
@@ -135,35 +124,4 @@ func newSessionsFlagSet() (*flag.FlagSet, sessionsFlags) {
 		format:        fs.String("format", "tsv", "output format (tsv, json)"),
 	}
 	return fs, flags
-}
-
-type sessionUserTurnSummary struct {
-	NonCommandUserTurnCount int
-	FirstNonCommandUserLine string
-}
-
-func deriveSessionUserTurnSummaries(db *core.DB, sessions []core.SessionRow, matcher commandMatcher) ([]sessionUserTurnSummary, error) {
-	summaries := make([]sessionUserTurnSummary, len(sessions))
-	for i, session := range sessions {
-		messages, err := db.GetMessages(session.Source, session.SessionID)
-		if err != nil {
-			return nil, err
-		}
-		summaries[i] = summarizeNonCommandUserTurns(messages, matcher)
-	}
-	return summaries, nil
-}
-
-func summarizeNonCommandUserTurns(messages []core.MessageRow, matcher commandMatcher) sessionUserTurnSummary {
-	var summary sessionUserTurnSummary
-	for _, tm := range userTurnMessages(assignTurns(messages)) {
-		if matcher.isCommand(tm.Msg.Content) {
-			continue
-		}
-		summary.NonCommandUserTurnCount++
-		if summary.FirstNonCommandUserLine == "" {
-			summary.FirstNonCommandUserLine = firstLine(tm.Msg.Content)
-		}
-	}
-	return summary
 }

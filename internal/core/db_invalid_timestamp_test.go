@@ -49,11 +49,6 @@ func TestInvalidSavedTimestampsRemainReadable(t *testing.T) {
 	if !reflect.DeepEqual(messages, want) {
 		t.Fatalf("messages = %+v, want %+v", messages, want)
 	}
-	summary, err := db.GetSummaryMessages(SourceClaudeCode, "invalid", 3, false)
-	must(t, err)
-	if !reflect.DeepEqual(summary, want) {
-		t.Fatalf("summary = %+v, want %+v", summary, want)
-	}
 	hits, err := db.SearchMessages(SessionFilter{}, "needle", SearchPagination{})
 	must(t, err)
 	var ids []string

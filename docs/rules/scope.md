@@ -80,13 +80,11 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - `repo_path` は絶対パスのため、`/` セグメントを跨いだ部分一致（例: `--project Sources/ryot`）も可能
 - 表示は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合、デフォルト表示は `repo_path` をそのまま
 - `--short` は alias 非一致時に `filepath.Base(repo_path)`（ハイフン保持）
-- 出力 TSV の列: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`, `source`。source は `claude_code` / `codex` / `cursor_agent`
+- 出力 TSV の列: `session_id`, `time_range`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `source`。source は `claude_code` / `codex` / `cursor_agent`
 - TSV の `project` と `custom_title` はタブ・改行を空白に置換し、列と行の境界を保つ。JSON は生の文字列を出す
 - `logical_day` は `ended_at`（無ければ `started_at`）をローカルタイムに変換し、その暦日の `dayBoundary` の境界時点より前なら前暦日、境界以降なら当暦日（`YYYY-MM-DD`）として出す。セッションを途中で分割せず、表示時に計算する
 - `body_size` は非 sidechain メッセージの本文合計サイズ（UTF-8 バイト数）。show が出力する量の予測値として使う（show 前に大きいセッションかを判定する用途）。文字数でなくバイト数なのは、コンテキスト量の感覚と一致させるため。`message_count` は従来どおり sidechain を含む全行数
-- `non_command_user_turn_count` は outline と同じ user turn 母集団（`GetMessages` の sidechain 除外済み全メッセージ列に `assignTurns` を適用し、user メッセージだけを拾う）から、コマンド扱いの user turn を除いた件数。コマンド扱いは、本文を trim した文字列が `/` で始まる場合、または config の `commandPatterns` のいずれかに正規表現一致する場合。CLI はこの値でセッションを除外せず、一覧を読む側がスキップ判断に使う
-- `first_non_command_user_line` は最初の非コマンド user turn の先頭 1 行。抽出は outline の `first_line` と同じく、前後の空白を除去した本文の最初の行。TSV ではタブ・改行を空白に置換する。非コマンド user turn が無ければ空文字
-- `--format tsv|json`（デフォルト `tsv`）。JSON のフィールドは `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `logicalDay`, `messageCount`, `bodySize`, `nonCommandUserTurnCount`, `firstNonCommandUserLine`（共通仕様は「JSON 出力」節参照）
+- `--format tsv|json`（デフォルト `tsv`）。JSON のフィールドは `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `logicalDay`, `messageCount`, `bodySize`（共通仕様は「JSON 出力」節参照）
 
 ### プロジェクト一覧（projects）
 
@@ -106,8 +104,10 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - `show [--source <source>] <session-id>` は全 source を横断検索する。`--source` には search が出力する内部値 `claude_code` / `codex` / `cursor_agent` または CLI 表記 `claude-code` / `codex` / `cursor-agent` を指定でき、同じ `session_id` が複数 source に存在する場合に対象を選ぶ。未指定時は曖昧エラーとして候補を表示する。`all`、空値、未知値は不正で、`--source` は `--since` / `--until` の一括表示とは併用できない
 - Markdown metadata は Session、Source、Project、Started。Started 行は `started_at ~ ended_at` の時刻範囲で、ended_at がない場合は `started_at ~`、両方未知なら空欄
 - `--since`/`--until` で期間指定して一括表示（`started_at` 基準）。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な started_at は時刻条件に一致しない。date-only は `projects` と同じくローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
-- `--summary N` で各セッションの user メッセージ先頭 N 件を表示（`/clear` と `<local-command-caveat>` はスキップ）。`0` または未指定で従来の全文表示
-- `--include-clear` で `/clear`・caveat のスキップを無効化（`--summary >= 1` が前提）
+- `--summary N` で各セッションの user メッセージから、除外後の先頭 N 件を表示。`0` または未指定で全文表示
+- `--exclude-user-message-pattern <regex>` は繰り返し指定でき、trim 済みの本文全文に対して Go 正規表現を OR で評価する。1 回でも指定すると config の pattern 一覧全体を置き換える。照合は部分一致なので、先頭一致には `^` を明示する
+- `--no-exclude-user-messages` は config の除外をこの呼び出しだけ無効化する。pattern 指定との併用はエラー。どちらの明示フラグも `--summary >= 1` が前提
+- 除外 pattern は `outline` と `show --summary` の user message 表示だけに適用する。全文 `show`、`--turn`、`--tail`、`search`、保存 DB には適用せず、`sessions` の一覧行も除外しない。未設定時は除外なしで、slash prefix や合成 `/clear`・caveat の固定除外もない
 - `--turn N` / `--turn N..M` で指定ターンだけ表示（両端含む）。1 ターンは user メッセージとそれに続く非 user メッセージ（assistant 応答等）。ターン番号は outline と同一の採番（GetMessages の全メッセージ列に対する採番）を共有する。範囲がセッションのターン数を超える場合は本文なしでセッションヘッダのみ出力し exit 0（エラーにしない）。`--turn ""`（空文字）は不正値としてエラー
 - `--tail N` で末尾 N ターンだけ表示
 - `--turn` と `--tail` は互いに排他。どちらも `--summary` とは併用不可
@@ -121,7 +121,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 - `outline <session-id>` で、セッションの user メッセージだけを「ターン番号・時刻・本文合計サイズ・先頭 1 行」の TSV で時系列表示する。長いセッションを全文 show する前に構造を掴む用途
 - ターン番号は 1 始まり。sidechain を除いたメッセージ列を時系列に走査し、user メッセージごとに 1 増える（sidechain 除外は show と同じで、採番にも含めない）。最初の user メッセージより前のメッセージはターン 1 に畳み込む
-- `/clear` エコーや `<local-command-caveat>` などの合成 user メッセージも 1 ターンとして数え、そのまま表示する（`show --summary` のスキップとは異なる扱い。採番をメッセージ列と 1:1 に保つことを優先する）
+- `/clear` エコーや `<local-command-caveat>` などの合成 user メッセージも turn 採番に数える。除外 pattern に一致すれば表示だけを省き、後続の turn 番号は元の値を保つ
 - メッセージの時系列順は `timestamp` 昇順、同値は挿入順（rowid）で決定的に並べる（旧形式 Codex rollout は全レコードが同一 timestamp になるため、タイブレーカーがないと採番が実行ごとに揺れる）
 - セッション ID の解決は show と同じ（`--source` で選択可能。未指定で複数 source に一致する場合は曖昧エラーで候補を表示）
 - 時刻はローカルタイム `2006-01-02 15:04` 形式
@@ -174,7 +174,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
   "projectAliases": {
     "somniloq": ["Brimday"]
   },
-  "commandPatterns": ["^日報生成"],
+  "excludeUserMessagePatterns": ["^/", "^<command-name>/clear</command-name>"],
   "dayBoundary": "04:00"
 }
 ```
@@ -186,8 +186,27 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - `--project` フィルタ展開の対象は `--project` を持つコマンド（`sessions` / `show` / `search`）
 - 表示正規化の対象は project 名を出すコマンド（`sessions` / `show` / `projects` / `search`）。alias グループに一致する `repo_path` / basename は canonical 名だけで表示し、旧名や元のパスを追加フィールドとして出さない
 - `projects` 一覧では、alias により同じ canonical 名になる行を cmd 層で合算する。DB の `repo_path` は書き換えない
-- `commandPatterns` は、`sessions` のスキップ判定用列でコマンド扱いにする user turn を指定する正規表現リスト。各 pattern は trim 済みの user message 本文全体に対して Go の `regexp` で評価する。不正な正規表現は config 読み込みエラーとし、壊れた JSON と同じく黙って無効化しない
+- `excludeUserMessagePatterns` は `outline` と `show --summary` で表示から除外する user message の Go 正規表現リスト。本文を trim した全文に対する部分一致で OR 評価し、未設定または空配列なら除外しない。不正な pattern は config 読み込みエラーとし、CLI override や一時無効化で隠さない
+- 両コマンドで `--exclude-user-message-pattern <regex>` を繰り返し指定できる。指定があれば config の一覧を置換する。`--no-exclude-user-messages` は config の除外を呼び出し単位で無効化し、pattern override とは併用できない。空 regex は全本文に一致する有効な pattern で、無効化の意味には使わない
 - `dayBoundary` は論理日の開始時刻をローカル時計の `HH:MM` で指定する。DST 切り替え日も指定したローカル時刻を使い、date-only の `--since` は指定暦日の境界を包含下限、`--until` は翌暦日の境界を排他上限とする。`logical_day` も同じ境界時点と比較する。欠落・重複するローカル時刻は Go の `time.Date` による解決に従う。未指定時は `00:00`。不正値は config 読み込みエラー。`sessions` / `search` の date-only `--since`/`--until` と `sessions` の `logical_day` 表示だけに使い、DB に焼き込まない
+
+### v1.0.0 の設定・出力移行
+
+- `commandPatterns` は自動移行しない。旧設定を `excludeUserMessagePatterns` へ手動で移すと、適用先は `sessions` のスキップ用ヒントから `outline` と `show --summary` の表示除外へ変わる。slash prefix の除外が必要なら `^/` を明示する
+- 旧 `show --summary` の `/clear` 除外は `^<command-name>/clear</command-name>`、caveat 除外は `^<local-command-caveat>` として設定する。たとえば両方を除外する場合は次の通り:
+
+```json
+{
+  "excludeUserMessagePatterns": [
+    "^<command-name>/clear</command-name>",
+    "^<local-command-caveat>"
+  ]
+}
+```
+
+- `--include-clear` は廃止した。特定の summary 呼び出しだけ全除外を止める場合は `show --summary N --no-exclude-user-messages` を使う
+- sessions TSV は 10 列から 8 列になり、`source` は最終列（8 列目）へ移る。JSON の `nonCommandUserTurnCount` と `firstNonCommandUserLine` も削除した
+- この公開変更は v1.0.0 の対象。`dayBoundary`、`logicalDay`、summary 機能は引き続き利用できる
 
 ## CLI インターフェース
 
@@ -213,12 +232,14 @@ somniloq show --since 24h                # 直近24時間の全セッション
 somniloq show --since 2026-03-28 --until 2026-03-29  # 3/28 の全セッション
 somniloq show --summary 1 --since 24h                # 直近24時間の各セッションの冒頭 1 件
 somniloq show --summary 3 --since 24h                # 冒頭 3 件
-somniloq show --summary 1 --include-clear --since 24h  # /clear・caveat もスキップせずに表示
+somniloq show --summary 1 --exclude-user-message-pattern '^<command-name>/clear</command-name>' --since 24h # /clear を除外
+somniloq show --summary 1 --no-exclude-user-messages --since 24h # この呼び出しだけ除外を無効化
 somniloq show --since 24h --short                    # プロジェクト名を短縮表示
 somniloq show --turn 40..60 <session-id>             # ターン 40〜60 だけ表示
 somniloq show --tail 3 <session-id>                  # 末尾 3 ターンだけ表示
 somniloq outline <session-id>            # user メッセージをターン番号・時刻・本文サイズ・先頭1行で一覧
 somniloq outline --source cursor_agent <session-id> # search の source で対象を選択
+somniloq outline --exclude-user-message-pattern '^/' <session-id> # slash command を表示から除外
 somniloq sessions --format json          # セッション一覧を JSON で出力
 somniloq show --format json <session-id> # セッション内容を JSON で出力（outline / projects も --format json 対応）
 somniloq search "auth bug"               # 全メッセージ本文を横断検索

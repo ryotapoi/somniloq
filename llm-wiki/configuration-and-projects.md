@@ -7,6 +7,8 @@ sources:
   - cmd/somniloq/filter.go
   - cmd/somniloq/sessions.go
   - cmd/somniloq/show.go
+  - cmd/somniloq/outline.go
+  - cmd/somniloq/user_message_exclusion.go
   - cmd/somniloq/turn.go
   - cmd/somniloq/shorten.go
   - cmd/somniloq/projects.go
@@ -19,7 +21,7 @@ sources:
 
 # Configuration and projects
 
-`repo_path` / `--project` / config 周りを変えるときの地図。表示名、filter、集約キー、sessions skip hint 用の command pattern、論理日境界が混ざりやすいので、入口を分けて見る。
+`repo_path` / `--project` / config 周りを変えるときの地図。表示名、filter、集約キー、user message の表示除外、論理日境界が混ざりやすいので、入口を分けて見る。
 
 ## repo_path
 
@@ -34,12 +36,13 @@ sources:
 - 展開後の `core.SessionFilter.Projects` は `internal/core/db_sessions_projects.go` の `sessionFilterConditions` → `projectsCondition` → `escapeLikeLiteral` へ進む。条件を変える際は `ListSessions` と `internal/core/db_search.go` の `SearchMessages` を併せて確認する。
 - alias の表示への波及は下の「集約と表示」を読む。filter の展開と表示名の解決は別の入口を持つ。
 
-## commandPatterns
+## excludeUserMessagePatterns
 
-判定規則は `docs/rules/scope.md` の「設定ファイル（config）」、出力列の契約は「セッション一覧（sessions）」を参照する。
+判定規則は `docs/rules/scope.md` の「設定ファイル（config）」、コマンド別の影響は「内容表示（show）」と「アウトライン表示（outline）」を参照する。
 
-- `cmd/somniloq/config.go` の `loadConfig` / `newCommandMatcher` が `compileCommandPatterns` を使い、`commandMatcher.isCommand` が本文を判定する。
-- 利用側は `cmd/somniloq/sessions.go` の `deriveSessionUserTurnSummaries` → `summarizeNonCommandUserTurns`。判定対象のターンを変える場合は `cmd/somniloq/turn.go` の `assignTurns` / `userTurnMessages` と [Display and turns](display-and-turns.md) を併せて確認する。
+- `cmd/somniloq/config.go` の `loadConfig` が `excludeUserMessagePatterns` を検証し、`cmd/somniloq/user_message_exclusion.go` の `userMessageMatcher` が trim 済み全文を Go regexp で照合する。
+- 利用側は `cmd/somniloq/outline.go` と `cmd/somniloq/show.go`。CLI pattern の置換・呼び出し単位の無効化も matcher の作成時に解決する。
+- `sessions` はメッセージ本文を読まず、user message による一覧行の除外も行わない。
 
 ## dayBoundary
 

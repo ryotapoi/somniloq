@@ -9,6 +9,7 @@ sources:
   - cmd/somniloq/outline.go
   - cmd/somniloq/turn.go
   - cmd/somniloq/sessions.go
+  - cmd/somniloq/user_message_exclusion.go
   - cmd/somniloq/config.go
   - cmd/somniloq/format.go
   - cmd/somniloq/jsonout.go
@@ -29,9 +30,11 @@ source の受理は `cmd/somniloq/session_source.go` の `parseSessionSource`、
 
 ## メッセージとターンを変更する
 
-解決したセッションの本文は `internal/core/db_messages_summary.go` の `GetMessages` から得る。`cmd/somniloq/turn.go` の `assignTurns` はその全メッセージ列を受け、show の `filterTurns` / `filterLastTurns`、outline の `userTurnMessages`、search の `searchTurnsByUUID` が番号を共有する。順序や採番を変えるときはこの経路と `cmd/somniloq/show_turn_test.go` / `cmd/somniloq/outline_test.go` / `cmd/somniloq/search_test.go` を確認する。show の要約経路は `GetSummaryMessages` を使うため、通常のターン指定とは分けて読む。
+解決したセッションの本文は `internal/core/db_messages_summary.go` の `GetMessages` から得る。`cmd/somniloq/turn.go` の `assignTurns` はその全メッセージ列を受け、show の `filterTurns` / `filterLastTurns`、outline の `userTurnMessages`、search の `searchTurnsByUUID` が番号を共有する。順序や採番を変えるときはこの経路と `cmd/somniloq/show_turn_test.go` / `cmd/somniloq/outline_test.go` / `cmd/somniloq/search_test.go` を確認する。
 
-セッション一覧の非コマンド user turn 案内を変える場合は `cmd/somniloq/sessions.go` の `summarizeNonCommandUserTurns` から `userTurnMessages` と `cmd/somniloq/config.go` の `commandMatcher` を辿る。session 行の集計は `internal/core/db_sessions_projects.go` を読む。
+user message の表示除外は `cmd/somniloq/user_message_exclusion.go` の共有 matcher で行う。outline は全メッセージへ採番し、turn body size を計算した後に user message を除外するため、後続の番号は元のまま残る。show summary は時系列の `GetMessages` 列から user message を除外してから先頭 N 件を選ぶ。全文 show、turn/tail、search、保存処理は matcher を通らない。
+
+`sessions` は `ListSessions` の行メタデータだけを出す。メッセージ本文の取得、user message による一覧行の除外、以前の非コマンド user-turn 案内はない。
 
 ## 出力を変更する
 

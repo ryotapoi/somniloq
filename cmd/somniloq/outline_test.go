@@ -54,7 +54,7 @@ func TestOutlineCmd_ListsUserTurns(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := outlineCmd([]string{"sess-1"}, staticDB(db), &out, &errOut)
+	code, err := outlineCmd([]string{"sess-1"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("outlineCmd: %v", err)
 	}
@@ -74,7 +74,7 @@ func TestOutlineCmd_SessionNotFound(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := outlineCmd([]string{"no-such"}, staticDB(db), &out, &errOut)
+	code, err := outlineCmd([]string{"no-such"}, staticDB(db), config{}, &out, &errOut)
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
@@ -87,7 +87,7 @@ func TestOutlineCmd_MissingSessionIDPrintsUsage(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := outlineCmd(nil, staticDB(db), &out, &errOut)
+	code, err := outlineCmd(nil, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("outlineCmd: %v", err)
 	}

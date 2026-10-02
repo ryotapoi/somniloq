@@ -49,17 +49,15 @@ func TestSessionsCmd_FormatJSON(t *testing.T) {
 		t.Fatalf("entries = %d, want 1", len(got))
 	}
 	want := map[string]any{
-		"source":                  "claude_code",
-		"sessionId":               "sess-1",
-		"project":                 "/Users/test/proj",
-		"title":                   "Title\twith\nline",
-		"startedAt":               "2026-03-28T15:00:00Z",
-		"endedAt":                 "2026-03-28T16:00:00Z",
-		"logicalDay":              "2026-03-28",
-		"messageCount":            float64(5),
-		"bodySize":                float64(86),
-		"nonCommandUserTurnCount": float64(3),
-		"firstNonCommandUserLine": "first\tline",
+		"source":       "claude_code",
+		"sessionId":    "sess-1",
+		"project":      "/Users/test/proj",
+		"title":        "Title\twith\nline",
+		"startedAt":    "2026-03-28T15:00:00Z",
+		"endedAt":      "2026-03-28T16:00:00Z",
+		"logicalDay":   "2026-03-28",
+		"messageCount": float64(5),
+		"bodySize":     float64(86),
 	}
 	for k, v := range want {
 		if got[0][k] != v {
@@ -99,7 +97,7 @@ func TestOutlineCmd_FormatJSON(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := outlineCmd([]string{"--format", "json", "sess-1"}, staticDB(db), &out, &errOut)
+	code, err := outlineCmd([]string{"--format", "json", "sess-1"}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("outlineCmd: %v", err)
 	}
@@ -349,7 +347,7 @@ func TestFormatFlag_Unknown(t *testing.T) {
 		}},
 		{"outline", func() (int, error) {
 			var out, errOut bytes.Buffer
-			return outlineCmd([]string{"--format", "xml", "sess-1"}, openDB, &out, &errOut)
+			return outlineCmd([]string{"--format", "xml", "sess-1"}, openDB, config{}, &out, &errOut)
 		}},
 		{"show", func() (int, error) {
 			var out, errOut bytes.Buffer

@@ -37,12 +37,6 @@ func TestMainDispatchSkipsBrokenConfigForConfigIndependentCommands(t *testing.T)
 			wantCode: 1,
 			want:     "unknown command: backfill",
 		},
-		{
-			name:     "outline",
-			args:     []string{"outline"},
-			wantCode: 1,
-			want:     "usage: somniloq outline",
-		},
 	}
 
 	for _, tt := range tests {
@@ -104,6 +98,10 @@ func TestMainDispatchSubcommandHelpAfterFlagsSkipsBrokenConfig(t *testing.T) {
 			name: "projects",
 			args: []string{"projects", "--format", "json", "--help"},
 		},
+		{
+			name: "outline with exclusion flag",
+			args: []string{"outline", "--exclude-user-message-pattern", "ignored", "--help"},
+		},
 	}
 
 	for _, tt := range tests {
@@ -125,12 +123,37 @@ func TestMainDispatchSubcommandHelpAfterFlagsSkipsBrokenConfig(t *testing.T) {
 func TestMainDispatchConfigDependentCommandLoadsBrokenConfig(t *testing.T) {
 	home := homeWithBrokenConfig(t)
 
-	code, stdout, stderr := runSomniloqMain(t, home, "sessions")
-	if code != 1 {
-		t.Fatalf("exit code = %d, want 1\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+	for _, command := range []string{"sessions", "outline"} {
+		t.Run(command, func(t *testing.T) {
+			code, stdout, stderr := runSomniloqMain(t, home, command)
+			if code != 1 {
+				t.Fatalf("exit code = %d, want 1\nstdout:\n%s\nstderr:\n%s", code, stdout, stderr)
+			}
+			if !strings.Contains(stderr, "parse config") {
+				t.Fatalf("stderr missing config error\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+			}
+		})
 	}
-	if !strings.Contains(stderr, "parse config") {
-		t.Fatalf("stderr missing config error\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+}
+
+func TestMainDispatchInvalidConfigPatternCannotBeOverriddenOrDisabled(t *testing.T) {
+	home := t.TempDir()
+	configDir := filepath.Join(home, ".somniloq")
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		t.Fatalf("create config dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(configDir, "config.json"), []byte(`{"excludeUserMessagePatterns": ["["]}`), 0o644); err != nil {
+		t.Fatalf("write invalid config: %v", err)
+	}
+
+	for _, args := range [][]string{
+		{"outline", "--exclude-user-message-pattern", "valid", "session"},
+		{"show", "--summary", "1", "--no-exclude-user-messages", "session"},
+	} {
+		code, stdout, stderr := runSomniloqMain(t, home, args...)
+		if code != 1 || !strings.Contains(stderr, "invalid excludeUserMessagePatterns pattern") {
+			t.Errorf("somniloq %v = (%d, stdout %q, stderr %q), want config validation error", args, code, stdout, stderr)
+		}
 	}
 }
 

@@ -24,6 +24,40 @@ func TestLoadConfig_MissingFileIsEmptyConfig(t *testing.T) {
 	if cfg.DayBoundary != "" {
 		t.Errorf("DayBoundary = %q, want empty", cfg.DayBoundary)
 	}
+	if cfg.ExcludeUserMessagePatterns != nil {
+		t.Errorf("ExcludeUserMessagePatterns = %v, want nil", cfg.ExcludeUserMessagePatterns)
+	}
+}
+
+func TestLoadConfig_ParsesExcludeUserMessagePatterns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"excludeUserMessagePatterns": ["^/", "^skip\\nthis$"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	want := []string{`^/`, `^skip\nthis$`}
+	if !reflect.DeepEqual(cfg.ExcludeUserMessagePatterns, want) {
+		t.Errorf("ExcludeUserMessagePatterns = %q, want %q", cfg.ExcludeUserMessagePatterns, want)
+	}
+}
+
+func TestLoadConfig_DoesNotMigrateCommandPatterns(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	if err := os.WriteFile(path, []byte(`{"commandPatterns": ["^/"]}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg, err := loadConfig(path)
+	if err != nil {
+		t.Fatalf("loadConfig: %v", err)
+	}
+	if len(cfg.ExcludeUserMessagePatterns) != 0 {
+		t.Errorf("ExcludeUserMessagePatterns = %v, want old commandPatterns to be ignored", cfg.ExcludeUserMessagePatterns)
+	}
 }
 
 func TestLoadConfig_InvalidJSONIsError(t *testing.T) {
@@ -43,16 +77,16 @@ func TestLoadConfig_InvalidJSONIsError(t *testing.T) {
 
 func TestLoadConfig_InvalidCommandPatternIsError(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"commandPatterns": ["["]}`), 0o644); err != nil {
+	if err := os.WriteFile(path, []byte(`{"excludeUserMessagePatterns": ["["]}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
 	_, err := loadConfig(path)
 	if err == nil {
-		t.Fatal("expected error for invalid commandPatterns, got nil")
+		t.Fatal("expected error for invalid excludeUserMessagePatterns, got nil")
 	}
-	if !strings.Contains(err.Error(), "invalid commandPatterns pattern") {
-		t.Errorf("err = %v, want invalid commandPatterns pattern", err)
+	if !strings.Contains(err.Error(), "invalid excludeUserMessagePatterns pattern") {
+		t.Errorf("err = %v, want invalid excludeUserMessagePatterns pattern", err)
 	}
 	if !strings.Contains(err.Error(), path) {
 		t.Errorf("err = %v, want the config path in the message", err)

@@ -31,7 +31,7 @@ func TestSessionsCmd_OutputColumns(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
 	}
 
-	const want = "sess-1\t2026-03-28 15:00 ~ 2026-03-28 16:00\t2026-03-28\t/Users/test/proj\tTitle with line\t5\t86\t3\tfirst line\tclaude_code\n"
+	const want = "sess-1\t2026-03-28 15:00 ~ 2026-03-28 16:00\t2026-03-28\t/Users/test/proj\tTitle with line\t5\t86\tclaude_code\n"
 	if got := out.String(); got != want {
 		t.Errorf("TSV = %q, want %q", got, want)
 	}
@@ -212,12 +212,12 @@ func TestSessionsCmdAt_RelativeFiltersShareSubsecondNow(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("sessionsCmdAt = %d, %v (stderr: %q)", code, err, errOut.String())
 	}
-	if got, want := out.String(), "included\t2026-03-29 11:59 ~\t2026-03-29\t\t\t0\t0\t0\t\tclaude_code\n"; got != want {
+	if got, want := out.String(), "included\t2026-03-29 11:59 ~\t2026-03-29\t\t\t0\t0\tclaude_code\n"; got != want {
 		t.Errorf("output = %q, want %q", got, want)
 	}
 }
 
-func newSessionSkipHintsDB(t *testing.T) *core.DB {
+func newSessionUserMessageExclusionDB(t *testing.T) *core.DB {
 	t.Helper()
 	db, err := core.OpenDB(":memory:")
 	if err != nil {
@@ -227,7 +227,7 @@ func newSessionSkipHintsDB(t *testing.T) *core.DB {
 
 	if err := db.UpsertSession(core.SessionMeta{
 		Source:    core.SourceCodex,
-		SessionID: "skip-hints",
+		SessionID: "exclude-all",
 		CWD:       "/Users/test/proj",
 		RepoPath:  "/Users/test/proj",
 		StartedAt: "2026-03-28T15:00:00Z",
@@ -253,7 +253,7 @@ func newSessionSkipHintsDB(t *testing.T) *core.DB {
 		if err := db.InsertMessage(core.NormalizedMessage{
 			Source:      core.SourceCodex,
 			UUID:        m.uuid,
-			SessionID:   "skip-hints",
+			SessionID:   "exclude-all",
 			Role:        m.role,
 			Content:     m.content,
 			Timestamp:   m.timestamp,
@@ -265,9 +265,9 @@ func newSessionSkipHintsDB(t *testing.T) *core.DB {
 	return db
 }
 
-func TestSessionsCmd_SkipHintColumnsExcludeCommands(t *testing.T) {
-	db := newSessionSkipHintsDB(t)
-	cfg := config{CommandPatterns: []string{`^日報生成`}}
+func TestSessionsCmd_DoesNotFilterRowsByUserMessageExclusions(t *testing.T) {
+	db := newSessionUserMessageExclusionDB(t)
+	cfg := config{ExcludeUserMessagePatterns: []string{`.*`}}
 
 	var out, errOut bytes.Buffer
 	code, err := sessionsCmd(nil, staticDB(db), cfg, &out, &errOut)
@@ -280,30 +280,11 @@ func TestSessionsCmd_SkipHintColumnsExcludeCommands(t *testing.T) {
 
 	line := strings.TrimSuffix(out.String(), "\n")
 	fields := strings.Split(line, "\t")
-	if len(fields) != 10 {
-		t.Fatalf("fields = %d, want 10: %q", len(fields), line)
+	if len(fields) != 8 {
+		t.Fatalf("fields = %d, want 8: %q", len(fields), line)
 	}
-	if fields[7] != "2" {
-		t.Errorf("NonCommandUserTurnCount column = %s, want 2", fields[7])
-	}
-	if fields[8] != "real work request" {
-		t.Errorf("FirstNonCommandUserLine column = %q, want sanitized first non-command line", fields[8])
-	}
-}
-
-func TestSessionsCmd_InvalidCommandPatternFailsBeforeOpeningDB(t *testing.T) {
-	openDB := func() (*core.DB, error) {
-		t.Fatal("openDB must not be called for invalid commandPatterns")
-		return nil, nil
-	}
-
-	var out, errOut bytes.Buffer
-	code, err := sessionsCmd(nil, openDB, config{CommandPatterns: []string{"["}}, &out, &errOut)
-	if code != 1 {
-		t.Errorf("exit code = %d, want 1", code)
-	}
-	if err == nil || !strings.Contains(err.Error(), "invalid commandPatterns pattern") {
-		t.Errorf("err = %v, want invalid commandPatterns pattern", err)
+	if fields[0] != "exclude-all" || fields[7] != "codex" {
+		t.Errorf("session columns = %v, want included row with source in final column", fields)
 	}
 }
 

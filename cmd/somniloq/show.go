@@ -10,8 +10,8 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const showUsageLine = "somniloq show [--source <source>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>] <session-id>\n" +
-	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--include-clear] [--short] [--format <fmt>]"
+const showUsageLine = "somniloq show [--source <source>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>] <session-id>\n" +
+	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>]"
 
 const showHelpDetails = `Output (markdown):
   One or more sessions. Each session has a title, Session, Source, Project, Started metadata, then message sections headed by role.
@@ -28,13 +28,16 @@ Notes:
   Use either <session-id> or --since/--until. --project only applies in time-range mode.
   --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
   --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent with <session-id>; it cannot be used with --since/--until.
-  --summary N shows first N user messages per session, skipping /clear and local-command-caveat unless --include-clear is set.
+  --summary N shows the first N user messages per session after applying excludeUserMessagePatterns.
+  --exclude-user-message-pattern may be repeated; patterns are ORed and replace config patterns.
+  --no-exclude-user-messages disables config exclusions for this invocation. Either exclusion flag requires --summary >= 1.
   --turn N or --turn N..M shows inclusive turn ranges; --tail N shows the last N turns.
   --turn and --tail share outline numbering and cannot be combined with --summary.
   If a session_id exists in multiple sources, use --source with the source shown by search; without it, show prints an ambiguity error with source/session candidates.
 
 Examples:
   somniloq show --summary 1 --since 24h --short
+  somniloq show --summary 1 --exclude-user-message-pattern '^<command-name>/clear</command-name>' --since 24h
   somniloq show --turn 40..60 <session-id>
   somniloq show --source codex <session-id>
   somniloq show --format json --tail 3 <session-id>`
@@ -51,8 +54,13 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	if *flags.summary < 0 {
 		return 1, errors.New("--summary must be >= 0")
 	}
-	if *flags.includeClear && *flags.summary == 0 {
-		return 1, errors.New("--include-clear requires --summary >= 1")
+	exclusionFlagsSet := flagWasProvided(fs, "exclude-user-message-pattern") || flagWasProvided(fs, "no-exclude-user-messages")
+	if exclusionFlagsSet && *flags.summary < 1 {
+		return 1, errors.New("user-message exclusion flags require --summary >= 1")
+	}
+	matcher, err := newUserMessageMatcher(cfg, *flags.excludePatterns, *flags.noExclusions)
+	if err != nil {
+		return 1, err
 	}
 	if *flags.tail < 0 {
 		return 1, errors.New("--tail must be >= 0")
@@ -148,7 +156,10 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 		var messages []core.MessageRow
 		if *flags.summary >= 1 {
-			messages, err = db.GetSummaryMessages(session.Source, session.SessionID, *flags.summary, *flags.includeClear)
+			messages, err = db.GetMessages(session.Source, session.SessionID)
+			if err == nil {
+				messages = filterSummaryMessages(messages, *flags.summary, matcher)
+			}
 		} else {
 			messages, err = db.GetMessages(session.Source, session.SessionID)
 			if err == nil && turnFiltered {
@@ -186,22 +197,41 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 type showFlags struct {
 	since, until, project, turnRange, format, source *string
-	short, includeClear                              *bool
+	short, noExclusions                              *bool
 	summary, tail                                    *int
+	excludePatterns                                  *stringListFlag
 }
 
 func newShowFlagSet() (*flag.FlagSet, showFlags) {
 	fs := flag.NewFlagSet("show", flag.ContinueOnError)
+	var excludePatterns stringListFlag
+	fs.Var(&excludePatterns, "exclude-user-message-pattern", "exclude matching user messages from --summary (repeatable; replaces config patterns)")
 	return fs, showFlags{
-		since:        fs.String("since", "", "filter by start time (relative, local date/datetime, or RFC3339 instant)"),
-		until:        fs.String("until", "", "filter sessions started before a relative, local date/datetime, or RFC3339 instant"),
-		project:      fs.String("project", "", "filter by repo path (literal substring match)"),
-		short:        fs.Bool("short", false, "shorten unaliased project to repo basename"),
-		summary:      fs.Int("summary", 0, "show first N user messages skipping /clear and local-command-caveat (0 disables)"),
-		includeClear: fs.Bool("include-clear", false, "keep /clear and local-command-caveat messages in --summary output (requires --summary >= 1)"),
-		turnRange:    fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)"),
-		tail:         fs.Int("tail", 0, "show only the last N turns (0 disables)"),
-		format:       fs.String("format", "markdown", "output format (markdown, json)"),
-		source:       fs.String("source", "", "source for session-id (claude_code, claude-code, codex, cursor_agent, cursor-agent)"),
+		since:           fs.String("since", "", "filter by start time (relative, local date/datetime, or RFC3339 instant)"),
+		until:           fs.String("until", "", "filter sessions started before a relative, local date/datetime, or RFC3339 instant"),
+		project:         fs.String("project", "", "filter by repo path (literal substring match)"),
+		short:           fs.Bool("short", false, "shorten unaliased project to repo basename"),
+		summary:         fs.Int("summary", 0, "show first N user messages after exclusions (0 disables)"),
+		noExclusions:    fs.Bool("no-exclude-user-messages", false, "disable user-message exclusions for this --summary invocation"),
+		turnRange:       fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)"),
+		tail:            fs.Int("tail", 0, "show only the last N turns (0 disables)"),
+		format:          fs.String("format", "markdown", "output format (markdown, json)"),
+		source:          fs.String("source", "", "source for session-id (claude_code, claude-code, codex, cursor_agent, cursor-agent)"),
+		excludePatterns: &excludePatterns,
 	}
+}
+
+func filterSummaryMessages(messages []core.MessageRow, limit int, matcher userMessageMatcher) []core.MessageRow {
+	capacity := min(limit, len(messages))
+	filtered := make([]core.MessageRow, 0, capacity)
+	for _, message := range messages {
+		if message.Role != "user" || matcher.excludes(message.Content) {
+			continue
+		}
+		filtered = append(filtered, message)
+		if len(filtered) == limit {
+			break
+		}
+	}
+	return filtered
 }

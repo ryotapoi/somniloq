@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"regexp"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,9 +16,8 @@ type config struct {
 	// ProjectAliases groups project names that refer to the same project
 	// over time (e.g. a renamed repository): canonical name -> old names.
 	ProjectAliases map[string][]string `json:"projectAliases"`
-	// CommandPatterns marks user turns that should be treated as commands
-	// when deriving sessions skip-hint columns.
-	CommandPatterns []string `json:"commandPatterns"`
+	// ExcludeUserMessagePatterns filters user messages from outline and show summaries.
+	ExcludeUserMessagePatterns []string `json:"excludeUserMessagePatterns"`
 	// DayBoundary shifts date-only filters and sessions logical-day display.
 	// Empty means the calendar day starts at 00:00 local time.
 	DayBoundary string `json:"dayBoundary"`
@@ -40,7 +38,7 @@ func loadConfig(path string) (config, error) {
 	if err := json.Unmarshal(data, &c); err != nil {
 		return config{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
-	if _, err := compileCommandPatterns(c.CommandPatterns); err != nil {
+	if _, err := compileUserMessagePatterns(c.ExcludeUserMessagePatterns); err != nil {
 		return config{}, fmt.Errorf("parse config %s: %w", path, err)
 	}
 	if _, err := parseDayBoundary(c.DayBoundary); err != nil {
@@ -98,41 +96,4 @@ func (c config) expandProject(project string) []string {
 		return append([]string{canonical}, oldNames...)
 	}
 	return []string{project}
-}
-
-type commandMatcher struct {
-	patterns []*regexp.Regexp
-}
-
-func newCommandMatcher(cfg config) (commandMatcher, error) {
-	patterns, err := compileCommandPatterns(cfg.CommandPatterns)
-	if err != nil {
-		return commandMatcher{}, err
-	}
-	return commandMatcher{patterns: patterns}, nil
-}
-
-func compileCommandPatterns(patterns []string) ([]*regexp.Regexp, error) {
-	compiled := make([]*regexp.Regexp, 0, len(patterns))
-	for _, pattern := range patterns {
-		re, err := regexp.Compile(pattern)
-		if err != nil {
-			return nil, fmt.Errorf("invalid commandPatterns pattern %q: %w", pattern, err)
-		}
-		compiled = append(compiled, re)
-	}
-	return compiled, nil
-}
-
-func (m commandMatcher) isCommand(content string) bool {
-	text := strings.TrimSpace(content)
-	if strings.HasPrefix(text, "/") {
-		return true
-	}
-	for _, pattern := range m.patterns {
-		if pattern.MatchString(text) {
-			return true
-		}
-	}
-	return false
 }

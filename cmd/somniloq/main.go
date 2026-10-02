@@ -86,7 +86,8 @@ func main() {
 		cfg := loadCommandConfig(args[0], args[1:])
 		code, cmdErr = showCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	case "outline":
-		code, cmdErr = outlineCmd(args[1:], open, os.Stdout, os.Stderr)
+		cfg := loadCommandConfig(args[0], args[1:])
+		code, cmdErr = outlineCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
 	case "search":
 		cfg := loadCommandConfig(args[0], args[1:])
 		code, cmdErr = searchCmd(args[1:], open, cfg, os.Stdout, os.Stderr)
@@ -167,6 +168,9 @@ func configCommandFlagSet(command string) *flag.FlagSet {
 		return fs
 	case "projects":
 		fs, _ := newProjectsFlagSet()
+		return fs
+	case "outline":
+		fs, _ := newOutlineFlagSet()
 		return fs
 	}
 	return nil

@@ -25,17 +25,15 @@ func validateFormat(format string, supported ...string) error {
 // empty — so consumers get a stable schema.
 
 type sessionJSON struct {
-	Source                  string `json:"source"`
-	SessionID               string `json:"sessionId"`
-	Project                 string `json:"project"`
-	Title                   string `json:"title"`
-	StartedAt               string `json:"startedAt"`
-	EndedAt                 string `json:"endedAt"`
-	LogicalDay              string `json:"logicalDay"`
-	MessageCount            int    `json:"messageCount"`
-	BodySize                int    `json:"bodySize"`
-	NonCommandUserTurnCount int    `json:"nonCommandUserTurnCount"`
-	FirstNonCommandUserLine string `json:"firstNonCommandUserLine"`
+	Source       string `json:"source"`
+	SessionID    string `json:"sessionId"`
+	Project      string `json:"project"`
+	Title        string `json:"title"`
+	StartedAt    string `json:"startedAt"`
+	EndedAt      string `json:"endedAt"`
+	LogicalDay   string `json:"logicalDay"`
+	MessageCount int    `json:"messageCount"`
+	BodySize     int    `json:"bodySize"`
 }
 
 type projectJSON struct {
@@ -75,19 +73,17 @@ type showSessionJSON struct {
 	Messages  []messageJSON `json:"messages"`
 }
 
-func newSessionJSON(r core.SessionRow, project, logicalDay string, userTurns sessionUserTurnSummary) sessionJSON {
+func newSessionJSON(r core.SessionRow, project, logicalDay string) sessionJSON {
 	return sessionJSON{
-		Source:                  string(r.Source),
-		SessionID:               r.SessionID,
-		Project:                 project,
-		Title:                   r.CustomTitle,
-		StartedAt:               r.StartedAt,
-		EndedAt:                 r.EndedAt,
-		LogicalDay:              logicalDay,
-		MessageCount:            r.MessageCount,
-		BodySize:                r.BodySize,
-		NonCommandUserTurnCount: userTurns.NonCommandUserTurnCount,
-		FirstNonCommandUserLine: userTurns.FirstNonCommandUserLine,
+		Source:       string(r.Source),
+		SessionID:    r.SessionID,
+		Project:      project,
+		Title:        r.CustomTitle,
+		StartedAt:    r.StartedAt,
+		EndedAt:      r.EndedAt,
+		LogicalDay:   logicalDay,
+		MessageCount: r.MessageCount,
+		BodySize:     r.BodySize,
 	}
 }
 

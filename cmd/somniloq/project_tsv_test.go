@@ -22,7 +22,7 @@ func TestProjectOutput_ControlCharacters(t *testing.T) {
 		columns int
 		project int
 	}{
-		{"sessions", sessionsCmd, 10, 3},
+		{"sessions", sessionsCmd, 8, 3},
 		{"projects", projectsCmd, 2, 0},
 	}
 	for _, command := range commands {

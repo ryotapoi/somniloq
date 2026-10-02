@@ -48,12 +48,14 @@ The optional JSON config is `~/.somniloq/config.json`; the database defaults to 
 ```json
 {
   "projectAliases": {"new-name": ["old-name"]},
-  "commandPatterns": ["^Daily report"],
+  "excludeUserMessagePatterns": ["^<command-name>/clear</command-name>"],
   "dayBoundary": "04:00"
 }
 ```
 
-`projectAliases` groups renamed projects, `commandPatterns` marks user turns treated as commands in session list hints, and `dayBoundary` sets the start of a logical day in local time. Omit any keys you do not need.
+`projectAliases` groups renamed projects, `excludeUserMessagePatterns` filters user messages from `outline` and `show --summary`, and `dayBoundary` sets the start of a logical day in local time. Patterns use Go regular expressions against the trimmed full message. Omit any keys you do not need.
+
+For v1.0.0, `commandPatterns` is not migrated automatically. Moving its patterns to `excludeUserMessagePatterns` changes their effect from session-list hints to displayed messages; add `^/` explicitly if slash-prefixed messages should be excluded. `show --summary` no longer skips `/clear` or command caveats by default; configure patterns for those messages or use `--no-exclude-user-messages` for one summary call. The sessions TSV drops two user-turn fields and moves `source` to column 8; JSON drops `nonCommandUserTurnCount` and `firstNonCommandUserLine`.
 
 ## More information
 

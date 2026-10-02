@@ -35,7 +35,7 @@ func TestUsageErrorsKeepExactStderr(t *testing.T) {
 		{
 			name: "outline",
 			run: func(errOut *bytes.Buffer) (int, error) {
-				return outlineCmd([]string{"one", "two"}, openDB, &bytes.Buffer{}, errOut)
+				return outlineCmd([]string{"one", "two"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
 			want: "error: too many arguments\nusage: " + outlineUsageLine + "\n",
 		},

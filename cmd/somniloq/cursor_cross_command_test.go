@@ -94,7 +94,7 @@ func TestCursorFixture_CrossCommandReferenceContract(t *testing.T) {
 
 		out.Reset()
 		errOut.Reset()
-		code, err = outlineCmd([]string{cursorFixtureSessionID}, staticDB(newCursorCrossCommandDB(t, false)), &out, &errOut)
+		code, err = outlineCmd([]string{cursorFixtureSessionID}, staticDB(newCursorCrossCommandDB(t, false)), config{}, &out, &errOut)
 		if err != nil || code != 0 || !strings.HasPrefix(out.String(), "1\t\t72\tPlan a harmless sample.\n2\t\t50\t") {
 			t.Fatalf("outline = %d, %v, %q", code, err, out.String())
 		}
