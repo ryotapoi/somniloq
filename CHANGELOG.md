@@ -2,6 +2,40 @@
 
 English | [日本語](CHANGELOG.ja.md)
 
+## v0.12.5 — 2026-10-02
+
+### Changed
+
+- `search` now loads only message IDs and roles when assigning turn numbers, avoiding an additional fetch of every message body in a matching session. Search results, snippets, and turn numbers remain unchanged.
+
+### Fixed
+
+- Claude Code import now reports user and assistant records with a missing or empty `sessionId` or `uuid` as unparsed instead of saving them under empty IDs. Valid records around them continue to import normally; existing stored data is not repaired automatically.
+
+## v0.12.4 — 2026-10-01
+
+### Changed
+
+- Simplified CLI, database query, and import internals while preserving their existing behavior; consolidated redundant tests and retained coverage for the public command and import contracts.
+
+## v0.12.3 — 2026-10-01
+
+### Fixed
+
+- Differential import now retries an unfinished final JSONL line after the file grows, while still importing a complete final record without a newline.
+- Codex import now reports `session_meta` records with a missing or empty ID as unparsed instead of merging subsequent messages into an empty-ID session.
+- Malformed stored timestamps are treated as unknown for filtering and ordering, so one bad timestamp no longer prevents `sessions`, `projects`, `show`, or `search` from reading valid data. The original value remains in stored and JSON output.
+- Claude Code and Codex sessions from existing linked Git worktrees now group under the main repository in project listings and filters. Previously stored non-NULL paths require a full re-import to update.
+- `sessions` and `import` now reject unexpected positional arguments, including arguments that previously caused later flags to be ignored.
+- Date-only time filters and `logical_day` now use the configured local clock boundary across daylight saving time changes.
+- `sessions` and `projects` now flatten tabs and line breaks in TSV project names, preserving row and column boundaries while leaving JSON values unchanged.
+
+## v0.12.2 — 2026-10-01
+
+### Changed
+
+- Consolidated redundant tests while retaining regression coverage for command output and import behavior; CLI and stored-data behavior are unchanged.
+
 ## v0.12.1 — 2026-09-24
 
 ### Changed

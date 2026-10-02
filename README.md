@@ -1,276 +1,64 @@
 # somniloq
 
-A CLI tool that imports Claude Code, Codex, and Cursor Agent session logs (JSONL) into SQLite for searching and browsing.
-It parses JSONL files under `~/.claude/projects/`, `~/.codex/sessions/`, and `~/.cursor/projects/`, enabling cross-session search of past conversations.
+somniloq is a local CLI for importing Claude Code, Codex, and Cursor Agent session logs into SQLite, then searching and reading conversations across sessions. It reads JSONL under `~/.claude/projects/`, `~/.codex/sessions/`, and `~/.cursor/projects/`.
 
 [日本語版 README](README.ja.md)
 
-## Features
+## Install
 
-- **Differential import** — Auto-detects Claude Code, Codex, and Cursor Agent JSONL files and imports only what's new
-- **Cross-session search** — Search message bodies and filter by project name and time range
-- **Long-session navigation** — Check session size, skim an outline, then read only the turns you need
-- **Markdown and JSON output** — Export readable Markdown or script-friendly JSON
-- **Built for Coding Agents** — Invoke from skills to use past sessions as context
-- **Fully local** — No external services required. Pure Go + SQLite
-
-## Installation
+Requires Go 1.27.1 or later.
 
 ```bash
 go install github.com/ryotapoi/somniloq/cmd/somniloq@latest
 ```
 
-## Quick Start
+## Quick start
 
 ```bash
-# Import Claude Code, Codex, and Cursor Agent session logs
-somniloq import
-
-# List sessions
-somniloq sessions
-
-# Sessions from the last 24 hours
-somniloq sessions --since 24h
-
-# Sessions saved or updated in the last 24 hours
-somniloq sessions --imported-since 24h
-
-# Search message bodies
-somniloq search --since 7d "auth bug"
-
-# Skim a long session, then read only relevant turns
-somniloq outline <session-id>
-somniloq show --turn 40..60 <session-id>
-
-# Show session content
-somniloq show <session-id>
-
-# Export the last week as Markdown
-somniloq show --since 7d
+somniloq import                         # Import new log content from all three sources
+somniloq sessions --since 7d           # Find recent sessions
+somniloq search "auth bug"              # Search message bodies across sessions
+somniloq outline <session-id>           # Skim a long session by turn
+somniloq show --turn 12..18 <session-id> # Read selected turns
 ```
+
+`sessions` and `search` results include a `source` value. If the same session ID exists in multiple sources, pass that value when reading it, for example `somniloq show --source codex <session-id>`. Without `--source`, `show` and `outline` report the matching sources instead of choosing one.
 
 ## Commands
 
-| Command | Description |
-|---------|-------------|
-| `import` | Import Claude Code, Codex, and Cursor Agent JSONL files into SQLite |
-| `backfill` | Migrate/repair existing DB rows |
-| `sessions` | List sessions |
-| `projects` | List projects with session counts |
-| `show` | Show session content in Markdown |
-| `outline` | List a session's user messages as turn number, time, body size, and first line |
-| `search` | Search message content across sessions with turn numbers |
+| Command | Use |
+|---------|-----|
+| `import` | Import new log content; use `--source claude-code`, `codex`, or `cursor-agent` to select one source. |
+| `sessions` | List sessions; `--since 24h` filters by session time, while `--imported-since 24h` finds sessions saved or updated recently. |
+| `projects` | List projects and session counts. |
+| `search` | Search message bodies; use `--project` or `--since` to narrow results. |
+| `outline` | List user turns in a session before reading a long conversation. |
+| `show` | Read a session in Markdown; use `--turn` or `--tail` to read part of it. |
+| `backfill` | Migrate or repair an existing database after upgrading and before importing; it asks before deleting rows. |
 
-### import
+`import` is incremental by default. **`somniloq import --full` deletes the entire somniloq database before re-importing.** This also applies when `--source` selects one source: rows from other sources are deleted, and only the selected source is re-imported. Check that the original logs for everything you want to keep are available before using it. `--full` asks for confirmation; `--yes` skips the prompt.
 
-```bash
-somniloq import              # differential import (default)
-somniloq import --source claude-code
-somniloq import --source codex
-somniloq import --source cursor-agent
-somniloq import --full       # full re-import (with confirmation)
-somniloq import --full --yes # skip confirmation
-```
-
-Imports Claude Code JSONL from `~/.claude/projects/`, Codex rollout JSONL from `~/.codex/sessions/`, and Cursor Agent transcripts from `~/.cursor/projects/`. Use `--source all|claude-code|codex|cursor-agent` to limit the import target. The default is `all`.
-
-`--full` always clears the whole somniloq DB before re-importing. If you run `somniloq import --source codex --full`, Claude Code rows are deleted too, then only Codex logs are imported.
-
-Claude Code と Codex の実在する通常の Git linked worktree は、本体 repository と同じ project に集約する。既存の `/.claude/worktrees/` marker の優先解決も維持する。保存済みの非 NULL worktree path は自動更新されず、不変ログは差分 import でスキップされる。元ログと対象 worktree が残っていれば `somniloq import --full --yes` で再構築できる。DB 全体を削除して指定 source のみを取り込むため、保持したい全 source のログを確認して実行する。`backfill` は NULL のみが対象で、消失した一般 worktree の本体は推測しない。
-
-Errors are non-fatal: lines that cannot be parsed (broken JSON, malformed payloads) are skipped and counted in the summary (`... N unparsed lines`). To make schema changes diagnosable, the first five parse/normalization failures are listed on stderr as `file:line: error`; they do not change the import exit code. Unreadable directories or files are skipped while the rest is still imported; those errors are listed on stderr and make the exit code 1. A missing source directory is treated as an unused source, not an error.
-
-### backfill
-
-```bash
-somniloq backfill            # repair existing rows (with confirmation if rows will be deleted)
-somniloq backfill --yes      # skip confirmation
-```
-
-Migrates and repairs DB rows produced by older versions. Specifically:
-
-- Migrates v0.3 databases to the v0.4 schema (`source` columns and `(source, session_id)` session keys).
-- Resolves `repo_path` for sessions where it is `NULL` and `cwd` is non-empty.
-- Deletes `sessions` rows that have no `messages` (leftover meta-only rows from v0.2.x).
-
-Run `backfill` once after upgrading to v0.4 before importing. When there are sessions to delete, `backfill` prompts before proceeding (default `No`). `--yes` skips the prompt; in non-interactive environments (pipes, CI), `--yes` is required if any rows would be deleted. Re-running is safe.
-
-### sessions
-
-```bash
-somniloq sessions                        # all sessions
-somniloq sessions --since 24h            # last 24 hours
-somniloq sessions --imported-since 24h   # sessions saved or updated in the last 24 hours
-somniloq sessions --since 7d             # last 7 days
-somniloq sessions --since 2026-03-28     # after a date (local time)
-somniloq sessions --until 2026-03-28     # before a date (local time)
-somniloq sessions --since 2026-03-28 --day-boundary 04:00  # after the logical day boundary
-somniloq sessions --since 7d --until 2h  # 7 days ago to 2 hours ago
-somniloq sessions --project myapp        # substring match against repo_path
-somniloq sessions --short                # basename of repo_path for unaliased projects
-somniloq sessions --format json          # JSON array instead of TSV
-```
-
-Output is TSV: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`, `source` (`claude_code`, `codex`, or `cursor_agent`).
-
-`logical_day` is derived at query time from `ended_at` (or `started_at` when `ended_at` is empty), by comparing the timestamp with that local calendar day’s `dayBoundary`: before the boundary belongs to the previous calendar day, and at or after it belongs to the current day. Sessions are not split across days.
-
-Sessions with an unknown timestamp remain visible without a time filter, but do not match `--since` or `--until`. When both timestamps are unknown, the TSV time range and Markdown Started value are empty.
-
-保存済み timestamp が RFC3339 として解釈できない場合、比較上は未知として扱い、時刻 filter には一致させず、NULL と同じ順（昇順で先、降順で後、message 同値は挿入順）に並べる。filter なしでは行・本文を表示し、不正文字列は保存・JSON 出力・時刻表示にそのまま残す。CLI の不正な時刻引数はエラーのまま。
-
-`sessions --imported-since <time>` filters by the inclusive `imported_at` lower bound. It accepts the same relative, local-date, minute-precision, and RFC3339-instant forms as `--since`, but a date starts at local midnight and ignores `--day-boundary`. It combines with `--since`, `--until`, and `--project` using AND. `imported_at` is the UTC, whole-second start time of processing the JSONL file that last saved or updated the session; it is not the time of the overall CLI invocation or the latest invocation, a message-change timestamp, commit time, or an exactly-once consumption watermark. Skipping an unchanged file does not update `imported_at`. Pass the output `source` and `session_id` to `somniloq show --source <source> <session-id>` to read the session.
-
-When `projectAliases` matches a repo path or basename, project output uses only the canonical name.
-
-`body_size` is the total body size in bytes (sidechain excluded), so you can tell whether a session is large before `show`ing it.
-
-`non_command_user_turn_count` and `first_non_command_user_line` are skip hints for consumers: they use the same sidechain-excluded user-turn population as `outline`, then ignore user turns whose trimmed content starts with `/` or matches a configured `commandPatterns` regex. The CLI only reports these values; it does not skip sessions.
-
-`--format json` emits a JSON array with `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `logicalDay`, `messageCount`, `bodySize`, `nonCommandUserTurnCount`, `firstNonCommandUserLine`. JSON timestamps are the stored RFC3339 UTC values (see "JSON output" below).
-
-### projects
-
-```bash
-somniloq projects             # all projects
-somniloq projects --since 7d  # projects active in the last 7 days
-somniloq projects --short     # basename of repo_path for unaliased projects
-somniloq projects --format json
-```
-
-Output is TSV: `project`, `session_count`. With `--format json`: `project`, `sessionCount`. Alias groups are displayed and counted under the canonical project name.
-
-Sessions with an unknown repository remain in the empty project group without a filter; they never match `--project`, including a literal `%`.
-
-### show
-
-```bash
-somniloq show <session-id>                              # single session
-somniloq show --source codex <session-id>               # select a source-qualified session
-somniloq show --since 24h                               # last 24 hours
-somniloq show --since 2026-03-28 --until 2026-03-29     # date range
-somniloq show --since 7d --project myapp                # filter by project
-somniloq show --summary 1 --since 24h                   # first user message per session
-somniloq show --summary 3 --since 24h                   # first 3 user messages per session
-somniloq show --short --since 24h                       # basename of repo_path for unaliased projects
-somniloq show --turn 40..60 <session-id>                # only turns 40-60
-somniloq show --tail 3 <session-id>                     # only the last 3 turns
-somniloq show --format json <session-id>                # JSON instead of Markdown
-```
-
-`--turn` / `--tail` use the same turn numbering as `outline` (1-based, incremented on each user message), so you can skim the outline first and read only the range you need. A turn includes the user message and the replies that follow it. `--turn` and `--tail` are mutually exclusive, cannot be combined with `--summary`, and in bulk mode (`--since`/`--until`) apply to each listed session independently.
-
-Markdown metadata includes `Source`. `show` and `outline` accept `--source claude_code|claude-code|codex|cursor_agent|cursor-agent` with a session ID, so use the `source` value from a search result to select the matching session. If `--source` is omitted and a session ID exists in multiple sources, they report the source/session candidates as an ambiguity error rather than selecting one. `--source` cannot be used with `show --since`/`--until`; `all`, an empty value, and unknown sources are rejected.
-
-`--format json` emits a JSON array of sessions — always an array, even for a single session ID — where each element has `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, and `messages` (`role`, `content`, `timestamp`). `--summary` / `--turn` / `--tail` filtering applies to `messages` as-is.
-
-### outline
-
-```bash
-somniloq outline <session-id>                 # user messages as turn number, time, body size, and first line
-somniloq outline --source cursor_agent <session-id> # select a source-qualified session
-somniloq outline --format json <session-id>  # JSON instead of TSV
-```
-
-Grasp the structure of a long session before `show`ing it in full. Output is TSV: `turn`, `time`, `body_size`, `first_line`. Turn numbers start at 1 and increment on each user message (sidechain rows are excluded). `body_size` is the total UTF-8 byte size of all non-sidechain message bodies in that turn, including replies. With `--format json`: `turn`, `timestamp`, `bodySize`, `firstLine`.
-
-### search
-
-```bash
-somniloq search "auth bug"                          # search all message bodies
-somniloq search --since 7d "auth"                   # messages written in the last 7 days
-somniloq search --since 2026-03-28 --day-boundary 04:00 "auth"  # messages since 04:00 on that local day
-somniloq search --since 7d --project myapp "auth"   # narrowed by project
-somniloq search --limit 50 --offset 50 "auth bug"   # next 50 results
-somniloq search --format json "auth bug"            # JSON search results
-```
-
-Default output is TSV: `session_id`, `turn`, `time`, `project`, `snippet`, `source` (the internal identifier: `claude_code`, `codex`, or `cursor_agent`), newest first. `--format json` emits an array with `source`, `sessionId`, `turn`, `timestamp`, `project`, and `snippet`; timestamps and snippets retain their stored/raw values. `turn` uses the same numbering as `outline` and `show --turn`, so a hit can feed directly into `somniloq show --source <source> --turn <N> <session_id>` or `somniloq outline --source <source> <session_id>`. Matching follows SQLite LIKE: case-insensitive for ASCII only; `%`, `_`, and `\` in a query are literal text. Unlike `sessions`/`show`, `--since`/`--until` filter on the **message** timestamp — the time the content was written, not when the session started. Date-only filters use `dayBoundary`. Sidechain messages are excluded. `--limit N` returns at most N results (N >= 1; omitted means unlimited), and `--offset M` skips M ordered results (M >= 0; default 0) after filtering and sorting. Continue with a fixed query/filter and increasing `--offset`; pages are stable only while the DB and resolved time conditions are fixed. Database changes and snapshots are unsupported.
-
-### JSON output
-
-`sessions`, `projects`, `outline`, `search` (`--format tsv|json`) and `show` (`--format markdown|json`) support JSON output for scripts. Rules common to all commands:
-
-- Always a JSON array; empty results print `[]`.
-- Timestamps are the stored RFC3339 UTC values, not the local-time display format.
-- Strings are raw values (no tab/newline sanitizing; JSON escaping covers it). `title` is the raw custom title with no session-id fallback.
-- `project` uses the canonical project alias when configured; otherwise it honors `--short`, and without `--short` you get the raw `repo_path`.
+Use `somniloq <command> --help` for flags, output formats, and examples. `sessions`, `projects`, `search`, and `outline` support `--format json`; `show` supports Markdown or JSON.
 
 ## Configuration
 
-Optional config file at `~/.somniloq/config.json` (override with the global `--config` flag). A missing file is fine; broken JSON is an error.
+The optional JSON config is `~/.somniloq/config.json`; the database defaults to `~/.somniloq/somniloq.db`. Set another path with the global `--config` or `--db` flag, before the command name.
 
 ```json
 {
-  "projectAliases": {
-    "newname": ["oldname"]
-  },
+  "projectAliases": {"new-name": ["old-name"]},
   "commandPatterns": ["^Daily report"],
   "dayBoundary": "04:00"
 }
 ```
 
-`projectAliases` groups project names that refer to the same project over time (e.g. a renamed repository): current name → old names. When a `--project` value exactly matches any name in a group, the filter expands to the whole group, so sessions recorded under either name are found. Non-matching values behave as before. Project filtering is a literal substring match, including `%`, `_`, and `\`; empty or unknown `repo_path` values never match it and remain in the empty project group without a filter. Filtering applies to `sessions`, `show`, and `search`. Project display in `sessions`, `show`, `projects`, and `search` uses only the canonical name when the stored `repo_path` or basename matches an alias group; `projects` also aggregates those rows under the canonical name.
+`projectAliases` groups renamed projects, `commandPatterns` marks user turns treated as commands in session list hints, and `dayBoundary` sets the start of a logical day in local time. Omit any keys you do not need.
 
-`commandPatterns` is a list of Go regular expressions used only by `sessions` skip-hint columns. Each pattern matches against the trimmed full user message. Invalid regular expressions make config loading fail, the same as broken JSON, so typos do not silently disable the setting.
+## More information
 
-`dayBoundary` sets the logical day start time as `HH:MM` on the local clock, including DST transition days. Date-only `--since` includes the boundary on the specified calendar day, while `--until` excludes the boundary on the next calendar day. `logical_day` compares against the same boundary instant. Missing or repeated local times follow Go’s `time.Date` resolution. It defaults to `00:00` and can be overridden per command with `--day-boundary` on `sessions` and `search`. It only changes date-only `--since`/`--until` values and the `sessions` logical-day column; stored timestamps stay raw, so changing the boundary does not require re-import.
-
-## Common Options
-
-| Option | Description | Default |
-|--------|-------------|---------|
-| `--db <path>` | Path to SQLite database | `~/.somniloq/somniloq.db` |
-| `--config <path>` | Path to config file (JSON) | `~/.somniloq/config.json` |
-| `--version` | Print version and exit | — |
-
-> Requires SQLite 3.35 or later (for `ALTER TABLE ... DROP COLUMN`). The bundled `modernc.org/sqlite` driver ships with a recent SQLite, so no separate install is needed.
-
-### Time Filters
-
-`--since` and `--until` accept the following formats:
-
-| Format | Example | Meaning |
-|--------|---------|---------|
-| Relative | `30m`, `24h`, `7d` | That amount of time ago |
-| Date | `2026-03-28` | The configured local `dayBoundary` on that day for `sessions`/`search`; otherwise 00:00 local time |
-| Local datetime | `2026-03-28T15:00` | Exact local time |
-| RFC3339 instant | `2026-03-28T15:00:00Z`, `2026-03-29T00:00:00+09:00` | Exact instant using the explicit UTC or numeric offset |
-
-## Upgrading to v0.4
-
-v0.4 adds Codex support and changes the session key to include `source`. Existing databases need a one-time migration/repair through `backfill`.
-
-1. **Back up the DB.** `backfill` deletes orphan rows (see below), so copy `~/.somniloq/somniloq.db` aside first.
-2. **Install the v0.4 binary**, then run:
-   ```bash
-   somniloq backfill
-   ```
-   This migrates v0.3 rows to the v0.4 schema, resolves `repo_path` for older rows, and removes `sessions` rows that have no `messages` (leftovers from the v0.2.x meta-only INSERT path).
-3. **Import current logs.**
-   ```bash
-   somniloq import
-   ```
-4. **Optional — refill JSONL you previously archived.** If you moved old Claude Code JSONL out of `~/.claude/projects/`, copy only the missing files back, then re-import:
-   ```bash
-   cp -rn /path/to/old-projects/. ~/.claude/projects/
-   somniloq import --full --yes
-   ```
-
-### CLI behavior changes
-
-- `--project` now matches `repo_path` only. The previous fallback to a `project_dir` column is gone, so older sessions whose `repo_path` is still `NULL` will not match `--project` until you run `somniloq backfill`.
-- `sessions` / `projects` TSV output shows `project` from `repo_path` (no `project_dir` fallback column). Configured project aliases display as the canonical name.
-- `--short` shows `filepath.Base(repo_path)` for unaliased projects.
-- `import` now imports Claude Code, Codex, and Cursor Agent logs by default. Select one source with `--source claude-code|codex|cursor-agent`.
-- From v0.12.0, `search` queries and `--project` treat `%`, `_`, and `\` as literal text rather than wildcards. Results for old wildcard patterns therefore change; there is no wildcard mode. No database migration, backfill, or re-import is required.
-
-## Documentation
-
+- [CLI behavior and configuration](docs/rules/scope.md)
+- [Project purpose and non-goals](docs/rules/mission.md)
 - [Changelog](CHANGELOG.md)
-- [Mission and non-goals](docs/rules/mission.md)
-- [Features, CLI, and schema](docs/rules/scope.md)
-- [Module structure and dependencies](docs/rules/architecture.md)
 
 ## License
 
