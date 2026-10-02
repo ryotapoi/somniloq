@@ -24,6 +24,7 @@ JSON fields:
 Notes:
   Flags must come before <session-id>.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
+  Unknown or invalid stored start times do not match time filters.
   Use either <session-id> or --since/--until. --project only applies in time-range mode.
   --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
   --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent with <session-id>; it cannot be used with --since/--until.

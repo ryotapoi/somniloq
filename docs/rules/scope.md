@@ -96,6 +96,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - 表示は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合、デフォルト表示は `repo_path` をそのまま
 - `--short` は alias 非一致時に `filepath.Base(repo_path)`（ハイフン保持）
 - 出力 TSV の列: `session_id`, `started_at ~ ended_at`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `non_command_user_turn_count`, `first_non_command_user_line`, `source`。source は `claude_code` / `codex` / `cursor_agent`
+- TSV の `project` と `custom_title` はタブ・改行を空白に置換し、列と行の境界を保つ。JSON は生の文字列を出す
 - `logical_day` は `ended_at`（無ければ `started_at`）をローカルタイムに変換し、その暦日の `dayBoundary` の境界時点より前なら前暦日、境界以降なら当暦日（`YYYY-MM-DD`）として出す。セッションを途中で分割せず、表示時に計算する
 - `body_size` は非 sidechain メッセージの本文合計サイズ（UTF-8 バイト数）。show が出力する量の予測値として使う（show 前に大きいセッションかを判定する用途）。文字数でなくバイト数なのは、コンテキスト量の感覚と一致させるため。`message_count` は従来どおり sidechain を含む全行数
 - `non_command_user_turn_count` は outline と同じ user turn 母集団（`GetMessages` の sidechain 除外済み全メッセージ列に `assignTurns` を適用し、user メッセージだけを拾う）から、コマンド扱いの user turn を除いた件数。コマンド扱いは、本文を trim した文字列が `/` で始まる場合、または config の `commandPatterns` のいずれかに正規表現一致する場合。CLI はこの値でセッションを除外せず、一覧を読む側がスキップ判断に使う
@@ -108,6 +109,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - `--since`/`--until` で時刻フィルタ（`started_at` 基準）。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な started_at は時刻条件に一致しない。date-only は従来どおりローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
 - SQL 側の集約キーは `repo_path` 一本。本体と worktree・サブディレクトリは取り込み時に同じ `repo_path` へ解決され、その保存値で集約される
 - 出力 1 列目は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` そのもの
+- TSV の project 名はタブ・改行を空白に置換し、列と行の境界を保つ。JSON は生の文字列を出す
 - alias により同じ canonical 名になる行は cmd 層で session count を合算する
 - `--short` は alias 非一致時に `filepath.Base(repo_path)`
 - ソート: 直近セッション開始順（降順）

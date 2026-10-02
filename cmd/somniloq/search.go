@@ -30,7 +30,9 @@ Notes:
   LIKE is ASCII-case-insensitive; query text, including %, _, and \, is literal.
   --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
   --since/--until filter message timestamps, not session start time.
+  Unknown or invalid stored message timestamps do not match time filters.
   Date-only --since/--until values use --day-boundary or config dayBoundary.
+  Date-only boundaries follow local calendar days across daylight saving time changes.
   --limit returns at most N results (N >= 1); --offset skips N ordered results (N >= 0).
   Continue a fixed search with --limit and increasing --offset. Database changes or
   different resolved relative-time filters can change later pages.

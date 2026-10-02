@@ -9,7 +9,7 @@ import (
 )
 
 const projectsHelpDetails = `Columns (TSV, in order):
-  project: canonical alias name when configured, otherwise repo_path or basename with --short.
+  project: canonical alias name when configured, otherwise repo_path or basename with --short; tabs/newlines flattened.
   session_count: number of sessions for that project.
 
 JSON fields:
@@ -17,8 +17,10 @@ JSON fields:
 
 Notes:
   Projects are grouped by repo_path in SQL, then alias-equivalent rows are merged for display.
+  Existing linked Git worktrees share the main repository's repo_path when imported.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   --since/--until filter session start time. Date-only filters use local 00:00; dayBoundary does not apply to projects.
+  Unknown or invalid stored start times do not match time filters.
   --short only affects projects that do not match projectAliases.
 
 Examples:

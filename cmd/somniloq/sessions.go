@@ -12,9 +12,9 @@ import (
 const sessionsHelpDetails = `Columns (TSV, in order):
   session_id: source-local session identifier.
   time_range: local started_at ~ ended_at; ended_at may be empty.
-  logical_day: local YYYY-MM-DD after applying --day-boundary to ended_at, or started_at when ended_at is empty.
-  project: canonical alias name when configured, otherwise repo_path or basename with --short.
-  custom_title: raw session title, empty when unavailable.
+  logical_day: local YYYY-MM-DD using the calendar day's boundary and ended_at, or started_at when ended_at is empty.
+  project: canonical alias name when configured, otherwise repo_path or basename with --short; tabs/newlines flattened.
+  custom_title: session title with tabs/newlines flattened, empty when unavailable.
   message_count: stored message rows, including sidechain rows.
   body_size: UTF-8 byte size of non-sidechain message bodies; use this to choose outline/show ranges.
   non_command_user_turn_count: user turns from outline numbering after excluding slash commands and config commandPatterns.
@@ -27,7 +27,9 @@ JSON fields:
 Notes:
   --since/--until and --imported-since accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   Date-only --since/--until values use --day-boundary or config dayBoundary. Relative times and datetimes do not.
+  Date-only boundaries follow local calendar days across daylight saving time changes.
   --imported-since filters sessions imported at or after a time; date-only values start at local midnight and ignore --day-boundary.
+  Unknown or invalid stored start times do not match time filters.
   Use the resulting source and session_id with somniloq show --source <source> <session-id> to read the session.
   --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
 
