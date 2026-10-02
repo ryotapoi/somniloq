@@ -34,8 +34,8 @@ func TestMainDispatchSkipsBrokenConfigForConfigIndependentCommands(t *testing.T)
 		{
 			name:     "backfill",
 			args:     []string{"backfill", "--yes"},
-			wantCode: 0,
-			want:     "Backfilled:",
+			wantCode: 1,
+			want:     "unknown command: backfill",
 		},
 		{
 			name:     "outline",
@@ -65,7 +65,7 @@ func TestMainDispatchSkipsBrokenConfigForConfigIndependentCommands(t *testing.T)
 func TestMainDispatchSubcommandHelpSkipsBrokenConfig(t *testing.T) {
 	home := homeWithBrokenConfig(t)
 
-	for _, subcommand := range []string{"import", "backfill", "sessions", "show", "outline", "search", "projects"} {
+	for _, subcommand := range []string{"import", "sessions", "show", "outline", "search", "projects"} {
 		t.Run(subcommand, func(t *testing.T) {
 			code, stdout, stderr := runSomniloqMain(t, home, subcommand, "--help")
 			if code != 0 {
@@ -143,6 +143,13 @@ func TestMainDispatchHelpLikeFlagValueDoesNotSkipBrokenConfig(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "parse config") {
 		t.Fatalf("stderr missing config error\nstdout:\n%s\nstderr:\n%s", stdout, stderr)
+	}
+}
+
+func TestMainDispatchGlobalHelpOmitsBackfill(t *testing.T) {
+	code, stdout, stderr := runSomniloqMain(t, t.TempDir())
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "Commands:") || strings.Contains(stderr, "backfill") {
+		t.Fatalf("global help: code=%d stdout=%q stderr=%q", code, stdout, stderr)
 	}
 }
 

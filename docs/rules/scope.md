@@ -26,7 +26,7 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 - `import_state` と照合し、未取り込み or サイズ増加分を検出（差分取り込み）
 - 各 JSONL を行単位で読み、`type` でフィルタ
 - `user`/`assistant` → messages テーブルへ（text 部分のみ抽出）
-- `user`/`assistant` レコードが初出のときだけ `sessions` 行を作成する（`messages` 0 件で残るケースの扱いはバックフィル節参照）
+- `user`/`assistant` レコードが初出のときだけ `sessions` 行を作成する。text 抽出結果が空の会話レコード（`tool_use` のみ・添付のみ・空白のみ）では、text 非空判定の前に session を保存するため `messages` 0 件の session が残る
 - メタセッション（`custom-title` / `agent-name` 単独で `user`/`assistant` を持たない）は DB に保存しない。当該ファイルの `import_state` も進めず、後で会話レコードが追記されたときに先頭から再読み込みできる状態を維持する
 - `user`/`assistant` の `cwd` から `repo_path` を解決して sessions に保存。`cwd` は会話レコードでは通常非空のため、会話セッションでは `repo_path` も通常非空（`ResolveRepoPath` 手順 4 で `cwd` 自体を返すため、`cwd` 非空なら必ず解決される）
 - `custom-title` / `agent-name` レコードは、ファイル走査終了時点で対応する `sessions` 行が存在するときのみ反映する
@@ -40,7 +40,9 @@ source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専
 
 Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する。空 cwd は空、`/.claude/worktrees/` を含む cwd は最初の marker より前を優先する。それ以外は Git の top-level と worktree 情報を使い、実在する通常の linked worktree とそのサブディレクトリも本体 repository の root に集約する。通常 repository と submodule はそれぞれ自身の root を使い、Git が解決できない cwd は元の値を保持する。消失した一般 worktree の本体は推測しない。
 
-保存済みの非 NULL `repo_path` は自動補正されず、不変ファイルは差分 import でスキップされる。元ログと対象 worktree が残っていれば `somniloq import --full --yes` で再構築できる。ただし source 制限にかかわらず DB 全体を削除して指定 source だけを再取り込みするため、保持したい全 source の元ログを確認する。`backfill` は NULL のみが対象で、保存済み worktree path の補正には使えない。
+保存済みの非 NULL `repo_path` は自動補正されず、不変ファイルは差分 import でスキップされる。元ログと対象 worktree が残っていれば `somniloq import --full --yes` で再構築できる。ただし source 制限にかかわらず DB 全体を削除して指定 source だけを再取り込みするため、保持したい全 source の元ログを確認する。
+
+旧形式 DB 向けの専用 upgrade・データ補正手段は提供しない。`OpenDB` による一般的な schema 管理は維持するが、v0.3 形式から現在の source 付き schema への移行成功は保証しない。
 
 #### Codex 用（`somniloq import --source codex`）
 
@@ -61,23 +63,6 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - ログにない timestamp、cwd、repository、version、title、usage、parent は補完しない
 - `messages.uuid` の一意性は source、path、物理行に基づく。差分取り込み時も空行・無視行・unparsed 行を含む物理行番号を維持する
 - 差分取り込み・`--full` 等のオプション体系は `import` と揃える
-
-### バックフィル（backfill）
-
-過去バージョン由来のデータ補正と、メジャーバージョンアップ時のスキーマ移行の窓口。以下を順に実行する。
-
-- v0.4 スキーマ移行（v0.3 由来 DB のみ実行。実行済みなら no-op）:
-  - `sessions` / `messages` に `source` カラムを追加し、既存行に `'claude_code'` を埋め込む
-  - `sessions` の主キーを `(source, session_id)` 複合主キーに、`messages` の外部キーを `(source, session_id)` 複合外部キーに張り直す（テーブル再作成方式）
-  - `import_state` に `source` カラムを追加し、既存行に `'claude_code'` を埋め込む
-  - 判断の経緯は `docs/decisions/0004-codex-schema-and-migration.md` 参照
-- `messages` を持たない `sessions` 行を DELETE
-  - 主目的は v0.2.x 由来のメタ前置 INSERT 残骸の除去
-  - 副次的に、text 抽出結果が空の `user`/`assistant` レコードしか持たないセッション（`tool_use` のみ・添付のみ・空白のみ）も消える。取り込み側は text 非空判定の前に `upsertSession` を呼ぶため `messages` 0 件で残る仕様で、show / sessions 一覧で実体が無く実害はほぼゼロ。`--full` で再取り込みすれば戻る
-- `repo_path IS NULL` かつ `cwd` 非空 の行を `ResolveRepoPath` で埋める（手順 4 が cwd 返却になったため `cwd` 非空なら必ず解決される）
-  - 解決できなかった行にはマーカーを書かず `repo_path` を NULL のまま残す。次回以降の `backfill` で毎回再試行されるため、git 設定やインストールを直して再実行すれば解決する（`docs/decisions/0003-backfill-as-separate-subcommand.md`）
-- DELETE 対象が 1 件以上ある場合のみ件数を起動時に表示し確認プロンプトを出す（デフォルト No）。0 件なら無確認で進む。`--yes` で確認をスキップ。非対話環境（パイプ・CI 等）では DELETE 対象 1 件以上のとき `--yes` 必須（`import --full` と同じ作法）
-- `import` から独立。v0.3 / v0.4 へアップグレード後に一度叩く想定（v0.4 ではスキーマ移行が含まれるため、`import` を叩く前の実行が必須）
 
 ### 時刻フィルタの共通規則
 
@@ -213,8 +198,6 @@ somniloq import --source codex           # Codex の rollout JSONL だけを差�
 somniloq import --source cursor-agent    # Cursor Agent の transcript JSONL だけを差分取り込み
 somniloq import --full                   # 全件再取り込み（確認あり）
 somniloq import --full --yes             # 確認なしで全件再取り込み
-somniloq backfill                        # 既存セッションの補正（DELETE 対象があれば確認）
-somniloq backfill --yes                  # 確認なしで補正
 somniloq sessions                        # セッション一覧
 somniloq sessions --since 24h            # 直近24時間
 somniloq sessions --imported-since 24h   # 直近24時間に保存更新されたセッション
@@ -309,7 +292,7 @@ CREATE TABLE import_state (
 
 ## 互換性
 
-- v0.12.0 以降、`search` query と `--project` は `%`、`_`、`\` を wildcard ではなく文字列として扱う。従来 wildcard を渡していた検索結果は変わる。explicit wildcard mode は提供しない。保存形式は変わらないため、DB migration、backfill、再 import は不要
+- v0.12.0 以降、`search` query と `--project` は `%`、`_`、`\` を wildcard ではなく文字列として扱う。従来 wildcard を渡していた検索結果は変わる。explicit wildcard mode は提供しない。保存形式は変わらないため、DB migration、再 import は不要
 
 ## スキーマ変更への対応方針
 

@@ -25,7 +25,7 @@ Notes:
   An unparsed final line without a newline is retried if the file grows; completed malformed lines are skipped.
   Claude Code messages need non-empty session and message IDs; Codex session metadata needs a non-empty ID.
   Claude Code and Codex sessions from existing linked Git worktrees are grouped under the main repository.
-  Previously stored invalid IDs or worktree paths are not repaired by differential import or backfill; --full
+  Previously stored invalid IDs or worktree paths are not repaired by differential import; --full
   can rebuild them if the original logs remain. Check all sources before clearing the DB.
   Non-fatal scan/file errors are printed to stderr; import continues and exits 1 if any occurred.
 

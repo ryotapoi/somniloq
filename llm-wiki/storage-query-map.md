@@ -8,14 +8,11 @@ sources:
   - docs/specs/jsonl-schema.md
   - internal/core/db.go
   - internal/core/db_schema.go
-  - internal/core/migrate_v04.go
   - internal/core/db_write.go
   - internal/core/db_import_state.go
   - internal/core/db_sessions_projects.go
   - internal/core/db_messages_summary.go
   - internal/core/db_search.go
-  - internal/core/backfill.go
-  - cmd/somniloq/backfill.go
   - cmd/somniloq/sessions.go
   - cmd/somniloq/show.go
   - cmd/somniloq/session_resolution.go
@@ -28,9 +25,8 @@ SQLite の変更目的から入口を選ぶ。schema・migration・書き込み�
 
 ## schema と書き込み
 
-- 列やテーブルを変える: `internal/core/db_schema.go` の `schema` と `internal/core/db.go` の `OpenDB` を読む。旧 DB の移行を変える場合は `internal/core/migrate_v04.go` の `MigrateToV04IfNeeded` と該当 migration test を確認する。
+- 列やテーブルを変える: `internal/core/db_schema.go` の `schema` と `internal/core/db.go` の `OpenDB` を読む。一般 schema 管理は `internal/core/db_schema.go` の ensure helpers と `tableColumnPresent`、検証は `internal/core/db_migration_test.go` を確認する。旧形式 DB のサポート境界は `docs/rules/scope.md` の repository 解決節を読む。
 - import の保存を変える: `internal/core/db_write.go` の `importTx` と書き込み SQL、取り込み位置の読み取りは `internal/core/db_import_state.go` の `GetImportState` を確認する。JSONL 入力を変える場合は `docs/specs/jsonl-schema.md` も読む。
-- backfill の削除・更新を変える: `cmd/somniloq/backfill.go` の確認導線から `internal/core/backfill.go` の `CountOrphanSessions` / `Backfill` を辿る。
 
 ## query と表示
 

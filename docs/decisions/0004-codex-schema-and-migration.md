@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted（2026-05-04 決定）
+Superseded by ADR 0019（2026-05-04 決定）
 
 ## Context
 

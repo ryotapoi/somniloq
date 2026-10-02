@@ -62,13 +62,6 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			want: []string{"Examples:", "Output:", "Imported <imported> files", "Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.", "somniloq import --source cursor-agent", "somniloq import [--source all|claude-code|codex|cursor-agent] [flags]", "source to import: all, claude-code, codex, cursor-agent"},
 		},
 		{
-			name: "backfill",
-			run: func(errOut *bytes.Buffer) (int, error) {
-				return backfillCmd([]string{"--help"}, openDB, strings.NewReader(""), &bytes.Buffer{}, errOut, false)
-			},
-			want: []string{"Examples:", "Output:", "Backfilled: deleted=<n> resolved=<n> unresolved=<n>", "somniloq backfill --yes"},
-		},
-		{
 			name: "sessions",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return sessionsCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)

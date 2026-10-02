@@ -367,3 +367,7 @@ func TestSessionsCmd_RejectsUnexpectedArgumentsBeforeOpeningDB(t *testing.T) {
 		})
 	}
 }
+
+func staticDB(db *core.DB) func() (*core.DB, error) {
+	return func() (*core.DB, error) { return db, nil }
+}

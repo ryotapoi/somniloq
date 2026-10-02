@@ -34,7 +34,8 @@ somniloq show --turn 12..18 <session-id> # 必要なターンを読む
 | `search` | メッセージ本文を検索する。`--project` や `--since` で絞れる。 |
 | `outline` | 長い会話を読む前に、user ターンを一覧する。 |
 | `show` | セッションを Markdown で読む。`--turn` や `--tail` で一部だけ読める。 |
-| `backfill` | 旧版からの更新時、取り込み前に既存 DB を移行・補正する。行を削除する場合は確認する。 |
+
+旧形式 DB 向けの専用アップグレード・データ補正手段は提供しない。一般的な schema 管理は維持するが、v0.3 形式から現在の schema への移行成功は保証しない。
 
 `import` はデフォルトで差分を取り込む。**`somniloq import --full` は再取り込み前に somniloq の DB 全体を削除する。** `--source` で1つの source を選んでも他の source の行を削除し、指定した source だけを再取り込みする。保持したいログの原本が揃っていることを確認してから使う。`--full` は確認を求め、`--yes` で確認を省略できる。
 

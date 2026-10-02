@@ -3,7 +3,6 @@ package main
 import (
 	"bytes"
 	"errors"
-	"fmt"
 	"io"
 	"strings"
 	"testing"
@@ -41,26 +40,6 @@ func TestConfirmFullImport(t *testing.T) {
 				t.Errorf("expected prompt with [y/N], got %q", out.String())
 			}
 		})
-	}
-}
-
-func TestConfirmBackfillDelete(t *testing.T) {
-	var out bytes.Buffer
-	confirmed, err := confirmBackfillDelete(strings.NewReader("y\n"), &out, 3)
-	if err != nil || !confirmed {
-		t.Fatalf("confirmBackfillDelete = %t, %v, want confirmation", confirmed, err)
-	}
-	if !strings.Contains(out.String(), "[y/N]") {
-		t.Errorf("expected prompt with [y/N], got %q", out.String())
-	}
-
-	out.Reset()
-	confirmed, err = confirmBackfillDelete(strings.NewReader("n\n"), &out, 42)
-	if err != nil || confirmed {
-		t.Fatalf("confirmBackfillDelete = %t, %v, want rejection", confirmed, err)
-	}
-	if !strings.Contains(out.String(), fmt.Sprintf("%d", 42)) {
-		t.Errorf("expected count 42 in prompt, got %q", out.String())
 	}
 }
 

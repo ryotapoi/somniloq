@@ -34,7 +34,8 @@ somniloq show --turn 12..18 <session-id> # Read selected turns
 | `search` | Search message bodies; use `--project` or `--since` to narrow results. |
 | `outline` | List user turns in a session before reading a long conversation. |
 | `show` | Read a session in Markdown; use `--turn` or `--tail` to read part of it. |
-| `backfill` | Migrate or repair an existing database after upgrading and before importing; it asks before deleting rows. |
+
+No dedicated upgrade or data repair path is provided for legacy databases. General schema management remains, but migration from v0.3 databases to the current schema is not guaranteed.
 
 `import` is incremental by default. **`somniloq import --full` deletes the entire somniloq database before re-importing.** This also applies when `--source` selects one source: rows from other sources are deleted, and only the selected source is re-imported. Check that the original logs for everything you want to keep are available before using it. `--full` asks for confirmation; `--yes` skips the prompt.
 

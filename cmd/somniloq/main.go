@@ -18,7 +18,6 @@ Usage:
 
 Commands:
   import    Import Claude Code, Codex, and Cursor Agent session logs from JSONL files
-  backfill  Correct legacy session data
   sessions  List sessions
   show      Show session content in Markdown
   outline   List a session's user messages as turn, time, body size, and first line
@@ -80,8 +79,6 @@ func main() {
 	switch args[0] {
 	case "import":
 		code, cmdErr = importCmd(args[1:], open, defaultProjectsDir, defaultCodexSessionsDir, defaultCursorProjectsDir, os.Stdin, os.Stdout, os.Stderr, isTTY)
-	case "backfill":
-		code, cmdErr = backfillCmd(args[1:], open, os.Stdin, os.Stdout, os.Stderr, isTTY)
 	case "sessions":
 		cfg := loadCommandConfig(args[0], args[1:])
 		code, cmdErr = sessionsCmd(args[1:], open, cfg, os.Stdout, os.Stderr)

@@ -12,7 +12,6 @@ sources:
   - cmd/somniloq/projects.go
   - cmd/somniloq/search.go
   - internal/core/import.go
-  - internal/core/backfill.go
   - internal/core/repo_path.go
   - internal/core/db_sessions_projects.go
   - internal/core/db_search.go
@@ -26,7 +25,6 @@ sources:
 
 - 解決は `internal/core/repo_path.go` の `ResolveRepoPath`。Claude marker を優先し、実在する通常 linked worktree は Git の worktree 情報から本体 root に集約する。通常 repository / submodule は自身の root。空 cwd は空、git root が取れない cwd は cwd 自体へ fallback。保存済み worktree path の再構築条件は `docs/rules/scope.md` の repository 解決節を参照。
 - import 時は adapter が `RepoResolver` を受け、`SessionMeta.RepoPath` に保存する。
-- legacy 補正は `internal/core/backfill.go` の `Backfill`。
 
 ## project filter と alias
 
