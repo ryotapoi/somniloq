@@ -57,5 +57,12 @@ jobs:
       - name: Build Markdown index
         run: mdhop build --vault llm-wiki
 
+      - name: Test Markdown diagnostic gate
+        run: bash .github/scripts/test-markdown-diagnostics.sh
+
       - name: Diagnose Markdown links
-        run: mdhop diagnose --vault llm-wiki --fields basename_conflicts,asset_basename_conflicts,phantoms,anchors --format json
+        shell: bash
+        run: |
+          diagnostics="$(mdhop diagnose --vault llm-wiki --fields basename_conflicts,asset_basename_conflicts,phantoms,anchors --format json)"
+          printf '%s\n' "$diagnostics"
+          jq -e -f .github/scripts/check-markdown-diagnostics.jq <<< "$diagnostics"

@@ -54,7 +54,7 @@
 
   `internal/core/duration.go` の `ParseTimeRef` は `+09:60` を `+10:00` 相当、`+24:00` も有効値として扱う。`--since` / `--until` / `--imported-since` で不正 offset をエラーにし、正しい `Z`・数値 offset、相対時刻・ローカル日時の解釈を維持することを確認する（`I06-001`）。
 
-- [ ] Markdown CI を診断結果の問題で失敗させる
+- [x] Markdown CI を診断結果の問題で失敗させる
 
   `.github/workflows/ci.yml` は `mdhop diagnose` の終了コードだけを使うが、固定された mdhop v0.16.1 は phantom・壊れた anchor があっても JSON 出力成功時に exit 0 を返す。正常な vault は成功し、`basename_conflicts`・`asset_basename_conflicts`・`phantoms`・`anchors` の対象問題があれば job が失敗することを一時 vault で検証する（`O01-001`）。
 
