@@ -11,7 +11,7 @@ import (
 
 const sessionsHelpDetails = `Columns (TSV, in order):
   session_id: source-local session identifier.
-  time_range: local started_at ~ ended_at; ended_at may be empty.
+  time_range: local started_at ~ ended_at; ended_at may be empty; tabs/newlines flattened.
   logical_day: local YYYY-MM-DD using the calendar day's boundary and ended_at, or started_at when ended_at is empty.
   project: canonical alias name when configured, otherwise repo_path or basename with --short; tabs/newlines flattened.
   custom_title: session title with tabs/newlines flattened, empty when unavailable.
@@ -99,7 +99,7 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 		title := sanitizeTSV(r.CustomTitle)
 		proj := sanitizeTSV(resolveProjectDisplayName(r.RepoPath, *flags.short, cfg))
 		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\n",
-			r.SessionID, formatTimeRange(r.StartedAt, r.EndedAt, time.Local), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
+			r.SessionID, sanitizeTSV(formatTimeRange(r.StartedAt, r.EndedAt, time.Local)), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
 			r.Source); err != nil {
 			return 1, err
 		}

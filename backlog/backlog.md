@@ -46,7 +46,7 @@
 
   対象セッション数だけ `messages` 全体を繰り返し走査する問題を解消する。`internal/core/db_messages_summary.go` の `GetMessages` / `GetTurnMessages` と schema の接続を見直し、新規・既存 DB で query plan、複数セッションの `search` / `show` の処理時間、同時刻の rowid 順・turn 採番を確認する。合成10万メッセージ・100セッションの summary 表示では約0.95秒、比較用索引ありでは約0.15秒だった。本文検索の LIKE 全走査は変更しない（`S01-001`）。
 
-- [ ] 不正 timestamp による sessions TSV の破損を防ぐ
+- [x] 不正 timestamp による sessions TSV の破損を防ぐ
 
   `cmd/somniloq/sessions.go` の時刻欄は `formatLocalTime` が返す不正値の生文字列をそのまま出力する。タブ・改行を含む保存値でも8列・1セッション1行を維持し、JSON の生値と時刻フィルタの既存契約を保つことを検証する（`C03-001`）。
 

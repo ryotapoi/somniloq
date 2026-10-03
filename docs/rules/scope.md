@@ -66,7 +66,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 時刻フィルタの共通規則
 
-- 保存済み timestamp の NULL・空文字列・RFC3339 として解釈できない値は、比較上は時点不明として扱う。範囲 filter には一致せず、filter なしでは行・本文を保持し、並び順は既存の NULL 順（昇順で先、降順で後、message 同値は rowid）に従う。不正な非空文字列は保存・JSON 出力・時刻表示にそのまま残し、時刻を補完しない。CLI の不正な時刻引数はエラーとする。
+- 保存済み timestamp の NULL・空文字列・RFC3339 として解釈できない値は、比較上は時点不明として扱う。範囲 filter には一致せず、filter なしでは行・本文を保持し、並び順は既存の NULL 順（昇順で先、降順で後、message 同値は rowid）に従う。不正な非空文字列は保存・JSON 出力・時刻表示にそのまま残し、時刻を補完しない。ただし sessions TSV の時刻欄はタブ・改行を空白化する。CLI の不正な時刻引数はエラーとする。
 - RFC3339 instant 入力の小数秒はミリ秒へ切り捨てず、ナノ秒精度で保持して時点として比較し、offset 表現が異なっても同じ時点なら等しい。`--since` は包含下限、`--until` は排他上限
 
 ### セッション一覧（sessions）
@@ -81,7 +81,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - 表示は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合、デフォルト表示は `repo_path` をそのまま
 - `--short` は alias 非一致時に `filepath.Base(repo_path)`（ハイフン保持）
 - 出力 TSV の列: `session_id`, `time_range`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `source`。source は `claude_code` / `codex` / `cursor_agent`
-- TSV の `project` と `custom_title` はタブ・改行を空白に置換し、列と行の境界を保つ。JSON は生の文字列を出す
+- TSV の `time_range`、`project`、`custom_title` はタブ・改行を空白に置換し、列と行の境界を保つ。JSON は生の文字列を出す
 - `logical_day` は `ended_at`（無ければ `started_at`）をローカルタイムに変換し、その暦日の `dayBoundary` の境界時点より前なら前暦日、境界以降なら当暦日（`YYYY-MM-DD`）として出す。セッションを途中で分割せず、表示時に計算する
 - `body_size` は非 sidechain メッセージの本文合計サイズ（UTF-8 バイト数）。show が出力する量の予測値として使う（show 前に大きいセッションかを判定する用途）。文字数でなくバイト数なのは、コンテキスト量の感覚と一致させるため。`message_count` は従来どおり sidechain を含む全行数
 - `--format tsv|json`（デフォルト `tsv`）。JSON のフィールドは `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `logicalDay`, `messageCount`, `bodySize`（共通仕様は「JSON 出力」節参照）

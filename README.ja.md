@@ -41,6 +41,8 @@ somniloq show --turn 12..18 <session-id> # 必要なターンを読む
 
 フラグ・出力形式・使用例は `somniloq <command> --help` を参照。`sessions`、`projects`、`search`、`outline` は `--format json` に対応し、`show` は Markdown または JSON で出力する。
 
+`sessions` TSV は時刻範囲のタブ・改行を空白化し、8 列・1 セッション 1 行を保つ。JSON は保存済み timestamp の文字列をそのまま出す。
+
 ## 設定
 
 任意の JSON 設定ファイルは `~/.somniloq/config.json`、DB のデフォルトは `~/.somniloq/somniloq.db`。別のパスはコマンド名の前にグローバルフラグ `--config` または `--db` で指定する。

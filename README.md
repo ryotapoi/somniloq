@@ -41,6 +41,8 @@ No dedicated upgrade or data repair path is provided for legacy databases. Gener
 
 Use `somniloq <command> --help` for flags, output formats, and examples. `sessions`, `projects`, `search`, and `outline` support `--format json`; `show` supports Markdown or JSON.
 
+`sessions` TSV flattens tabs and newlines in time ranges to preserve eight columns and one line per session. JSON retains the stored timestamp strings.
+
 ## Configuration
 
 The optional JSON config is `~/.somniloq/config.json`; the database defaults to `~/.somniloq/somniloq.db`. Set another path with the global `--config` or `--db` flag, before the command name.

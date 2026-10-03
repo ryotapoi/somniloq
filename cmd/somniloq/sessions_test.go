@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"strings"
 	"testing"
 	"time"
@@ -351,4 +352,78 @@ func TestSessionsCmd_RejectsUnexpectedArgumentsBeforeOpeningDB(t *testing.T) {
 
 func staticDB(db *core.DB) func() (*core.DB, error) {
 	return func() (*core.DB, error) { return db, nil }
+}
+
+func TestSessionsCmd_InvalidTimestampOutputBoundaries(t *testing.T) {
+	oldLocal := time.Local
+	time.Local = time.UTC
+	defer func() { time.Local = oldLocal }()
+
+	for _, tt := range []struct {
+		name, startedAt, endedAt, timeRange string
+		matchesFilter                       bool
+	}{
+		{"both invalid", "start\tbad\nline\rend", "end\tbad\r\nline", "start bad line end ~ end bad  line", false},
+		{"start only", "start\tbad\nline\rend", "", "start bad line end ~", false},
+		{"valid start invalid end", "2026-03-28T15:00:00Z", "end\tbad\r\nline", "2026-03-28 15:00 ~ end bad  line", true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			openDB := func() (*core.DB, error) {
+				db, err := core.OpenDB(":memory:")
+				if err != nil {
+					return nil, err
+				}
+				if err := db.UpsertSession(core.SessionMeta{Source: core.SourceCodex, SessionID: "invalid-time", StartedAt: tt.startedAt, EndedAt: tt.endedAt}, "2026-03-28T16:00:00Z"); err != nil {
+					db.Close()
+					return nil, err
+				}
+				return db, nil
+			}
+			var out, errOut bytes.Buffer
+			code, err := sessionsCmd(nil, openDB, config{}, &out, &errOut)
+			if err != nil || code != 0 || errOut.Len() != 0 {
+				t.Fatalf("sessionsCmd = %d, %v (stderr: %q)", code, err, errOut.String())
+			}
+			if strings.Count(out.String(), "\n") != 1 || strings.Contains(out.String(), "\r") {
+				t.Fatalf("want one physical TSV line, got %q", out.String())
+			}
+			fields := strings.Split(strings.TrimSuffix(out.String(), "\n"), "\t")
+			if len(fields) != 8 {
+				t.Fatalf("TSV columns = %d, want 8: %q", len(fields), out.String())
+			}
+			if fields[1] != tt.timeRange {
+				t.Errorf("time_range = %q, want %q", fields[1], tt.timeRange)
+			}
+			if fields[2] != "" {
+				t.Errorf("logical_day = %q, want empty for invalid timestamp", fields[2])
+			}
+
+			out.Reset()
+			code, err = sessionsCmd([]string{"--format", "json"}, openDB, config{}, &out, &errOut)
+			if err != nil || code != 0 || errOut.Len() != 0 {
+				t.Fatalf("JSON sessionsCmd = %d, %v (stderr: %q)", code, err, errOut.String())
+			}
+			var entries []sessionJSON
+			if err := json.Unmarshal(out.Bytes(), &entries); err != nil {
+				t.Fatalf("decode JSON: %v", err)
+			}
+			if len(entries) != 1 {
+				t.Fatalf("JSON entries = %d, want 1", len(entries))
+			}
+			if entries[0].StartedAt != tt.startedAt || entries[0].EndedAt != tt.endedAt {
+				t.Errorf("JSON timestamps = %q, %q, want raw %q, %q", entries[0].StartedAt, entries[0].EndedAt, tt.startedAt, tt.endedAt)
+			}
+
+			for _, args := range [][]string{{"--since", "2026-03-28T00:00:00Z"}, {"--until", "2026-03-29T00:00:00Z"}} {
+				out.Reset()
+				code, err = sessionsCmd(args, openDB, config{}, &out, &errOut)
+				if err != nil || code != 0 || errOut.Len() != 0 {
+					t.Fatalf("filtered sessionsCmd(%v) = %d, %v (stderr: %q)", args, code, err, errOut.String())
+				}
+				if got := out.Len() != 0; got != tt.matchesFilter {
+					t.Errorf("filter %v matched = %v, want %v (output: %q)", args, got, tt.matchesFilter, out.String())
+				}
+			}
+		})
+	}
 }
