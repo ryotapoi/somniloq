@@ -55,7 +55,7 @@ somniloq show --turn 12..18 <session-id> # 必要なターンを読む
 
 `projectAliases` は改名したプロジェクトをまとめ、`excludeUserMessagePatterns` は `outline` と `show --summary` の user message を表示から除外し、`dayBoundary` はローカル時刻で論理日の開始を指定する。pattern は trim 済みの本文全文に Go 正規表現で照合する。不要なキーは省略できる。
 
-v1.0.0 では `commandPatterns` を自動移行しない。pattern を `excludeUserMessagePatterns` へ移すと、適用先がセッション一覧のヒントから表示メッセージへ変わる。slash で始まる本文も除外する場合は `^/` を明示する。`show --summary` は `/clear` や command caveat を既定では除外しないため、必要なら pattern を設定する。一度の summary だけ除外を無効にするには `--no-exclude-user-messages` を使う。sessions TSV は 2 列を削除して `source` が 8 列目へ移り、JSON は `nonCommandUserTurnCount` と `firstNonCommandUserLine` を削除する。
+v0.13.0 では `commandPatterns` を自動移行しない。pattern を `excludeUserMessagePatterns` へ移すと、適用先がセッション一覧のヒントから表示メッセージへ変わる。slash で始まる本文も除外する場合は `^/` を明示する。`show --summary` は `/clear` や command caveat を既定では除外しないため、必要なら pattern を設定する。一度の summary だけ除外を無効にするには `--no-exclude-user-messages` を使う。sessions TSV は 2 列を削除して `source` が 8 列目へ移り、JSON は `nonCommandUserTurnCount` と `firstNonCommandUserLine` を削除する。
 
 ## 詳細
 

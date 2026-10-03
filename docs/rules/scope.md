@@ -190,7 +190,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - 両コマンドで `--exclude-user-message-pattern <regex>` を繰り返し指定できる。指定があれば config の一覧を置換する。`--no-exclude-user-messages` は config の除外を呼び出し単位で無効化し、pattern override とは併用できない。空 regex は全本文に一致する有効な pattern で、無効化の意味には使わない
 - `dayBoundary` は論理日の開始時刻をローカル時計の `HH:MM` で指定する。DST 切り替え日も指定したローカル時刻を使い、date-only の `--since` は指定暦日の境界を包含下限、`--until` は翌暦日の境界を排他上限とする。`logical_day` も同じ境界時点と比較する。欠落・重複するローカル時刻は Go の `time.Date` による解決に従う。未指定時は `00:00`。不正値は config 読み込みエラー。`sessions` / `search` の date-only `--since`/`--until` と `sessions` の `logical_day` 表示だけに使い、DB に焼き込まない
 
-### v1.0.0 の設定・出力移行
+### v0.13.0 の設定・出力移行
 
 - `commandPatterns` は自動移行しない。旧設定を `excludeUserMessagePatterns` へ手動で移すと、適用先は `sessions` のスキップ用ヒントから `outline` と `show --summary` の表示除外へ変わる。slash prefix の除外が必要なら `^/` を明示する
 - 旧 `show --summary` の `/clear` 除外は `^<command-name>/clear</command-name>`、caveat 除外は `^<local-command-caveat>` として設定する。たとえば両方を除外する場合は次の通り:
@@ -206,7 +206,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 - `--include-clear` は廃止した。特定の summary 呼び出しだけ全除外を止める場合は `show --summary N --no-exclude-user-messages` を使う
 - sessions TSV は 10 列から 8 列になり、`source` は最終列（8 列目）へ移る。JSON の `nonCommandUserTurnCount` と `firstNonCommandUserLine` も削除した
-- この公開変更は v1.0.0 の対象。`dayBoundary`、`logicalDay`、summary 機能は引き続き利用できる
+- この公開変更は v0.13.0 の対象。`dayBoundary`、`logicalDay`、summary 機能は引き続き利用できる
 
 ## CLI インターフェース
 

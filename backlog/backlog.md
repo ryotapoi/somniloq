@@ -12,7 +12,7 @@
 
 ## タスク
 
-### v1.0.0 公開機能の整理
+### v0.13.0 メッセージ除外の統一とCLIの整理
 
 - [x] 公開の backfill コマンドを廃止する
 
@@ -26,7 +26,7 @@
 
   summary 固定の `/clear`・caveat 除外と `--include-clear` を廃止し、新しい除外指定への移行例を示す。`sessions` 用の `commandPatterns`、slash-prefix 判定、`nonCommandUserTurnCount`、`firstNonCommandUserLine` とその算出処理も廃止し、TSV・JSON の公開出力から削除する。`sessions` に独自の除外ルールは残さず、user message の除外処理は共有 matcher を使う。
 
-  公開出力・設定の変更は v1.0.0 で行い、dayBoundary・logicalDay と summary 自体は維持する。関連する docs・help・README・config/output の移行案内とテストを更新し、設定と CLI の優先順位、共有 matcher と順序、元の turn ID、不正 regex、廃止項目が TSV・JSON に残らないことを自動検証する。
+  公開出力・設定の変更は v0.13.0 で行い、dayBoundary・logicalDay と summary 自体は維持する。関連する docs・help・README・config/output の移行案内とテストを更新し、設定と CLI の優先順位、共有 matcher と順序、元の turn ID、不正 regex、廃止項目が TSV・JSON に残らないことを自動検証する。
 
 #### 不具合修正
 
@@ -100,7 +100,7 @@
 
 - [ ] 既存の版・backfill タスクとの関係を決める
 
-  この追記だけで既存の v1.0.0 項目や backfill 関連項目を撤回・完了扱いにしない。新しい出力と保存形式に合わせ、0.x での再リリースを含めて対象版と旧データの扱いを決め、必要なタスクの重複・順序を整理する。
+  この追記だけで既存の v0.13.0 項目や backfill 関連項目を撤回・完了扱いにしない。新しい出力と保存形式に合わせ、0.x での再リリースを含めて対象版と旧データの扱いを決め、必要なタスクの重複・順序を整理する。
 
 - [ ] 二つの利用場面と境界条件を fixture で検証する
 
