@@ -50,7 +50,7 @@
 
   `cmd/somniloq/sessions.go` の時刻欄は `formatLocalTime` が返す不正値の生文字列をそのまま出力する。タブ・改行を含む保存値でも8列・1セッション1行を維持し、JSON の生値と時刻フィルタの既存契約を保つことを検証する（`C03-001`）。
 
-- [ ] RFC3339 時刻引数の不正な offset を拒否する
+- [x] RFC3339 時刻引数の不正な offset を拒否する
 
   `internal/core/duration.go` の `ParseTimeRef` は `+09:60` を `+10:00` 相当、`+24:00` も有効値として扱う。`--since` / `--until` / `--imported-since` で不正 offset をエラーにし、正しい `Z`・数値 offset、相対時刻・ローカル日時の解釈を維持することを確認する（`I06-001`）。
 

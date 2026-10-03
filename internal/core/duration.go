@@ -16,7 +16,15 @@ import (
 func ParseTimeRef(s string, now time.Time, loc *time.Location) (time.Time, bool, error) {
 	if strings.Contains(s, "-") {
 		if t, err := time.Parse(time.RFC3339, s); err == nil {
-			return t, false, nil
+			// time.Parse accepts offset hours of 24 and minutes of 60.
+			// Validate the original offset before accepting the normalized time.
+			if strings.HasSuffix(s, "Z") {
+				return t, false, nil
+			}
+			offset := s[len(s)-6:]
+			if offset[1:3] < "24" && offset[4:6] < "60" {
+				return t, false, nil
+			}
 		}
 		if t, err := time.ParseInLocation("2006-01-02T15:04", s, loc); err == nil {
 			return t, false, nil
