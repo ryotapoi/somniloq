@@ -2,6 +2,7 @@ package core
 
 import (
 	"io"
+	"os"
 	"os/exec"
 	"strings"
 )
@@ -21,10 +22,19 @@ func ResolveRepoPath(cwd string) string {
 	if i := strings.Index(cwd, worktreePathFragment); i >= 0 {
 		return cwd[:i]
 	}
+	// Git environment overrides can select a repository unrelated to the log cwd.
+	// Filter only the child environment, preserving PATH and other caller settings.
+	env := make([]string, 0, len(os.Environ()))
+	for _, entry := range os.Environ() {
+		if !strings.HasPrefix(entry, "GIT_") {
+			env = append(env, entry)
+		}
+	}
 	// Keep -C before rev-parse so cwd is consumed as its value, even when it
 	// begins with a hyphen.
 	cmd := exec.Command("git", "-C", cwd, "rev-parse", "--show-toplevel")
 	// Git failures use the cwd fallback; discard stderr to keep expected misses silent.
+	cmd.Env = env
 	cmd.Stderr = io.Discard
 	out, err := cmd.Output()
 	if err != nil {
@@ -36,6 +46,7 @@ func ResolveRepoPath(cwd string) string {
 	// Only linked worktrees have a Git directory distinct from the common
 	// directory. Ordinary repositories and submodules retain their top-level.
 	cmd = exec.Command("git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
+	cmd.Env = env
 	cmd.Stderr = io.Discard
 	out, err = cmd.Output()
 	if err != nil {
@@ -48,6 +59,7 @@ func ResolveRepoPath(cwd string) string {
 	// Git lists the main worktree first. Do not infer its root from the
 	// common directory's location; that location need not be root/.git.
 	cmd = exec.Command("git", "-C", cwd, "worktree", "list", "--porcelain", "-z")
+	cmd.Env = env
 	cmd.Stderr = io.Discard
 	out, err = cmd.Output()
 	if err != nil {

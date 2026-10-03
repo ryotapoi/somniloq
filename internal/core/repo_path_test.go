@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -213,6 +214,48 @@ func TestResolveRepoPath_LinkedWorktree(t *testing.T) {
 		if got := ResolveRepoPath(cwd); got != repo {
 			t.Errorf("ResolveRepoPath(%q) = %q, want %q", cwd, got, repo)
 		}
+	}
+}
+
+func TestResolveRepoPath_IgnoresGitEnv(t *testing.T) {
+	repo, worktree := linkedWorktree(t)
+	foreignRepo, foreignWorktree := linkedWorktree(t)
+	foreignGitDir, err := exec.Command("git", "-C", foreignWorktree, "rev-parse", "--absolute-git-dir").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(repo, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	nonGit := t.TempDir()
+	// Build all repositories before poisoning the environment. A foreign linked
+	// worktree also catches isolation applied only to the first Git command.
+	for _, commonOnly := range []bool{false, true} {
+		t.Run(fmt.Sprintf("common-only=%t", commonOnly), func(t *testing.T) {
+			env := map[string]string{"GIT_COMMON_DIR": filepath.Join(foreignRepo, ".git")}
+			if !commonOnly {
+				env["GIT_DIR"] = strings.TrimRight(string(foreignGitDir), "\r\n")
+				env["GIT_WORK_TREE"] = foreignWorktree
+			}
+			for key, value := range env {
+				t.Setenv(key, value)
+			}
+			for _, cwd := range []string{repo, sub, worktree, nonGit} {
+				want := repo
+				if cwd == nonGit {
+					want = nonGit
+				}
+				if got := ResolveRepoPath(cwd); got != want {
+					t.Errorf("ResolveRepoPath(%q) = %q, want %q", cwd, got, want)
+				}
+			}
+			for key, value := range env {
+				if got := os.Getenv(key); got != value {
+					t.Errorf("parent %s = %q, want %q", key, got, value)
+				}
+			}
+		})
 	}
 }
 

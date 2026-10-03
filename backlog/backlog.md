@@ -38,7 +38,7 @@
 
   会話ログを保存する新規 DB と新規保存先ディレクトリを、所有者限定の権限で作成する。`cmd/somniloq/main.go` の `openDB` と `internal/core/db.go` の `OpenDB` は、umask 022 の共有パスで DB を 0644 にする。親パスを他ユーザーが辿れる場合にも、新規 DB の本文を他ユーザーが読めないことを確認する。既存 DB の権限変更はこのタスクに含めない（`S01-002`）。
 
-- [ ] repository 解決を Git 環境変数から隔離する
+- [x] repository 解決を Git 環境変数から隔離する
 
   `internal/core/repo_path.go` の subprocess が呼び出し元の `GIT_DIR`・`GIT_WORK_TREE` 等を継承し、ログの cwd と無関係な root を `repo_path` として保存する問題を防ぐ。別 repository を指す環境下で Claude Code・Codex を取り込み、cwd に基づく正しい保存値・projects 集約・project filter を確認する（`I05-001`）。
 

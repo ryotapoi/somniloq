@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -823,6 +824,15 @@ func TestImport_MetaAfterBody_AcrossInvocations(t *testing.T) {
 
 func TestImport_LinkedWorktreeProjects(t *testing.T) {
 	repo, worktree := linkedWorktree(t)
+	foreignRepo, foreignWorktree := linkedWorktree(t)
+	foreignGitDir, err := exec.Command("git", "-C", foreignWorktree, "rev-parse", "--absolute-git-dir").Output()
+	if err != nil {
+		t.Fatal(err)
+	}
+	sub := filepath.Join(repo, "sub")
+	if err := os.Mkdir(sub, 0o755); err != nil {
+		t.Fatal(err)
+	}
 	db := testDB(t)
 	claudeRoot, codexRoot := t.TempDir(), t.TempDir()
 	project := filepath.Join(claudeRoot, "project")
@@ -830,7 +840,7 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	other := t.TempDir()
-	for i, cwd := range []string{repo, worktree, other} {
+	for i, cwd := range []string{sub, worktree, other} {
 		claude := fmt.Sprintf(`{"type":"user","uuid":"u%d","sessionId":"claude-%d","timestamp":"2026-05-01T00:00:00Z","cwd":%q,"message":{"role":"user","content":"hello"}}`+"\n", i, i, cwd)
 		codex := fmt.Sprintf(`{"timestamp":"2026-05-01T00:00:00Z","type":"session_meta","payload":{"id":"codex-%d","cwd":%q}}
 {"timestamp":"2026-05-01T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
@@ -844,6 +854,10 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 			}
 		}
 	}
+	// Discovery must use the log cwd even when the caller targets another repo.
+	t.Setenv("GIT_DIR", strings.TrimRight(string(foreignGitDir), "\r\n"))
+	t.Setenv("GIT_WORK_TREE", foreignWorktree)
+	t.Setenv("GIT_COMMON_DIR", filepath.Join(foreignRepo, ".git"))
 	result, err := Import(db, ImportOptions{ProjectsDir: claudeRoot, CodexSessionsDir: codexRoot, CursorProjectsDir: t.TempDir(), Source: ImportSourceAll})
 	if err != nil {
 		t.Fatal(err)
@@ -851,8 +865,21 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 	if result.FilesImported != 6 || len(result.Errors) != 0 || result.UnparsedLines != 0 {
 		t.Fatalf("Import: %+v", result)
 	}
-	// Old non-NULL worktree identities survive unchanged differential import.
-	if _, err := db.db.Exec("UPDATE sessions SET repo_path=? WHERE session_id IN ('claude-1', 'codex-1')", worktree); err != nil {
+	stored, err := db.ListSessions(SessionFilter{})
+	if err != nil || len(stored) != 6 {
+		t.Fatalf("stored sessions: %+v, %v", stored, err)
+	}
+	for _, session := range stored {
+		want := repo
+		if session.SessionID == "claude-2" || session.SessionID == "codex-2" {
+			want = other
+		}
+		if session.RepoPath != want {
+			t.Errorf("%s repo_path = %q, want %q", session.SessionID, session.RepoPath, want)
+		}
+	}
+	// Old non-NULL identities survive unchanged differential import.
+	if _, err := db.db.Exec("UPDATE sessions SET repo_path=? WHERE session_id IN ('claude-1', 'codex-1')", foreignRepo); err != nil {
 		t.Fatal(err)
 	}
 	opts := ImportOptions{ProjectsDir: claudeRoot, CodexSessionsDir: codexRoot, CursorProjectsDir: t.TempDir(), Source: ImportSourceAll}
@@ -860,7 +887,7 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 	if err != nil || result.FilesSkipped != 6 {
 		t.Fatalf("unchanged import: %+v, %v", result, err)
 	}
-	old, err := db.ListSessions(SessionFilter{Projects: []string{worktree}})
+	old, err := db.ListSessions(SessionFilter{Projects: []string{foreignRepo}})
 	if err != nil || len(old) != 2 {
 		t.Fatalf("old identities: %+v, %v", old, err)
 	}
@@ -894,6 +921,22 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 	}
 	if !reflect.DeepEqual(ids, map[string]bool{"claude-0": true, "claude-1": true, "codex-0": true, "codex-1": true}) {
 		t.Fatalf("filtered sessions = %v", ids)
+	}
+	for project, want := range map[string]map[string]bool{
+		other:       {"claude-2": true, "codex-2": true},
+		foreignRepo: {},
+	} {
+		sessions, err := db.ListSessions(SessionFilter{Projects: []string{project}})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids := map[string]bool{}
+		for _, session := range sessions {
+			ids[session.SessionID] = true
+		}
+		if !reflect.DeepEqual(ids, want) {
+			t.Errorf("project %q sessions = %v, want %v", project, ids, want)
+		}
 	}
 }
 
