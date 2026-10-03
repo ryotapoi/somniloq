@@ -121,6 +121,8 @@ CREATE TABLE IF NOT EXISTS messages (
     FOREIGN KEY (source, session_id) REFERENCES sessions(source, session_id)
 );
 
+CREATE INDEX IF NOT EXISTS messages_session_idx ON messages(source, session_id);
+
 CREATE TABLE IF NOT EXISTS import_state (
     jsonl_path TEXT PRIMARY KEY,
     source TEXT NOT NULL CHECK(source <> ''),

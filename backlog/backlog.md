@@ -42,7 +42,7 @@
 
   `internal/core/repo_path.go` の subprocess が呼び出し元の `GIT_DIR`・`GIT_WORK_TREE` 等を継承し、ログの cwd と無関係な root を `repo_path` として保存する問題を防ぐ。別 repository を指す環境下で Claude Code・Codex を取り込み、cwd に基づく正しい保存値・projects 集約・project filter を確認する（`I05-001`）。
 
-- [ ] セッション別のメッセージ取得で全履歴の再走査を減らす
+- [x] セッション別のメッセージ取得で全履歴の再走査を減らす
 
   対象セッション数だけ `messages` 全体を繰り返し走査する問題を解消する。`internal/core/db_messages_summary.go` の `GetMessages` / `GetTurnMessages` と schema の接続を見直し、新規・既存 DB で query plan、複数セッションの `search` / `show` の処理時間、同時刻の rowid 順・turn 採番を確認する。合成10万メッセージ・100セッションの summary 表示では約0.95秒、比較用索引ありでは約0.15秒だった。本文検索の LIKE 全走査は変更しない（`S01-001`）。
 

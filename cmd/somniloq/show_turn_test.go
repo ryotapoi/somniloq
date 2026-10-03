@@ -9,6 +9,43 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
+func TestShowAndSearchTurnsKeepInsertionOrderAtEqualTimestamps(t *testing.T) {
+	fixture := func() *core.DB {
+		db := newOutlineTestDB(t)
+		if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "ties"}, "2026-03-28T15:00:00Z"); err != nil {
+			t.Fatal(err)
+		}
+		for _, message := range []struct{ uuid, role, content string }{
+			{"z-user", "user", "first tied question"},
+			{"z-reply", "assistant", "first tied reply"},
+			{"a-user", "user", "second tied question"},
+			{"a-reply", "assistant", "second tied reply"},
+		} {
+			insertOutlineMessage(t, db, "ties", message.uuid, message.role, message.content, "2026-03-28T15:00:00Z", false)
+		}
+		return db
+	}
+	db := fixture()
+	var out, errOut bytes.Buffer
+	code, err := showCmd([]string{"--turn", "2", "ties"}, staticDB(db), config{}, &out, &errOut)
+	if code != 0 || err != nil || errOut.Len() != 0 {
+		t.Fatalf("show = %d, %v, stderr %q", code, err, errOut.String())
+	}
+	if strings.Contains(out.String(), "first tied") || !strings.Contains(out.String(), "second tied question") || !strings.Contains(out.String(), "second tied reply") {
+		t.Fatalf("show turn 2 = %q", out.String())
+	}
+	out.Reset()
+	db = fixture()
+	code, err = searchCmd([]string{"--format", "json", "second tied reply"}, staticDB(db), config{}, &out, &errOut)
+	if code != 0 || err != nil || errOut.Len() != 0 {
+		t.Fatalf("search = %d, %v, stderr %q", code, err, errOut.String())
+	}
+	hits := decodeJSONArray(t, out.Bytes())
+	if len(hits) != 1 || hits[0]["sessionId"] != "ties" || hits[0]["turn"] != float64(2) {
+		t.Fatalf("search hits = %v, want ties turn 2", hits)
+	}
+}
+
 func TestShowCmd_TurnRange(t *testing.T) {
 	db := newOutlineTestDB(t)
 
