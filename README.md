@@ -18,9 +18,12 @@ go install github.com/ryotapoi/somniloq/cmd/somniloq@latest
 somniloq import                         # Import new log content from all three sources
 somniloq sessions --since 7d           # Find recent sessions
 somniloq search "auth bug"              # Search message bodies across sessions
+somniloq search --since 7d --project somniloq "auth" # Search recent messages in a project
 somniloq outline <session-id>           # Skim a long session by turn
 somniloq show --turn 12..18 <session-id> # Read selected turns
 ```
+
+Put search flags before the query, as in the period-filtered example above.
 
 `sessions` and `search` results include a `source` value. If the same session ID exists in multiple sources, pass that value when reading it, for example `somniloq show --source codex <session-id>`. Without `--source`, `show` and `outline` report the matching sources instead of choosing one.
 

@@ -18,9 +18,12 @@ go install github.com/ryotapoi/somniloq/cmd/somniloq@latest
 somniloq import                         # 3 source の新しいログを取り込む
 somniloq sessions --since 7d           # 最近のセッションを探す
 somniloq search "auth bug"              # セッション横断で本文を検索する
+somniloq search --since 7d --project somniloq "auth" # プロジェクトの直近メッセージを検索する
 somniloq outline <session-id>           # 長いセッションのターンを一覧する
 somniloq show --turn 12..18 <session-id> # 必要なターンを読む
 ```
+
+期間などの search フラグは検索語より前に置きます。
 
 `sessions` と `search` の結果には `source` が含まれる。同じセッション ID が複数の source にある場合は、`somniloq show --source codex <session-id>` のように指定する。省略すると `show` と `outline` は一方を選ばず候補を表示する。
 

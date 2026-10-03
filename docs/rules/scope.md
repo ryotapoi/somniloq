@@ -132,7 +132,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 検索（search）
 
-- `search <query> [--since] [--until] [--day-boundary] [--project] [--limit N] [--offset M] [--format tsv|json]` で全メッセージ本文を横断検索する。デフォルトは `tsv`
+- `search [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] <query>` で全メッセージ本文を横断検索する。デフォルトは `tsv`。フラグは検索語より前に置く
 - 実装は LIKE 全走査。FTS5 は日本語だと trigram 必須で索引が本文の 2〜3 倍に膨らみ、3 文字未満のクエリが索引で引けないため、LIKE で困るスケールになるまで見送り（本文 42 MB の DB で実測 0.1 秒前後）
 - マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ。query の `%`、`_`、`\` は文字列として扱う
 - sidechain メッセージは除外（show と同じ扱い）

@@ -58,7 +58,7 @@
 
   `.github/workflows/ci.yml` は `mdhop diagnose` の終了コードだけを使うが、固定された mdhop v0.16.1 は phantom・壊れた anchor があっても JSON 出力成功時に exit 0 を返す。正常な vault は成功し、`basename_conflicts`・`asset_basename_conflicts`・`phantoms`・`anchors` の対象問題があれば job が失敗することを一時 vault で検証する（`O01-001`）。
 
-- [ ] search の案内を受理される引数順に揃える
+- [x] search の案内を受理される引数順に揃える
 
   `docs/rules/scope.md` の synopsis は query の後に flag を示すが、`somniloq search auth --since 7d` は `too many arguments` で失敗する。CLI help・README 両言語・正本の案内を照合し、掲載した期間 filter 付きの構文をそのまま実行できることを確認する（`O01-003`）。
 
