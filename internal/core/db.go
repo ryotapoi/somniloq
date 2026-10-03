@@ -3,6 +3,7 @@ package core
 import (
 	"database/sql"
 	"database/sql/driver"
+	"os"
 	"time"
 
 	"modernc.org/sqlite"
@@ -40,6 +41,19 @@ type execer interface {
 }
 
 func OpenDB(dsn string) (*DB, error) {
+	if dsn != ":memory:" && dsn != "" {
+		// Restrict a new file before SQLite writes any conversation content.
+		// Exclusive creation leaves existing databases and their modes untouched.
+		file, err := os.OpenFile(dsn, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+		if err != nil && !os.IsExist(err) {
+			return nil, err
+		}
+		if err == nil {
+			if err := file.Close(); err != nil {
+				return nil, err
+			}
+		}
+	}
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err

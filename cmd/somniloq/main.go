@@ -182,7 +182,7 @@ func flagConsumesValue(f *flag.Flag) bool {
 }
 
 func openDB(dbPath string) (*core.DB, error) {
-	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o700); err != nil {
 		return nil, fmt.Errorf("create db directory: %w", err)
 	}
 	db, err := core.OpenDB(dbPath)
