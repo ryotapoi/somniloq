@@ -152,14 +152,6 @@ func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportR
 	// Scan errors already carry their "scan <path>:" context from the adapter.
 	result := &ImportResult{FilesScanned: len(files)}
 	result.Errors = append(result.Errors, scanErrs...)
-	newTransaction := func() (ingest.ImportTransaction, error) {
-		tx, err := db.Begin()
-		if err != nil {
-			return nil, err
-		}
-		return importTx{tx: tx}, nil
-	}
-
 	for _, path := range files {
 		state, err := db.GetImportState(path)
 		if err != nil {
@@ -190,6 +182,26 @@ func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportR
 		}
 
 		importedAt := timeNow()
+		newTransaction := func() (ingest.ImportTransaction, error) {
+			tx, err := db.Begin()
+			if err != nil {
+				return nil, err
+			}
+			// Validate the cursor in the same SQLite snapshot as its writes.
+			// A full import may have deleted its supporting body since the
+			// initial read. Later writes to that snapshot must also fail if
+			// another process commits a deletion after this validation.
+			current, err := getImportState(tx, path)
+			if err != nil {
+				tx.Rollback()
+				return nil, err
+			}
+			if (state == nil) != (current == nil) || (state != nil && current != nil && *state != *current) {
+				tx.Rollback()
+				return nil, fmt.Errorf("import state changed during import")
+			}
+			return importTx{tx: tx}, nil
+		}
 		pr, perr := adapter.ProcessFile(newTransaction, path, offset, fi.Size(), importedAt)
 		if perr != nil {
 			result.FilesFailed++
