@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 )
 
 type SessionRow struct {
@@ -88,7 +90,7 @@ func scanSessionRow(row rowScanner) (SessionRow, error) {
 	); err != nil {
 		return SessionRow{}, err
 	}
-	r.REF = IdentityREF(inputKey, r.Source, r.Identity)
+	r.REF = savedREF(inputKey, r.Source, r.Identity)
 	if parentIdentity != "" {
 		r.ParentREF = IdentityREF(inputKey, Source(parentSource), parentIdentity)
 	}
@@ -196,7 +198,27 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("list sessions: query: %w", err)
 	}
-	return scanSessionRows(rows, "list sessions")
+	result, err := scanSessionRows(rows, "list sessions")
+	if err != nil {
+		return nil, err
+	}
+	query = legacySessionRowSelect
+	if len(conditions) > 0 {
+		query += " WHERE " + strings.Join(conditions, " AND ")
+	}
+	query += " GROUP BY s.snapshot_sha256,s.source,s.session_id"
+	rows, err = d.execer().Query(query, args...)
+	if err != nil {
+		return nil, err
+	}
+	legacy, err := scanSessionRows(rows, "list legacy sessions")
+	result = append(result, legacy...)
+	sort.SliceStable(result, func(i, j int) bool {
+		left, _ := time.Parse(time.RFC3339Nano, result[i].StartedAt)
+		right, _ := time.Parse(time.RFC3339Nano, result[j].StartedAt)
+		return left.After(right)
+	})
+	return result, err
 }
 
 type ProjectRow struct {
@@ -209,7 +231,7 @@ type ProjectRow struct {
 // that collapse to the same canonical display name.
 func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	query := `SELECT COALESCE(MIN(s.repo_path), ''), COUNT(*)
-	FROM sessions s`
+	FROM (SELECT repo_path,started_at FROM sessions UNION ALL SELECT repo_path,started_at FROM legacy_sessions) s`
 
 	conditions, args := timeFilterConditions(filter, sessionStartedAtColumn)
 	if len(conditions) > 0 {
@@ -239,6 +261,18 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 }
 
 func (d *DB) GetSession(inputID int64, source Source, sessionID string) (*SessionRow, error) {
+	if inputID == LegacyInputID {
+		matches, err := d.LookupSessionsByID(sessionID)
+		if err != nil {
+			return nil, err
+		}
+		for _, r := range matches {
+			if r.InputID == LegacyInputID && r.Source == source {
+				return &r, nil
+			}
+		}
+		return nil, nil
+	}
 	row := d.execer().QueryRow(sessionRowSelect+`
 		WHERE s.input_id = ? AND s.source = ? AND s.identity = ?
 		GROUP BY s.input_id, s.source, s.identity`,
@@ -264,13 +298,33 @@ func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
 	if err != nil {
 		return nil, fmt.Errorf("lookup sessions by ID: query: %w", err)
 	}
-	return scanSessionRows(rows, "lookup sessions by ID")
+	result, err := scanSessionRows(rows, "lookup sessions by ID")
+	if err != nil {
+		return nil, err
+	}
+	rows, err = d.execer().Query(legacySessionRowSelect+` WHERE s.session_id=? GROUP BY s.snapshot_sha256,s.source,s.session_id`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	legacy, err := scanSessionRows(rows, "lookup legacy sessions by ID")
+	return append(result, legacy...), err
 }
 
 func (d *DB) LookupSessionREF(ref string) (*SessionRow, error) {
 	key, source, id, err := parseREF(ref)
 	if err != nil {
 		return nil, err
+	}
+	if strings.HasPrefix(key, "legacy:") {
+		row := d.execer().QueryRow(legacySessionRowSelect+` WHERE s.snapshot_sha256=? AND s.source=? AND s.session_id=? GROUP BY s.snapshot_sha256,s.source,s.session_id`, strings.TrimPrefix(key, "legacy:"), source, id)
+		r, e := scanSessionRow(row)
+		if errors.Is(e, sql.ErrNoRows) {
+			return nil, nil
+		}
+		if e != nil {
+			return nil, e
+		}
+		return &r, nil
 	}
 	row := d.db.QueryRow(sessionRowSelect+` WHERE i.input_key=? AND s.source=? AND s.identity=? GROUP BY s.input_id,s.source,s.identity`, key, source, id)
 	r, err := scanSessionRow(row)

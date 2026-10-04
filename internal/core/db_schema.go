@@ -75,6 +75,32 @@ CREATE TABLE migration_origin (
  copy_complete INTEGER NOT NULL CHECK(copy_complete=1),
  snapshot_path TEXT NOT NULL
 );
+CREATE TABLE legacy_sessions (
+ snapshot_sha256 TEXT NOT NULL,
+ source TEXT NOT NULL CHECK(source <> ''),
+ session_id TEXT NOT NULL,
+ cwd TEXT, repo_path TEXT, git_branch TEXT, custom_title TEXT,
+ agent_name TEXT, version TEXT, started_at TEXT, ended_at TEXT,
+ imported_at TEXT NOT NULL,
+ PRIMARY KEY(snapshot_sha256,source,session_id)
+);
+CREATE TABLE legacy_messages (
+ legacy_rowid INTEGER PRIMARY KEY,
+ snapshot_sha256 TEXT NOT NULL,
+ uuid TEXT NOT NULL UNIQUE,
+ source TEXT NOT NULL CHECK(source <> ''),
+ session_id TEXT NOT NULL,
+ parent_uuid TEXT,
+ role TEXT NOT NULL,
+ content TEXT NOT NULL,
+ timestamp TEXT,
+ is_sidechain BOOLEAN DEFAULT FALSE,
+ number INTEGER NOT NULL,
+ blocks_json TEXT DEFAULT NULL CHECK(blocks_json IS NULL),
+ provenance TEXT NOT NULL DEFAULT 'legacy_saved' CHECK(provenance='legacy_saved'),
+ FOREIGN KEY(snapshot_sha256,source,session_id) REFERENCES legacy_sessions(snapshot_sha256,source,session_id)
+);
+CREATE INDEX legacy_messages_session_idx ON legacy_messages(snapshot_sha256,source,session_id);
 PRAGMA user_version=1;
 `
 
@@ -85,7 +111,7 @@ type SchemaError struct {
 
 func (e *SchemaError) Error() string {
 	if e.Revision == 0 {
-		return "unsupported database schema (revision 0); dedicated migration is not implemented yet; use a new database"
+		return "unsupported database schema (revision 0); use migrate --config NAME_OR_PATH --from PATH for a legacy-v013 snapshot, or use a new database"
 	}
 	return fmt.Sprintf("unsupported database schema (revision %d): %s", e.Revision, e.Reason)
 }

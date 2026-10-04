@@ -2,7 +2,7 @@
 
 本書が CLI 仕様・コマンド挙動・スキーマの正。README.md / README.ja.md は本書の派生ビューなので、本書のこれらの記述を変更したら README 両方を同期する。
 
-v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF は利用できる。まとまりの解決、新 search/show の原文・ページ仕様、専用 migrate は後続実装。以下は現在利用できる CLI の仕様。
+v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF と専用 migrate は利用できる。まとまりの解決、新 search/show の原文・ページ仕様は後続実装。以下は現在利用できる CLI の仕様。
 
 ## 主要機能
 
@@ -47,7 +47,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 保存済みの非 NULL `repo_path` は自動補正されず、不変ファイルは差分 import でスキップされる。元ログと対象 worktree が残っていれば `somniloq import --config NAME_OR_PATH --full --yes` で選択入力を再構築できる。再構築する入力の元ログが残っていることを確認する。
 
-通常 import/read は既存旧 schema（revision 0）や非対応 schema/revision を変更せず拒否する。専用 migrate は後続実装のため、現在は旧 DB を直接利用できない。read コマンドは未存在 DB や parent directory を作成しない。
+通常 import/read は既存旧 schema（revision 0）や非対応 schema/revision を変更せず拒否する。既知の旧形式は専用 `migrate` で別 DB へ移せる。read コマンドは未存在 DB や parent directory を作成しない。
 
 #### Codex 用（`somniloq import --config NAME_OR_PATH --source codex`）
 
@@ -65,6 +65,14 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - ログにない timestamp、cwd、repository、version、title、usage、parent は補完しない
 - `messages.uuid` の一意性は source、path、物理行に基づく。差分取り込み時も空行・無視行・unparsed 行を含む物理行番号を維持する
 - 差分取り込み・`--full` 等のオプション体系は `import` と揃える
+
+### 旧履歴の移行（migrate）
+
+`somniloq migrate --config NAME_OR_PATH --from PATH` で、既知の旧形式 `legacy-v013` の固定 standalone snapshot を設定の `db` へコピーする。両フラグ必須、位置引数なし。移行先は未存在または revision 0 のユーザー object のない空 DB とし、設定には移行先 DB と残存 Codex ログの全入力を指定する。元と先の同一実体、元の sidecar、未知形状は拒否する。元 snapshot は変更しない。
+
+初回コピーを一つの transaction で確定し、入力不明の旧履歴を legacy namespace で保持する。その後、設定の全 Codex 入力から物理行の UUID 出自と本人帰属を別々に確認し、本人 group の全文保存と同じ transaction で証明できた旧行だけを除く。未解析・競合・読み取りや保存失敗では旧行・前回正常会話・cursor を保持し、独立 group は続行する。ログ欠落、所属不明、Claude Code / Cursor Agent の旧履歴を保持する。
+
+同じ snapshot の全 bytes digest と完了 receipt が一致する移行先だけ再実行できる。通常新 DB は再実行先として受理しない。stdout は JSON summary、stderr は本文を含まない診断。成功0、コピーや置換の失敗1、引数・設定・非対応 schema は2。所属不明の旧同名行を残した場合も置換不成功として終了1、単なるログ欠落保持は失敗にしない。詳細な受理条件・summary・保持条件は [移行契約](../specs/v0.14.0-migration.md) を参照する。
 
 ### 時刻フィルタの共通規則
 
@@ -165,7 +173,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 設定ファイル（config）
 
-全 DB コマンド（import / sessions / projects / search / show / outline）は `--config NAME_OR_PATH` が必須。コマンド名の前でも後でも指定できる。help / version / config init は設定不要。通常コマンドの `--db` は廃止。未指定・欠落時は exit 2、stderr に不足項目と `Run somniloq config init, then use --config default.` を表示し、DB・設定を自動生成しない。旧 JSON 設定は探索・変換しない。
+全 DB コマンド（import / migrate / sessions / projects / search / show / outline）は `--config NAME_OR_PATH` が必須。コマンド名の前でも後でも指定できる。help / version / config init は設定不要。通常コマンドの `--db` は廃止。未指定・欠落時は exit 2、stderr に不足項目と `Run somniloq config init, then use --config default.` を表示し、DB・設定を自動生成しない。旧 JSON 設定は探索・変換しない。
 
 `config init [NAME] [--output PATH] [--db PATH]` は設定だけを作り、DB は開かない。NAME 省略時は default、名前は `[A-Za-z0-9_-]+`。既定出力は `~/.somniloq/config/NAME.toml`、既定 DB は `~/.somniloq/NAME.db`。任意出力でも NAME が既定 DB を決める。parent directory は作成し、通常ファイル・directory・symlink（dangling を含む）への上書きは exit 2 で拒否する。stdout は作成した設定の絶対 path 一行。
 
@@ -205,6 +213,7 @@ root = "~/.cursor/projects"
 ```bash
 somniloq config init                               # default TOML を生成（DB は未作成）
 somniloq config init archive --output ./archive.toml --db ./archive.db
+somniloq migrate --config archive --from ./archive-snapshot.db
 somniloq import --config default                   # 全設定入力を差分取り込み
 somniloq import --config default --source codex     # Codex 入力だけ
 somniloq import --config default --input /path/to/logs --full --yes
@@ -223,7 +232,7 @@ somniloq --version
 
 ## SQLite と入力・会話の識別
 
-DB path は TOML の db で指定する。新 DB は revision 1（`PRAGMA user_version=1`）で作成する。通常経路で旧 DB を変更・移行しない。revision が1でも以前の root-only shape は無変更で拒否する。元ログから新しい DB へ取り込み直す（対応済み shape の DB の再構築には `--full --yes` を利用できる）。
+DB path は TOML の db で指定する。新 DB は revision 1（`PRAGMA user_version=1`）で作成する。通常経路で旧 DB を変更・移行しない。revision が1でも以前の root-only shape は無変更で拒否する。既知の旧形式は専用 `migrate` を使い、それ以外は元ログから新しい DB へ取り込み直す（対応済み shape の DB の再構築には `--full --yes` を利用できる）。
 
 | 保存対象 | 入力境界 |
 | --- | --- |
@@ -232,10 +241,11 @@ DB path は TOML の db で指定する。新 DB は revision 1（`PRAGMA user_v
 | messages | input と本人 identity ごとに UUID を区切り、同入力の本人会話へ接続する |
 | import_state | input と JSONL path ごとに差分再開状態を保持する |
 | migration_origin | 新規 DB では空。専用移行の receipt は通常 import で作らない |
+| legacy_sessions / legacy_messages | 固定 snapshot の旧会話・旧行を入力未知のまま保存し、正常入力とは分離する |
 
 入力キーは `sha256(UTF8(DB source) + NUL + UTF8(canonical root))` の64桁小文字 hex。同じ source/root は再処理や name 変更でも同入力、root 移動は別入力。Codex・Cursor Agent・Claude Code root の会話 identity は HTML escape なし・空白なし JSON 配列 `[sessionId]`。
 
-完全 REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`（padding なし RFC4648 URL alphabet）。path・name・DB rowid は含まない。同じ root/source/identity なら再 import・別 DB でも安定する。Codex は子本人の identity と明示親参照を保存し、各本人 REF で会話を選べる。Claude Code の子・孫は `[rootSessionId,agentId]` で個別 REF を発行・選択できる。まとまり・子孫を展開する query、legacy REF は後続実装。
+完全 REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`（padding なし RFC4648 URL alphabet）。path・name・DB rowid は含まない。同じ root/source/identity なら再 import・別 DB でも安定する。Codex は子本人の identity と明示親参照を保存し、各本人 REF で会話を選べる。Claude Code の子・孫は `[rootSessionId,agentId]` で個別 REF を発行・選択できる。まとまり・子孫を展開する query は後続実装。移行した旧会話は `slq1:legacy:<snapshot_sha256>:<source>:<base64url_legacy_session_id>` の完全 REF で選択でき、正常入力の同名会話と区別する。部分置換後も旧 REF と残行の番号を維持する。
 
 ## Known limitations
 

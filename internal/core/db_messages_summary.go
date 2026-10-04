@@ -8,26 +8,42 @@ import (
 
 // MessageRow carries the original block and physical provenance of a body row.
 type MessageRow struct {
-	UUID       string
-	Role       string
-	Content    string
-	Timestamp  string
-	Blocks     []string
-	Number     int
-	OriginPath string
-	OriginLine int
-	PayloadID  string
+	UUID        string
+	Role        string
+	Content     string
+	Timestamp   string
+	Blocks      []string
+	Number      int
+	OriginPath  string
+	OriginLine  int
+	PayloadID   string
+	Provenance  string
+	LegacyRowID int64
 }
 
 // GetMessages returns body messages by canonical number, with rowid as the
 // order for sources that have no numbered stream.
 func (d *DB) GetMessages(inputID int64, source Source, sessionID string) ([]MessageRow, error) {
+	if inputID == LegacyInputID {
+		return d.GetIdentityMessages(inputID, source, sessionID)
+	}
 	return d.GetIdentityMessages(inputID, source, rootIdentity(sessionID))
 }
 
 func (d *DB) GetIdentityMessages(inputID int64, source Source, identity string) ([]MessageRow, error) {
+	if inputID == LegacyInputID {
+		rows, err := d.execer().Query(`SELECT uuid,role,content,COALESCE(timestamp,''),'null',number,'',0,'','legacy_saved',legacy_rowid FROM legacy_messages WHERE source=? AND session_id=? AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0) ORDER BY number`, source, identity)
+		if err != nil {
+			return nil, err
+		}
+		result, err := scanMessages(rows, "get legacy messages")
+		if err != nil {
+			return nil, err
+		}
+		return result, nil
+	}
 	rows, err := d.execer().Query(`
-		SELECT uuid, role, content, timestamp, blocks_json, number, origin_path, origin_line, payload_id
+		SELECT uuid, role, content, timestamp, blocks_json, number, origin_path, origin_line, payload_id, '', 0
 		FROM messages
 		WHERE input_id = ? AND source = ? AND identity = ?
 		  AND membership = 'body'
@@ -43,10 +59,16 @@ func (d *DB) GetIdentityMessages(inputID int64, source Source, identity string) 
 
 // GetTurnMessages returns only UUID and role in the same order as GetMessages.
 func (d *DB) GetTurnMessages(inputID int64, source Source, sessionID string) ([]MessageRow, error) {
+	if inputID == LegacyInputID {
+		return d.GetIdentityTurnMessages(inputID, source, sessionID)
+	}
 	return d.GetIdentityTurnMessages(inputID, source, rootIdentity(sessionID))
 }
 
 func (d *DB) GetIdentityTurnMessages(inputID int64, source Source, identity string) ([]MessageRow, error) {
+	if inputID == LegacyInputID {
+		return d.GetIdentityMessages(inputID, source, identity)
+	}
 	rows, err := d.execer().Query(`
 		SELECT uuid, role
 		FROM messages
@@ -82,7 +104,7 @@ func scanMessages(rows *sql.Rows, operation string) ([]MessageRow, error) {
 	for rows.Next() {
 		var m MessageRow
 		var blocksJSON string
-		if err := rows.Scan(&m.UUID, &m.Role, &m.Content, &m.Timestamp, &blocksJSON, &m.Number, &m.OriginPath, &m.OriginLine, &m.PayloadID); err != nil {
+		if err := rows.Scan(&m.UUID, &m.Role, &m.Content, &m.Timestamp, &blocksJSON, &m.Number, &m.OriginPath, &m.OriginLine, &m.PayloadID, &m.Provenance, &m.LegacyRowID); err != nil {
 			return nil, fmt.Errorf("%s: scan row: %w", operation, err)
 		}
 		if err := json.Unmarshal([]byte(blocksJSON), &m.Blocks); err != nil {

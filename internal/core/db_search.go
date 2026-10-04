@@ -33,20 +33,24 @@ type SearchPagination struct {
 // the DESC order.
 func (d *DB) SearchMessages(filter SessionFilter, query string, pagination SearchPagination) ([]SearchRow, error) {
 	q := `
-		SELECT m.input_id, i.input_key, m.source, m.uuid, m.session_id, m.identity, COALESCE(s.repo_path, ''), m.timestamp, m.content
-		FROM messages m
-		JOIN inputs i ON m.input_id=i.id
- JOIN sessions s ON m.input_id=s.input_id AND m.source = s.source AND m.identity = s.identity
-		WHERE m.membership = 'body'
-		  AND (m.source IN ('codex','claude_code') OR m.is_sidechain = 0)
-		  AND m.content LIKE '%' || ? || '%' ESCAPE '\'`
+ SELECT m.input_id, m.input_key, m.source, m.uuid, m.session_id, m.identity, COALESCE(s.repo_path,''), COALESCE(m.timestamp,''), m.content
+ FROM (
+ SELECT m.*,i.input_key,m.rowid AS saved_rowid FROM messages m JOIN inputs i ON m.input_id=i.id
+ UNION ALL
+ SELECT -1,uuid,source,session_id,session_id,parent_uuid,role,content,COALESCE(blocks_json,'null'),timestamp,is_sidechain,number,'',0,'body','', 'legacy:' || snapshot_sha256,legacy_rowid FROM legacy_messages
+ ) m JOIN (
+ SELECT input_id,source,identity,repo_path,imported_at FROM sessions
+ UNION ALL SELECT -1,source,session_id,repo_path,imported_at FROM legacy_sessions
+ ) s ON m.input_id=s.input_id AND m.source=s.source AND m.identity=s.identity
+ WHERE m.membership='body' AND (m.source IN ('codex','claude_code') OR COALESCE(m.is_sidechain,0)=0)
+ AND m.content LIKE '%' || ? || '%' ESCAPE '\'`
 	args := []any{escapeLikeLiteral(query)}
 	conditions, filterArgs := sessionFilterConditions(filter, messageTimestampColumn)
 	if len(conditions) > 0 {
 		q += " AND " + strings.Join(conditions, " AND ")
 		args = append(args, filterArgs...)
 	}
-	q += " ORDER BY rfc3339_utc_nanos(m.timestamp) DESC, m.rowid DESC"
+	q += " ORDER BY rfc3339_utc_nanos(m.timestamp) DESC, m.saved_rowid DESC"
 	if pagination.Limit > 0 {
 		q += " LIMIT ? OFFSET ?"
 		args = append(args, pagination.Limit, pagination.Offset)
@@ -70,7 +74,7 @@ func (d *DB) SearchMessages(filter SessionFilter, query string, pagination Searc
 			return nil, fmt.Errorf("search messages: scan row: %w", err)
 		}
 		r.Source = Source(src)
-		r.REF = IdentityREF(inputKey, r.Source, r.Identity)
+		r.REF = savedREF(inputKey, r.Source, r.Identity)
 		result = append(result, r)
 	}
 	if err := rows.Err(); err != nil {

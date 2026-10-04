@@ -14,7 +14,7 @@ Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造
 
 末尾改行のない正常な JSON レコードは、その import で取り込む。末尾改行がなく unparsed となった行は診断に数えるが、差分再開位置をその行頭に残し、追記でファイルサイズが増えたら同じ物理行を再処理する。改行済みの unparsed 行では再開位置を進める。本文のない prefix は従来どおり保存境界を進めず、本文が現れたときに読み直す。
 
-保存済みの過去の欠落は自動回復しない。対応 revision の DB は、元ログが残っていれば `import --config NAME_OR_PATH --full` で選択入力だけを再構築できる。他入力は保持する。旧形式 DB は通常経路で無変更拒否し、専用 migrate は後続実装。
+保存済みの過去の欠落は自動回復しない。対応 revision の DB は、元ログが残っていれば `import --config NAME_OR_PATH --full` で選択入力だけを再構築できる。他入力は保持する。旧形式 DB は通常経路で無変更拒否し、既知の旧形式は `migrate --config NAME_OR_PATH --from PATH` で固定 snapshot から別 DB へ移せる（[移行契約](v0.14.0-migration.md)）。
 
 ## Claude Code
 

@@ -19,6 +19,8 @@ somniloq import --config default
 
 全 DB コマンドで明示 `--config NAME_OR_PATH` が必要です。設定がなければ `somniloq config init` で default TOML を生成します（DB は作成しません）。既存の設定名・path を確認して選び、旧 JSON や旧 DB を自動移行するものと考えないでください。DB は import 時点のスナップショットです。自動更新ではありません。
 
+既知の旧 DB の履歴保持には `somniloq migrate --config NAME_OR_PATH --from PATH` を使います。元は sidecar のない固定 standalone snapshot、設定の `db` は別の未存在または空 DB、inputs は残存 Codex ログの全 root にします。所属不明・ログ欠落・他 source の旧履歴は保持され、legacy REF で読めます。同じ snapshot と完了 receipt がある移行先に再実行できます。詳細な受理条件と部分失敗の扱いは `somniloq migrate --help` を確認してください。
+
 ## 代表的な探索導線
 
 ```bash
@@ -54,6 +56,7 @@ Cursor Agent の履歴には時刻がないことがあり、`--since` / `--unti
 somniloq --help
 somniloq config init --help
 somniloq import --help
+somniloq migrate --help
 somniloq sessions --help
 somniloq search --help
 somniloq outline --help

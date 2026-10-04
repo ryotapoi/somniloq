@@ -2,7 +2,7 @@
 
 ## Status
 
-Accepted（2026-10-02 決定）
+Superseded by ADR 0020（2026-10-05。専用 backfill の廃止は存続）
 
 ## Context
 

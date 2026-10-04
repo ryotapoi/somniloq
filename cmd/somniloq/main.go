@@ -20,6 +20,7 @@ Usage:
 
 Commands:
   import    Import Claude Code, Codex, and Cursor Agent session logs from JSONL files
+  migrate   Copy a fixed legacy snapshot and replace proven Codex conversations
   sessions  List sessions
   show      Show session content in Markdown
   outline   List a session's user messages as turn, time, body size, and first line
@@ -41,6 +42,10 @@ func main() {
 
 func runCommand(args []string, in io.Reader, out, errOut io.Writer, isTTY bool) (code int, cmdErr error) {
 	defer func() {
+		var migrationErr *migrationIOError
+		if errors.As(cmdErr, &migrationErr) {
+			return
+		}
 		var ioErr *ConfigIOError
 		if errors.As(cmdErr, &ioErr) {
 			return
@@ -101,6 +106,8 @@ func runCommand(args []string, in io.Reader, out, errOut io.Writer, isTTY bool) 
 	}
 	open := func() (*core.DB, error) { return core.OpenDBRead(cfg.DB) }
 	switch command {
+	case "migrate":
+		return migrateCmd(commandArgs, cfg, out, errOut)
 	case "import":
 		return importConfiguredCmd(commandArgs, func() (*core.DB, error) { return openDB(cfg.DB) }, cfg, in, out, errOut, isTTY)
 	case "sessions":
@@ -196,6 +203,10 @@ func splitFlagArg(arg string) (name string, hasValue bool, ok bool) {
 
 func configCommandFlagSet(command string) *flag.FlagSet {
 	switch command {
+	case "migrate":
+		fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
+		fs.String("from", "", "")
+		return fs
 	case "import":
 		fs := flag.NewFlagSet("import", flag.ContinueOnError)
 		fs.Bool("full", false, "")

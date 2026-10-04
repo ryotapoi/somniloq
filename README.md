@@ -31,6 +31,7 @@ Every database command requires `--config NAME_OR_PATH`, before or after the com
 |---------|-----|
 | `config init` | Create a TOML config without opening a database. |
 | `import` | Import new log content; repeat `--input PATH` to select roots, and use `--source claude-code`, `codex`, or `cursor-agent` to restrict sources. |
+| `migrate` | Copy a fixed snapshot of a supported legacy database to another database, replacing only old rows proven by remaining Codex logs. |
 | `sessions` | List sessions; `--since 24h` filters by session time, while `--imported-since 24h` finds sessions saved or updated recently. |
 | `projects` | List projects and session counts. |
 | `search` | Search message bodies; use `--project` or `--since` to narrow results. |
@@ -41,7 +42,7 @@ Every database command requires `--config NAME_OR_PATH`, before or after the com
 
 Codex import keeps each person's conversation separate from inherited context. The first valid session metadata identifies the conversation; an explicit parent ID is retained even if the parent arrives later. Text blocks, their source path and line, original timestamps (including unknown values), and one-based message numbers are stored. Multiple rollouts for the same conversation are ordered by relative path and physical line; incremental import rebuilds that order when earlier content changes. Use a child's full REF to read its own conversation. Current `show`, `outline`, and `search` still use their existing flags and output formats.
 
-New databases use schema revision 1. Normal commands reject legacy or unsupported databases, including the earlier root-only revision 1 shape, without modifying them. Reimport the original logs into a new database. A dedicated `migrate` command is planned. Read commands reject missing databases without creating them.
+New databases use schema revision 1. Normal commands reject legacy or unsupported databases, including the earlier root-only revision 1 shape, without modifying them. Use `somniloq migrate --config archive --from ./archive-snapshot.db` for the supported legacy shape. Set the config’s `db` to a missing or empty destination and configure all remaining Codex roots. Supply a fixed standalone snapshot without sidecars. Rerun only with the same snapshot and a completed copy receipt. Unknown membership, missing logs, and other sources’ old history are retained and accessible through legacy REFs. See the [migration contract](docs/specs/v0.14.0-migration.md) for details. Read commands reject missing databases without creating them.
 
 Use `somniloq <command> --help` for flags and formats. `sessions`, `projects`, `search`, and `outline` support `--format json`; `show` supports Markdown or JSON. JSON still returns arrays, and search still uses literal substring matching. Claude Code children and grandchildren have independent conversation REFs even when they share the root sessionId, and their original sidechain text is retained. Direct parents require matching Agent/Task calls and structured results in the same physical file; path-based root membership is stored separately. Incomplete scans or file reads preserve the affected input’s previously saved text, relations, and cursors; other inputs continue. Grouped search, descendant selection, and the redesigned original-text `show` interface are planned separately.
 

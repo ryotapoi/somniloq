@@ -18,7 +18,13 @@ type ParseFailure struct {
 	Diagnostic error
 }
 
+type PhysicalLine struct {
+	UUID string
+	Line int
+}
+
 type FileReport struct {
+	Lines    []PhysicalLine
 	Path     string
 	Data     []byte
 	Failures []ParseFailure
@@ -61,6 +67,18 @@ func (c *collector) Rollback() error                              { return nil }
 // BuildGroups reads full snapshots so edits to earlier rollouts renumber the
 // entire owner rather than append records in import encounter order.
 func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]Group, []error) {
+	return a.buildGroups(root, paths, importedAt, false)
+}
+
+// BuildMigrationGroups preserves every rollout and rejects incomplete ownership evidence.
+// Ordinary imports intentionally continue to accept partially parsed snapshots.
+func (a Adapter) BuildMigrationGroups(root string, paths []string, importedAt string) ([]Group, []error) {
+	return a.buildGroups(root, paths, importedAt, true)
+}
+
+func (a Adapter) buildGroups(root string, paths []string, importedAt string, strict bool) ([]Group, []error) {
+	paths = append([]string(nil), paths...)
+	boundaries := map[string]*int{}
 	sort.Slice(paths, func(i, j int) bool {
 		x, _ := filepath.Rel(root, paths[i])
 		y, _ := filepath.Rel(root, paths[j])
@@ -80,7 +98,15 @@ func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]
 		h.path = path
 		hasBody := false
 		var unfinishedTail int64
+		var lines []PhysicalLine
+		var strictErr error
 		_, err = ingest.ForEachLine(bytes.NewReader(data), -1, func(line []byte) error {
+			if strict {
+				lines = append(lines, PhysicalLine{UUID: messageUUID(path, len(lines)+1), Line: len(lines) + 1})
+				if e := h.validateMigrationLine(line); e != nil && strictErr == nil {
+					strictErr = fmt.Errorf("%s:%d: %w", path, len(lines), e)
+				}
+			}
 			outcome, err := h.HandleLine(c, line)
 			if err != nil {
 				return err
@@ -93,7 +119,7 @@ func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]
 			}
 			return nil
 		})
-		if hasBody {
+		if hasBody || (strict && h.meta != nil) {
 			c.state = ingest.ImportState{JSONLPath: path, Source: ingest.SourceCodex, FileSize: int64(len(data)), LastOffset: int64(len(data)) - unfinishedTail, ImportedAt: importedAt}
 		}
 		if c.meta == nil {
@@ -103,8 +129,11 @@ func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]
 			errs = append(errs, fmt.Errorf("%s: %w", path, err))
 			continue
 		}
-		if c.meta == nil || c.state.JSONLPath == "" {
-			groups = append(groups, Group{Files: 1, Reports: []FileReport{{Path: path, Data: data, Failures: h.failures}}})
+		if strict && len(h.failures) > 0 && strictErr == nil {
+			strictErr = h.failures[0].Diagnostic
+		}
+		if c.meta == nil || (!strict && c.state.JSONLPath == "") {
+			groups = append(groups, Group{Files: 1, Err: strictErr, Reports: []FileReport{{Path: path, Data: data, Failures: h.failures, Lines: lines}}})
 			continue
 		}
 		id := c.meta.SessionID
@@ -116,6 +145,18 @@ func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]
 		}
 		g := &groups[index]
 		g.Files++
+		if strictErr != nil {
+			g.Err = strictErr
+		}
+		if strict {
+			if old, ok := boundaries[id]; ok {
+				if (old == nil) != (h.historyStart == nil) || (old != nil && h.historyStart != nil && *old != *h.historyStart) {
+					g.Err = fmt.Errorf("%s: conflicting inheritance boundaries", path)
+				}
+			} else {
+				boundaries[id] = h.historyStart
+			}
+		}
 		if g.Session.ParentSessionID != c.meta.ParentSessionID {
 			g.Err = fmt.Errorf("%s: conflicting explicit parent references", id)
 		}
@@ -124,8 +165,11 @@ func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]
 		if c.state.JSONLPath != "" {
 			g.States = append(g.States, c.state)
 		}
-		g.Reports = append(g.Reports, FileReport{Path: path, Data: data, Failures: h.failures})
+		g.Reports = append(g.Reports, FileReport{Path: path, Data: data, Failures: h.failures, Lines: lines})
 		for _, m := range c.messages {
+			if strict && m.Membership == "unresolved" {
+				g.Err = fmt.Errorf("%s:%d: explicit inheritance boundary with missing ordinal", path, m.OriginLine)
+			}
 			rel, _ := filepath.Rel(root, path)
 			m.OriginPath = filepath.ToSlash(rel)
 			g.Messages = append(g.Messages, m)
@@ -190,4 +234,43 @@ func (r FileReport) Diagnostics(old *ingest.ImportState) ingest.ProcessResult {
 		}
 	}
 	return result
+}
+
+func (h *fileHandler) validateMigrationLine(line []byte) error {
+	rec, err := ParseRecord(bytes.TrimSpace(line))
+	if err != nil {
+		return nil
+	} // HandleLine records malformed JSON, including unfinished tails.
+	if rec.Type == "session_meta" {
+		meta, err := parseSessionMeta(rec, h.resolveRepoPath)
+		if err != nil {
+			return nil
+		}
+		var payload SessionMetaPayload
+		if err := json.Unmarshal(rec.Payload, &payload); err != nil {
+			return nil
+		}
+		if h.meta == nil {
+			return nil
+		}
+		if meta.SessionID != h.meta.SessionID {
+			if meta.SessionID != h.meta.ParentSessionID {
+				return fmt.Errorf("conflicting owner metadata")
+			}
+			return nil // Embedded direct-parent metadata does not change the owner boundary.
+		}
+		if meta.ParentSessionID != h.meta.ParentSessionID {
+			return fmt.Errorf("conflicting explicit parent references")
+		}
+		if (payload.HistoryStart == nil) != (h.historyStart == nil) || (payload.HistoryStart != nil && h.historyStart != nil && *payload.HistoryStart != *h.historyStart) {
+			return fmt.Errorf("conflicting inheritance boundaries")
+		}
+	}
+	if rec.Type == "response_item" && h.meta == nil {
+		payload, err := parseResponseItem(rec)
+		if err == nil && isConversationMessage(payload) {
+			return fmt.Errorf("message_owner_unknown: conversation message before owner metadata")
+		}
+	}
+	return nil
 }

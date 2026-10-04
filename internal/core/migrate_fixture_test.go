@@ -1,0 +1,545 @@
+package core
+
+import (
+	"bytes"
+	"crypto/sha256"
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"reflect"
+	"strings"
+	"testing"
+
+	"github.com/ryotapoi/somniloq/internal/ingest/codex"
+)
+
+const migrationFixtureDir = "../ingest/testdata/v0.14.0-migration"
+
+type migrationOracle struct {
+	MessageUUIDs map[string]string     `json:"message_uuids"`
+	Cases        []migrationOracleCase `json:"cases"`
+}
+type migrationOracleCase struct {
+	Name     string   `json:"name"`
+	Files    []string `json:"files"`
+	Mutation struct {
+		SQL         string          `json:"sql"`
+		File        string          `json:"file"`
+		Text        string          `json:"text"`
+		Append      string          `json:"append"`
+		Prepend     json.RawMessage `json:"prepend"`
+		RemoveLines []int           `json:"remove_lines"`
+	} `json:"mutation"`
+	Expected struct {
+		NewIdentity     []string `json:"new_identity"`
+		NewText         []string `json:"new_text"`
+		Removed         []int    `json:"removed_legacy_rowids"`
+		Retained        []int    `json:"retained_legacy_rowids"`
+		Context         []string `json:"inherited_context"`
+		Status          string   `json:"replacement_status"`
+		Reason          string   `json:"reason"`
+		LegacyPreserved bool     `json:"legacy_preserved"`
+		Saved           bool     `json:"new_conversation_saved"`
+		CopySkipped     bool     `json:"copy_skipped"`
+		Reprocessed     bool     `json:"all_current_codex_groups_reprocessed"`
+	} `json:"expected"`
+}
+
+func readMigrationOracle(t *testing.T) migrationOracle {
+	t.Helper()
+	data, err := os.ReadFile(filepath.Join(migrationFixtureDir, "expected.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var oracle migrationOracle
+	if err = json.Unmarshal(data, &oracle); err != nil {
+		t.Fatal(err)
+	}
+	return oracle
+}
+
+// Physical UUIDs change when synthetic rollouts move into the temporary root.
+// This encodes the historical UUID contract, rather than migration's ownership rule.
+func migrationFixtureUUID(path string, line int) string {
+	return fmt.Sprintf("codex:%x", sha256.Sum256([]byte(fmt.Sprintf("%s\x00%d", path, line))))
+}
+
+type migrationFixture struct {
+	from, destination, root, shared string
+	inputs                          []Input
+	before                          []byte
+}
+
+func setupMigrationFixture(t *testing.T, oracle migrationOracle, c migrationOracleCase) migrationFixture {
+	t.Helper()
+	base, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	f := migrationFixture{root: filepath.Join(base, "input-a"), shared: filepath.Join(base, "shared"), destination: filepath.Join(base, "new.db")}
+	for _, root := range []string{f.root, f.shared} {
+		if err := os.MkdirAll(root, 0700); err != nil {
+			t.Fatal(err)
+		}
+	}
+	f.inputs = []Input{{Source: SourceCodex, Root: f.root}, {Source: SourceCodex, Root: f.shared}}
+	script, err := os.ReadFile(filepath.Join(migrationFixtureDir, "legacy.sql"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := string(script)
+	mapping := map[string]struct {
+		name string
+		line int
+	}{"1": {"01-child.jsonl", 3}, "2": {"01-child.jsonl", 4}, "3": {"absent.jsonl", 2}, "4": {"02-multi.jsonl", 2}, "5": {"03-multi.jsonl", 3}, "6": {"04-conflict.jsonl", 2}}
+	for row, loc := range mapping {
+		root := f.root
+		if row == "6" {
+			root = f.shared
+		}
+		text = strings.ReplaceAll(text, oracle.MessageUUIDs[row], migrationFixtureUUID(filepath.Join(root, loc.name), loc.line))
+	}
+	// Old cursor paths are deliberately not copied into the destination.
+	text = strings.ReplaceAll(text, "/fixture/input-a", f.root)
+	text = strings.ReplaceAll(text, "/fixture/shared", f.shared)
+	text += c.Mutation.SQL
+	f.from = makeLegacySnapshot(t, text)
+	files := c.Files
+	switch c.Name {
+	case "rollout_payload_conflict", "invalid_json":
+		files = []string{"02-multi.jsonl", "03-multi.jsonl"}
+	case "unattributed_before_metadata":
+		files = []string{"01-child.jsonl"}
+	case "same_snapshot_retry":
+		files = []string{"02-multi.jsonl", "03-multi.jsonl"}
+	}
+	for _, name := range files {
+		data, err := os.ReadFile(filepath.Join(migrationFixtureDir, name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if c.Mutation.File == name {
+			if c.Mutation.Text != "" {
+				data = bytes.Replace(data, []byte(`"text":"first"`), []byte(`"text":"`+c.Mutation.Text+`"`), 1)
+			}
+			if len(c.Mutation.Prepend) > 0 {
+				var compact bytes.Buffer
+				if err := json.Compact(&compact, c.Mutation.Prepend); err != nil {
+					t.Fatal(err)
+				}
+				data = append(append(compact.Bytes(), '\n'), data...)
+			}
+			if c.Mutation.Append != "" {
+				data = append(data, []byte(c.Mutation.Append)...)
+			}
+			if len(c.Mutation.RemoveLines) > 0 {
+				lines := strings.SplitAfter(string(data), "\n")
+				var kept strings.Builder
+				for i, line := range lines {
+					remove := false
+					for _, n := range c.Mutation.RemoveLines {
+						if i+1 == n {
+							remove = true
+						}
+					}
+					if !remove {
+						kept.WriteString(line)
+					}
+				}
+				data = []byte(kept.String())
+			}
+		}
+		root := f.root
+		if name == "04-conflict.jsonl" {
+			root = f.shared
+		}
+		if err = os.WriteFile(filepath.Join(root, name), data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if c.Name == "conflicting_input_evidence" {
+		f.inputs[0].Root = base
+	}
+	f.before, err = os.ReadFile(f.from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f
+}
+
+func assertMigrationSourceUnchanged(t *testing.T, f migrationFixture) {
+	t.Helper()
+	after, err := os.ReadFile(f.from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(f.before, after) {
+		t.Fatal("source bytes changed")
+	}
+	for _, suffix := range []string{"-wal", "-shm", "-journal"} {
+		if _, err = os.Stat(f.from + suffix); !os.IsNotExist(err) {
+			t.Fatalf("source sidecar %s: %v", suffix, err)
+		}
+	}
+}
+
+func migrationQueryStrings(t *testing.T, db *DB, query string, args ...any) []string {
+	t.Helper()
+	rows, err := db.db.Query(query, args...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	out := []string{}
+	for rows.Next() {
+		var value string
+		if err = rows.Scan(&value); err != nil {
+			t.Fatal(err)
+		}
+		out = append(out, value)
+	}
+	if err = rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	return out
+}
+
+func assertMigrationOracle(t *testing.T, db *DB, c migrationOracleCase, result *MigrationResult) {
+	t.Helper()
+	for _, id := range c.Expected.Removed {
+		var n int
+		if err := db.db.QueryRow(`SELECT count(*) FROM legacy_messages WHERE legacy_rowid=?`, id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 0 {
+			t.Errorf("removed row %d remains", id)
+		}
+	}
+	for _, id := range c.Expected.Retained {
+		var n int
+		if err := db.db.QueryRow(`SELECT count(*) FROM legacy_messages WHERE legacy_rowid=?`, id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Errorf("retained row %d missing", id)
+		}
+	}
+	if c.Expected.NewIdentity != nil {
+		got := migrationQueryStrings(t, db, `SELECT session_id FROM sessions ORDER BY session_id`)
+		if !reflect.DeepEqual(got, c.Expected.NewIdentity) {
+			t.Errorf("identities=%v want=%v", got, c.Expected.NewIdentity)
+		}
+	}
+	if c.Expected.NewText != nil {
+		got := migrationQueryStrings(t, db, `SELECT content FROM messages WHERE membership='body' ORDER BY number`)
+		if !reflect.DeepEqual(got, c.Expected.NewText) {
+			t.Errorf("body=%v want=%v", got, c.Expected.NewText)
+		}
+	}
+	if c.Expected.Context != nil {
+		got := migrationQueryStrings(t, db, `SELECT content FROM messages WHERE membership='context' ORDER BY origin_path,origin_line`)
+		if !reflect.DeepEqual(got, c.Expected.Context) {
+			t.Errorf("context=%v want=%v", got, c.Expected.Context)
+		}
+	}
+	if c.Expected.Status == "failed" && len(result.Errors) == 0 {
+		t.Error("failed replacement reported success")
+	}
+	if c.Expected.Reason != "" {
+		found := false
+		for _, err := range result.Errors {
+			if strings.Contains(err.Error(), c.Expected.Reason) {
+				found = true
+			}
+		}
+		if !found {
+			t.Errorf("errors=%v missing %q", result.Errors, c.Expected.Reason)
+		}
+	}
+	if c.Expected.Saved {
+		var n int
+		if err := db.db.QueryRow(`SELECT count(*) FROM sessions WHERE session_id='child'`).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Error("new owner not saved")
+		}
+	}
+	if c.Expected.LegacyPreserved {
+		id := "missing"
+		if c.Name == "unattributed_old_same_id" {
+			id = "child"
+		}
+		var n int
+		if err := db.db.QueryRow(`SELECT count(*) FROM legacy_sessions WHERE session_id=? AND source='codex'`, id).Scan(&n); err != nil {
+			t.Fatal(err)
+		}
+		if n != 1 {
+			t.Errorf("legacy %s missing", id)
+		}
+	}
+}
+
+func TestMigrateFixtureReplacementOracle(t *testing.T) {
+	oracle := readMigrationOracle(t)
+	excluded := map[string]bool{"initial_copy_interrupt": true, "different_snapshot_retry": true, "ordinary_new_destination": true, "unknown_schema": true}
+	for _, c := range oracle.Cases {
+		if excluded[c.Name] {
+			continue
+		}
+		t.Run(c.Name, func(t *testing.T) {
+			f := setupMigrationFixture(t, oracle, c)
+			result, err := Migrate(f.from, f.destination, f.inputs)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !result.CopyPerformed {
+				t.Fatal("initial copy skipped")
+			}
+			assertMigrationSourceUnchanged(t, f)
+			db, err := OpenDB(f.destination)
+			if err != nil {
+				t.Fatal(err)
+			}
+			assertMigrationOracle(t, db, c, result)
+			if c.Name == "child_physical_not_owner" {
+				var number int
+				if err = db.db.QueryRow(`SELECT number FROM legacy_messages WHERE legacy_rowid=3`).Scan(&number); err != nil {
+					t.Fatal(err)
+				}
+				if number != 3 {
+					t.Fatalf("partial legacy renumbered to %d", number)
+				}
+			}
+			if c.Name == "other_sources" {
+				var timestamp any
+				if err = db.db.QueryRow(`SELECT timestamp FROM legacy_messages WHERE legacy_rowid=8`).Scan(&timestamp); err != nil {
+					t.Fatal(err)
+				}
+				if timestamp != nil {
+					t.Fatalf("unknown timestamp promoted: %v", timestamp)
+				}
+			}
+			if len(result.Errors) == 0 {
+				for _, input := range f.inputs {
+					files, errs := codex.NewAdapter(ResolveRepoPath).ScanFiles(input.Root)
+					if len(errs) > 0 {
+						t.Fatal(errs)
+					}
+					for _, path := range files {
+						var offset int64
+						if err = db.db.QueryRow(`SELECT last_offset FROM import_state WHERE jsonl_path=?`, path).Scan(&offset); err != nil {
+							t.Fatal(err)
+						}
+						info, err := os.Stat(path)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if offset != info.Size() {
+							t.Errorf("cursor %s=%d want=%d", path, offset, info.Size())
+						}
+					}
+				}
+			}
+			db.Close()
+			if c.Expected.CopySkipped {
+				again, err := Migrate(f.from, f.destination, f.inputs)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if again.CopyPerformed {
+					t.Fatal("retry recopied legacy")
+				}
+				if c.Expected.Reprocessed && again.GroupsReplaced != result.GroupsReplaced {
+					t.Fatalf("retry groups=%d first=%d", again.GroupsReplaced, result.GroupsReplaced)
+				}
+				assertMigrationSourceUnchanged(t, f)
+			}
+		})
+	}
+}
+
+func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
+	for _, kind := range []string{"partial_tail", "metadata_only_sibling", "save_failure", "changed_rollout", "missing_rollout"} {
+		t.Run(kind, func(t *testing.T) {
+			oracle := readMigrationOracle(t)
+			c := migrationOracleCase{Name: "multiple_rollouts", Files: []string{"02-multi.jsonl", "03-multi.jsonl"}}
+			f := setupMigrationFixture(t, oracle, c)
+			result, err := Migrate(f.from, f.destination, f.inputs)
+			if err != nil || len(result.Errors) != 0 {
+				t.Fatalf("seed: %v %v", result, err)
+			}
+			db, err := OpenDB(f.destination)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer db.Close()
+			beforeBody := migrationQueryStrings(t, db, `SELECT printf('%d:%s:%s',number,content,membership) FROM messages ORDER BY number`)
+			beforeCursor := migrationQueryStrings(t, db, `SELECT printf('%s:%d:%d:%s',jsonl_path,file_size,last_offset,content_hash) FROM import_state ORDER BY jsonl_path`)
+			// Restore proven legacy history so rollback protects copied history as well.
+			_, err = db.db.Exec(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) SELECT snapshot_sha256,'codex','multi','' FROM migration_origin; INSERT INTO legacy_messages(legacy_rowid,snapshot_sha256,uuid,source,session_id,role,content,number) SELECT 4,snapshot_sha256,?,'codex','multi','user','saved',1 FROM migration_origin`, migrationFixtureUUID(filepath.Join(f.root, "02-multi.jsonl"), 2))
+			if err != nil {
+				t.Fatal(err)
+			}
+			adapter := codex.NewAdapter(ResolveRepoPath)
+			files, errs := adapter.ScanFiles(f.root)
+			if len(errs) > 0 {
+				t.Fatal(errs)
+			}
+			if kind == "partial_tail" {
+				path := filepath.Join(f.root, "03-multi.jsonl")
+				data, err := os.ReadFile(path)
+				if err != nil {
+					t.Fatal(err)
+				}
+				data = append(data, []byte(`{"type":`)...)
+				if err = os.WriteFile(path, data, 0600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if kind == "metadata_only_sibling" {
+				if err = os.WriteFile(filepath.Join(f.root, "04-meta.jsonl"), []byte("{\"type\":\"session_meta\",\"payload\":{\"id\":\"multi\"}}\n"), 0600); err != nil {
+					t.Fatal(err)
+				}
+				files, errs = adapter.ScanFiles(f.root)
+				if len(errs) > 0 {
+					t.Fatal(errs)
+				}
+			}
+			groups, errs := adapter.BuildMigrationGroups(f.root, files, "2026-01-01T00:00:00Z")
+			if len(errs) > 0 {
+				t.Fatal(errs)
+			}
+			switch kind {
+			case "save_failure":
+				_, err = db.db.Exec(`CREATE TRIGGER reject_migration BEFORE INSERT ON messages BEGIN SELECT RAISE(ABORT,'forced save failure'); END;`)
+			case "changed_rollout":
+				err = os.WriteFile(files[0], []byte("{}\n"), 0600)
+			case "missing_rollout":
+				err = os.Remove(files[0])
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			r := &MigrationResult{}
+			err = replaceMigrationGroups(db, []migrationInput{{Input: f.inputs[0], Files: files, Groups: groups}}, adapter, "2026-01-01T00:00:00Z", r)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if kind == "metadata_only_sibling" {
+				if r.GroupsReplaced != 1 || r.GroupsFailed != 0 {
+					t.Fatalf("metadata-only sibling: %+v", r)
+				}
+				var n int
+				if err = db.db.QueryRow(`SELECT count(*) FROM import_state`).Scan(&n); err != nil {
+					t.Fatal(err)
+				}
+				if n != 3 {
+					t.Fatalf("group cursors=%d want 3", n)
+				}
+				return
+			}
+			if r.GroupsFailed != 1 || r.GroupsReplaced != 0 {
+				t.Fatalf("failure result=%+v", r)
+			}
+			if got := migrationQueryStrings(t, db, `SELECT printf('%d:%s:%s',number,content,membership) FROM messages ORDER BY number`); !reflect.DeepEqual(got, beforeBody) {
+				t.Fatalf("body changed: %v", got)
+			}
+			if got := migrationQueryStrings(t, db, `SELECT printf('%s:%d:%d:%s',jsonl_path,file_size,last_offset,content_hash) FROM import_state ORDER BY jsonl_path`); !reflect.DeepEqual(got, beforeCursor) {
+				t.Fatalf("cursors changed: %v", got)
+			}
+			var retained int
+			if err = db.db.QueryRow(`SELECT count(*) FROM legacy_messages WHERE legacy_rowid=4`).Scan(&retained); err != nil {
+				t.Fatal(err)
+			}
+			if retained != 1 {
+				t.Fatal("legacy removed on failed group")
+			}
+			assertMigrationSourceUnchanged(t, f)
+		})
+	}
+}
+
+func TestMigrateEarlierRolloutAndNormalFullPreserveLegacy(t *testing.T) {
+	oracle := readMigrationOracle(t)
+	f := setupMigrationFixture(t, oracle, migrationOracleCase{Name: "multiple_rollouts", Files: []string{"02-multi.jsonl", "03-multi.jsonl"}})
+	result, err := Migrate(f.from, f.destination, f.inputs)
+	if err != nil || len(result.Errors) > 0 {
+		t.Fatalf("seed: %v %v", result, err)
+	}
+	earlier := "{\"type\":\"session_meta\",\"payload\":{\"id\":\"multi\"}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"assistant\",\"id\":\"m0\",\"content\":[{\"type\":\"output_text\",\"text\":\"earlier\"}]}}\n"
+	if err = os.WriteFile(filepath.Join(f.root, "00-earlier.jsonl"), []byte(earlier), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err = Migrate(f.from, f.destination, f.inputs)
+	if err != nil || len(result.Errors) > 0 {
+		t.Fatalf("retry: %v %v", result, err)
+	}
+	db, err := OpenDB(f.destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	expected := []string{"1:earlier", "2:first", "3:second"}
+	if got := migrationQueryStrings(t, db, `SELECT printf('%d:%s',number,content) FROM messages WHERE membership='body' ORDER BY number`); !reflect.DeepEqual(got, expected) {
+		t.Fatalf("canonical=%v", got)
+	}
+	before := migrationQueryStrings(t, db, `SELECT printf('%d:%s:%d',legacy_rowid,content,number) FROM legacy_messages ORDER BY legacy_rowid`)
+	runCodexImport(t, db, f.root, true)
+	if got := migrationQueryStrings(t, db, `SELECT printf('%d:%s:%d',legacy_rowid,content,number) FROM legacy_messages ORDER BY legacy_rowid`); !reflect.DeepEqual(got, before) {
+		t.Fatalf("normal full changed legacy: %v", got)
+	}
+	if got := migrationQueryStrings(t, db, `SELECT printf('%d:%s',number,content) FROM messages WHERE membership='body' ORDER BY number`); !reflect.DeepEqual(got, expected) {
+		t.Fatalf("normal full canonical=%v", got)
+	}
+	assertMigrationSourceUnchanged(t, f)
+}
+
+func TestMigrateDeduplicatedPhysicalEvidenceAndIndependentFailure(t *testing.T) {
+	oracle := readMigrationOracle(t)
+	f := setupMigrationFixture(t, oracle, migrationOracleCase{Name: "multiple_rollouts", Files: []string{"01-child.jsonl", "02-multi.jsonl", "03-multi.jsonl"}})
+	// The old row points at the payload duplicate that disappears from canonical
+	// body, but its physical provenance must remain usable as deletion evidence.
+	snapshot, err := sql.Open("sqlite", f.from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = snapshot.Exec(`UPDATE messages SET uuid=? WHERE rowid=4`, migrationFixtureUUID(filepath.Join(f.root, "03-multi.jsonl"), 2)); err != nil {
+		t.Fatal(err)
+	}
+	if err = snapshot.Close(); err != nil {
+		t.Fatal(err)
+	}
+	f.before, err = os.ReadFile(f.from)
+	if err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(f.root, "01-child.jsonl")
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = os.WriteFile(path, append(data, []byte("{broken\n")...), 0600); err != nil {
+		t.Fatal(err)
+	}
+	result, err := Migrate(f.from, f.destination, f.inputs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.GroupsReplaced != 1 || result.GroupsFailed != 1 {
+		t.Fatalf("independent groups=%+v", result)
+	}
+	db, err := OpenDB(f.destination)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	c := migrationOracleCase{}
+	c.Expected.Removed = []int{4, 5}
+	c.Expected.Retained = []int{1, 2, 3}
+	c.Expected.NewText = []string{"first", "second"}
+	assertMigrationOracle(t, db, c, result)
+	assertMigrationSourceUnchanged(t, f)
+}

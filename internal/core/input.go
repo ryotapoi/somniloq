@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
 )
@@ -97,6 +98,15 @@ func parseREF(ref string) (key string, source Source, sessionID string, err erro
 		return "", "", "", &REFError{}
 	}
 	parts := strings.Split(ref, ":")
+	if len(parts) == 5 && parts[0] == "slq1" && parts[1] == "legacy" {
+		digest, e := hex.DecodeString(parts[2])
+		data, de := base64.RawURLEncoding.DecodeString(parts[4])
+		src := Source(parts[3])
+		if e != nil || len(digest) != 32 || hex.EncodeToString(digest) != parts[2] || de != nil || len(data) == 0 || !utf8.Valid(data) || !validSource(src) || LegacyREF(parts[2], src, string(data)) != ref {
+			return invalid()
+		}
+		return "legacy:" + parts[2], src, string(data), nil
+	}
 	if len(parts) != 4 || parts[0] != "slq1" || len(parts[1]) != 64 {
 		return invalid()
 	}
@@ -140,6 +150,9 @@ func parseRootREF(ref string) (string, Source, string, error) {
 	key, source, identity, err := parseREF(ref)
 	if err != nil {
 		return "", "", "", err
+	}
+	if strings.HasPrefix(key, "legacy:") {
+		return "", "", "", &REFError{}
 	}
 	var parts []string
 	_ = json.Unmarshal([]byte(identity), &parts)
