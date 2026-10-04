@@ -5,184 +5,127 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const showUsageLine = "somniloq show --config default [--source <source>] [--descendants] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>] <REF>\n" +
-	"  somniloq show --config default [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>]"
-
-const showHelpDetails = `Output (markdown):
-  One or more sessions. Each session has a title, Session, Source, Project, Started metadata, then message sections headed by role.
-  Multiple conversations are separated by ---.
-
-JSON fields:
-  Envelope: items, total, count, limit (null), offset (0), hasMore (false), nextOffset (null)
-  Each item: ref, messageNumber, role, timestamp, text, blocks, parentRef, rootRef, provenance
-  JSON preserves raw text, block boundaries and original message numbers.
-
+const showUsageLine = "somniloq show --config default REF... [--descendants] [--role user|assistant] [--messages A:B] [--since VALUE] [--until VALUE] [--day-boundary HH:MM] [--limit N] [--offset N] [--tail N] [--one-line] [--format tsv|json]"
+const showHelpDetails = `Output (TSV/JSON):
+  Envelope: items, total, count, limit, offset, hasMore, nextOffset.
+  Each item: ref, messageNumber, role, timestamp, text, blocks, parentRef, rootRef, provenance.
+  TSV begins with # page metadata and a fixed header; null is \N and strings are reversibly escaped.
 Notes:
-  Flags must come before <REF>.
-  --descendants requires REF and includes only confirmed descendants in parent-first order.
-  Codex messages follow canonical owner order; inheritance context and unresolved records are excluded.
-  --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
-  Unknown or invalid stored start times do not match time filters.
-  Use either a full <REF> or --since/--until. --project only applies in time-range mode.
-  --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
-  --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent with <REF>; it cannot be used with --since/--until.
-  --summary N shows the first N user messages per session after applying command-line exclusion patterns.
-  --exclude-user-message-pattern may be repeated; patterns are ORed.
-  --no-exclude-user-messages disables user-message exclusions for this invocation. Either exclusion flag requires --summary >= 1.
-  --turn N or --turn N..M shows inclusive turn ranges; --tail N shows the last N turns.
-  --turn and --tail share outline numbering and cannot be combined with --summary.
-  Only full slq1 references from sessions/search are accepted; --source restricts the reference source.
-
+  Full REF values are required. Selectors are expanded in input order and duplicates removed.
+  --descendants includes confirmed descendants in parent-first order.
+  Filter original messages by role, inclusive number range A:B (A: and :B allowed), and their own timestamp.
+  Dates use the local day boundary; --until dates include that day. Datetimes require RFC3339 with timezone.
+  Page after filtering, then --one-line keeps text before the first LF; blocks stay original.
+  --tail selects the final N messages and cannot be combined with explicit --limit or --offset.
 Examples:
-  somniloq show --config default --summary 1 --since 24h --short
-  somniloq show --config default --summary 1 --exclude-user-message-pattern '^<command-name>/clear</command-name>' --since 24h
-  somniloq show --config default --turn 40..60 <REF>
-  somniloq show --config default --source codex <REF>
-  somniloq show --config default --format json --tail 3 <REF>`
+  somniloq show --config default <REF> <REF> --since 2026-10-01 --until 2026-10-01 --format json
+  somniloq show --config default <REF> --role user --one-line
+  somniloq show --config default <REF> --messages 40:60 --limit 10`
 
-// showCmd runs the show subcommand without calling os.Exit, so it can be
-// tested directly.
 func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
-	fs, flags := newShowFlagSet()
-	setUsage(fs, "Show session content in Markdown", showUsageLine, showHelpDetails)
+	fs, f := newShowFlagSet()
+	setUsage(fs, "Show original messages", showUsageLine, showHelpDetails)
 	fs.SetOutput(errOut)
+	args = showFlagArgs(fs, args)
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
 			return 0, nil
 		}
-		if strings.Contains(err.Error(), "for -descendants:") {
-			return 2, nil
-		}
-		return 1, nil
+		return 2, nil
 	}
-
-	if *flags.summary < 0 {
-		return 1, errors.New("--summary must be >= 0")
+	if fs.NArg() == 0 {
+		return 2, fmt.Errorf("at least one REF is required; usage: %s", showUsageLine)
 	}
-	exclusionFlagsSet := flagWasProvided(fs, "exclude-user-message-pattern") || flagWasProvided(fs, "no-exclude-user-messages")
-	if exclusionFlagsSet && *flags.summary < 1 {
-		return 1, errors.New("user-message exclusion flags require --summary >= 1")
+	if err := validateFormat(*f.format, "tsv", "json"); err != nil {
+		return 2, err
 	}
-	matcher, err := newUserMessageMatcher(cfg, *flags.excludePatterns, *flags.noExclusions)
-	if err != nil {
-		return 1, err
+	if *f.role != "" && *f.role != "user" && *f.role != "assistant" {
+		return 2, errors.New("--role must be user or assistant")
 	}
-	if *flags.tail < 0 {
-		return 1, errors.New("--tail must be >= 0")
+	if flagWasProvided(fs, "role") && *f.role == "" {
+		return 2, errors.New("--role must be user or assistant")
 	}
-	// Detect --turn via Visit so an explicit empty value (e.g. an unset shell
-	// variable) is rejected by parseTurnRange instead of silently showing the
-	// whole session.
-	turnSet := flagWasProvided(fs, "turn")
-	if turnSet && *flags.tail > 0 {
-		return 1, errors.New("specify either --turn or --tail, not both")
-	}
-	turnFiltered := turnSet || *flags.tail > 0
-	if turnFiltered && *flags.summary > 0 {
-		return 1, errors.New("--turn/--tail cannot be combined with --summary")
-	}
-	var turnLo, turnHi int
-	if turnSet {
+	lo, hi := 0, 0
+	if flagWasProvided(fs, "messages") {
 		var err error
-		turnLo, turnHi, err = parseTurnRange(*flags.turnRange)
+		lo, hi, err = parseMessageRange(*f.messages)
 		if err != nil {
-			return 1, err
+			return 2, err
 		}
 	}
-
-	if err := validateFormat(*flags.format, "markdown", "json"); err != nil {
-		return 1, err
+	if *f.limit < 0 || *f.offset < 0 || *f.tail < 0 {
+		return 2, errors.New("--limit, --offset and --tail must be nonnegative")
 	}
-
-	showUsage := "usage: " + showUsageLine
-
-	if fs.NArg() > 1 {
-		writeUsageError(errOut, "too many arguments")
-		fmt.Fprintln(errOut, showUsage)
-		return 1, nil
+	tailSet := flagWasProvided(fs, "tail")
+	if tailSet && (flagWasProvided(fs, "limit") || flagWasProvided(fs, "offset")) {
+		return 2, errors.New("--tail cannot be combined with --limit or --offset")
 	}
-
-	sessionID := fs.Arg(0)
-
-	if flagWasProvided(fs, "descendants") && (sessionID == "" || *flags.since != "" || *flags.until != "") {
-		return 2, errors.New("--descendants requires REF and cannot be combined with --since/--until")
+	boundary, err := resolveDayBoundary(*f.dayBoundary, cfg)
+	if err != nil {
+		return 2, err
 	}
-	sourceSet := flagWasProvided(fs, "source")
-	var source *core.Source
-	if sourceSet {
-		parsed, err := parseSessionSource(*flags.source)
-		if err != nil {
-			return 1, err
+	if flagWasProvided(fs, "day-boundary") && *f.dayBoundary == "" {
+		return 2, errors.New("--day-boundary requires HH:MM")
+	}
+	var since, until *time.Time
+	for _, bound := range []struct {
+		name, value string
+		upper       bool
+		target      **time.Time
+	}{{"since", *f.since, false, &since}, {"until", *f.until, true, &until}} {
+		if flagWasProvided(fs, bound.name) {
+			t, err := parseShowTime(bound.value, bound.upper, boundary, time.Local)
+			if err != nil {
+				return 2, err
+			}
+			*bound.target = &t
 		}
-		source = &parsed
 	}
-
-	if sessionID != "" && (*flags.since != "" || *flags.until != "") {
-		return 1, errors.New("specify either REF or --since/--until, not both")
+	if since != nil && until != nil && !since.Before(*until) {
+		return 2, errors.New("--since must be before --until")
 	}
-	if source != nil && sessionID == "" {
-		return 1, errors.New("--source requires REF and cannot be combined with --since/--until")
-	}
-	if sessionID == "" && *flags.since == "" && *flags.until == "" {
-		fmt.Fprintln(errOut, showUsage)
-		return 1, nil
-	}
-
 	db, err := openDB()
 	if err != nil {
 		return 1, err
 	}
 	defer db.Close()
-
-	type conversation struct {
-		session  core.SessionRow
-		messages []core.MessageRow
-	}
-	conversations := []conversation{}
+	items := []showMessageJSON{}
 	selectionCode := 1
 	err = db.ReadSnapshot(func(snapshot *core.DB) error {
-		var sessions []core.SessionRow
-		if sessionID != "" {
-			resolved, err := snapshot.ResolveSession(sessionID)
+		sessions := []core.SessionRow{}
+		seen := map[string]bool{}
+		for _, ref := range fs.Args() {
+			resolved, err := snapshot.ResolveSession(ref)
 			if err != nil {
-				var refError *core.REFError
-				if errors.As(err, &refError) {
+				var re *core.REFError
+				if errors.As(err, &re) {
 					selectionCode = 2
 				}
 				return err
 			}
-			if resolved == nil || source != nil && resolved.Self.Source != *source {
+			if resolved == nil {
 				selectionCode = 2
-				return fmt.Errorf("session not found: %s", sessionID)
+				return fmt.Errorf("session not found: %s", ref)
 			}
 			for _, diagnostic := range resolved.Diagnostics {
 				fmt.Fprintln(errOut, diagnostic)
 			}
-			sessions = []core.SessionRow{resolved.Self}
-			if *flags.descendants {
-				sessions = resolved.Descendants
+			selected := []core.SessionRow{resolved.Self}
+			if *f.descendants {
+				selected = resolved.Descendants
 			}
-		} else {
-			filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, dayBoundary{})
-			if err != nil {
-				return err
-			}
-			sessions, err = snapshot.ListSessions(filter)
-			if err != nil {
-				return err
-			}
-			for i, session := range sessions {
-				resolved, err := snapshot.ResolveSession(session.REF)
-				if err != nil {
-					return err
+			for _, session := range selected {
+				if !seen[session.REF] {
+					seen[session.REF] = true
+					sessions = append(sessions, session)
 				}
-				sessions[i] = resolved.Self
 			}
 		}
 		for _, session := range sessions {
@@ -190,86 +133,157 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 			if err != nil {
 				return err
 			}
-			if *flags.summary >= 1 {
-				messages = filterSummaryMessages(messages, *flags.summary, matcher)
-			} else if turnFiltered {
-				if *flags.tail > 0 {
-					messages = filterLastTurns(messages, *flags.tail)
-				} else {
-					messages = filterTurns(messages, turnLo, turnHi)
+			for _, m := range messages {
+				if *f.role != "" && m.Role != *f.role || lo > 0 && m.Number < lo || hi > 0 && m.Number > hi {
+					continue
 				}
+				if since != nil || until != nil {
+					t, err := time.Parse(time.RFC3339Nano, m.Timestamp)
+					if err != nil || since != nil && t.Before(*since) || until != nil && !t.Before(*until) {
+						continue
+					}
+				}
+				items = append(items, newShowMessageJSON(session, m))
 			}
-			conversations = append(conversations, conversation{session, messages})
 		}
 		return nil
 	})
 	if err != nil {
 		return selectionCode, err
 	}
-	if *flags.format == "json" {
-		items := []showMessageJSON{}
-		for _, c := range conversations {
-			for _, message := range c.messages {
-				items = append(items, newShowMessageJSON(c.session, message))
-			}
+	page := showJSON{Items: []showMessageJSON{}, Total: len(items), Offset: *f.offset}
+	if flagWasProvided(fs, "limit") {
+		page.Limit = f.limit
+	}
+	if tailSet {
+		page.Limit = f.tail
+		page.Offset = max(len(items)-*f.tail, 0)
+	}
+	start := min(page.Offset, len(items))
+	end := len(items)
+	if page.Limit != nil {
+		end = start + min(*page.Limit, end-start)
+	}
+	page.Items = append(page.Items, items[start:end]...)
+	page.Count = len(page.Items)
+	page.HasMore = page.Offset < page.Total && page.Count < page.Total-page.Offset
+	if page.HasMore && page.Count > 0 {
+		next := page.Offset + page.Count
+		page.NextOffset = &next
+	}
+	if *f.oneLine {
+		for i := range page.Items {
+			page.Items[i].Text = showFirstLine(page.Items[i].Text)
 		}
-		if err := writeJSON(out, showJSON{Items: items, Total: len(items), Count: len(items)}); err != nil {
-			return 1, err
-		}
+	}
+	if *f.format == "json" {
+		err = writeJSON(out, page)
 	} else {
-		for i, c := range conversations {
-			if i > 0 {
-				if _, err := fmt.Fprint(out, "\n---\n\n"); err != nil {
-					return 1, err
-				}
-			}
-			project := resolveProjectDisplayName(c.session.RepoPath, *flags.short, cfg)
-			if err := formatSession(out, c.session, project, c.messages, time.Local); err != nil {
-				return 1, err
-			}
-		}
+		err = writeShowTSV(out, page)
+	}
+	if err != nil {
+		return 1, err
 	}
 	return 0, nil
 }
 
+// The standard flag parser stops at the first positional argument. Keep option
+// values together when moving REF selectors behind the options.
+func showFlagArgs(fs *flag.FlagSet, args []string) []string {
+	options, refs := []string{}, []string{}
+	for i := 0; i < len(args); i++ {
+		if args[i] == "--" {
+			refs = append(refs, args[i+1:]...)
+			break
+		}
+		name, hasValue, ok := splitFlagArg(args[i])
+		if !ok {
+			refs = append(refs, args[i])
+			continue
+		}
+		options = append(options, args[i])
+		if f := fs.Lookup(name); f != nil && !hasValue && flagConsumesValue(f) && i+1 < len(args) {
+			i++
+			options = append(options, args[i])
+		}
+	}
+	return append(append(options, "--"), refs...)
+}
+
 type showFlags struct {
-	since, until, project, turnRange, format, source *string
-	short, noExclusions, descendants                 *bool
-	summary, tail                                    *int
-	excludePatterns                                  *stringListFlag
+	since, until, dayBoundary, role, messages, format *string
+	descendants, oneLine                              *bool
+	limit, offset, tail                               *int
 }
 
 func newShowFlagSet() (*flag.FlagSet, showFlags) {
 	fs := flag.NewFlagSet("show", flag.ContinueOnError)
-	var excludePatterns stringListFlag
-	fs.Var(&excludePatterns, "exclude-user-message-pattern", "exclude matching user messages from --summary (repeatable; OR)")
 	return fs, showFlags{
-		since:           fs.String("since", "", "filter by start time (relative, local date/datetime, or RFC3339 instant)"),
-		until:           fs.String("until", "", "filter sessions started before a relative, local date/datetime, or RFC3339 instant"),
-		project:         fs.String("project", "", "filter by repo path (literal substring match)"),
-		descendants:     fs.Bool("descendants", false, "include confirmed descendants of REF, conversation by conversation"),
-		short:           fs.Bool("short", false, "shorten unaliased project to repo basename"),
-		summary:         fs.Int("summary", 0, "show first N user messages after exclusions (0 disables)"),
-		noExclusions:    fs.Bool("no-exclude-user-messages", false, "disable user-message exclusions for this --summary invocation"),
-		turnRange:       fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)"),
-		tail:            fs.Int("tail", 0, "show only the last N turns (0 disables)"),
-		format:          fs.String("format", "markdown", "output format (markdown, json)"),
-		source:          fs.String("source", "", "restrict REF source (claude_code, claude-code, codex, cursor_agent, cursor-agent)"),
-		excludePatterns: &excludePatterns,
+		since:       fs.String("since", "", "include messages at or after date or RFC3339 instant"),
+		until:       fs.String("until", "", "include messages before instant or through local date"),
+		dayBoundary: fs.String("day-boundary", "", "local date boundary HH:MM (overrides config)"),
+		role:        fs.String("role", "", "filter user or assistant messages"),
+		messages:    fs.String("messages", "", "inclusive original message number range A:B, A:, or :B"),
+		format:      fs.String("format", "tsv", "output format (tsv, json)"),
+		descendants: fs.Bool("descendants", false, "include confirmed descendants"),
+		oneLine:     fs.Bool("one-line", false, "show text before first LF; retain original blocks"),
+		limit:       fs.Int("limit", 0, "maximum number of filtered messages (default unlimited)"),
+		offset:      fs.Int("offset", 0, "skip filtered messages"),
+		tail:        fs.Int("tail", 0, "select final N filtered messages"),
 	}
 }
-
-func filterSummaryMessages(messages []core.MessageRow, limit int, matcher userMessageMatcher) []core.MessageRow {
-	capacity := min(limit, len(messages))
-	filtered := make([]core.MessageRow, 0, capacity)
-	for _, message := range messages {
-		if message.Role != "user" || matcher.excludes(message.Content) {
-			continue
-		}
-		filtered = append(filtered, message)
-		if len(filtered) == limit {
-			break
-		}
+func parseMessageRange(value string) (int, int, error) {
+	a, b, ok := strings.Cut(value, ":")
+	invalid := fmt.Errorf("--messages requires positive inclusive A:B, A:, or :B, got %q", value)
+	if !ok || a == "" && b == "" {
+		return 0, 0, invalid
 	}
-	return filtered
+	parse := func(s string) (int, error) {
+		if s == "" {
+			return 0, nil
+		}
+		for _, c := range s {
+			if c < '0' || c > '9' {
+				return 0, invalid
+			}
+		}
+		n, err := strconv.Atoi(s)
+		if err != nil || n < 1 {
+			return 0, invalid
+		}
+		return n, nil
+	}
+	lo, err := parse(a)
+	if err != nil {
+		return 0, 0, err
+	}
+	hi, err := parse(b)
+	if err != nil {
+		return 0, 0, err
+	}
+	if hi > 0 && hi < lo {
+		return 0, 0, invalid
+	}
+	return lo, hi, nil
+}
+func parseShowTime(value string, upper bool, boundary dayBoundary, loc *time.Location) (time.Time, error) {
+	if date, err := time.Parse("2006-01-02", value); err == nil {
+		offset := 0
+		if upper {
+			offset = 1
+		}
+		return boundary.onDate(date, offset, loc), nil
+	}
+	t, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("invalid show datetime %q: require date or RFC3339 with timezone", value)
+	}
+	return t, nil
+}
+func showFirstLine(text string) string {
+	line, _, found := strings.Cut(text, "\n")
+	if found {
+		line = strings.TrimSuffix(line, "\r")
+	}
+	return line
 }

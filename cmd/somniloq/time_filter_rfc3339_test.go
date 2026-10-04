@@ -66,12 +66,6 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 			},
 		},
 		{
-			name: "show",
-			run: func(args []string, timestamp string, out, errOut *bytes.Buffer) (int, error) {
-				return showCmd(args, staticDB(newRFC3339FilterDB(t, timestamp)), config{}, out, errOut)
-			},
-		},
-		{
 			name: "search",
 			run: func(args []string, timestamp string, out, errOut *bytes.Buffer) (int, error) {
 				return searchCmd(args, staticDB(newRFC3339FilterDB(t, timestamp)), config{}, out, errOut)

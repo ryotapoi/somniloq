@@ -94,38 +94,6 @@ func TestProjectsCmd_FormatJSON(t *testing.T) {
 	}
 }
 
-func TestOutlineCmd_FormatJSON(t *testing.T) {
-	db := newOutlineTestDB(t)
-
-	var out, errOut bytes.Buffer
-	code, err := outlineCmd([]string{"--format", "json", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
-	if err != nil {
-		t.Fatalf("outlineCmd: %v", err)
-	}
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
-	}
-
-	got := decodeJSONArray(t, out.Bytes())
-	if len(got) != 3 {
-		t.Fatalf("entries = %d, want 3: %v", len(got), got)
-	}
-	if got[0]["turn"] != float64(1) || got[0]["bodySize"] != float64(36) || got[0]["firstLine"] != "first question" {
-		t.Errorf("entry 0 = %v", got[0])
-	}
-	// Raw timestamp, not the local display format.
-	if got[0]["timestamp"] != "2026-03-28T15:00:00Z" {
-		t.Errorf("timestamp = %#v, want RFC3339 UTC", got[0]["timestamp"])
-	}
-	// Tabs survive: JSON escapes natively, no TSV sanitizing.
-	if got[2]["firstLine"] != "second\tquestion after blank lines" {
-		t.Errorf("entry 1 firstLine = %#v", got[2]["firstLine"])
-	}
-	if len(got[0]) != 4 {
-		t.Errorf("fields = %d, want 4: %v", len(got[0]), got[0])
-	}
-}
-
 func decodeShowItems(t *testing.T, data []byte) []any {
 	t.Helper()
 	var envelope map[string]any
@@ -149,8 +117,8 @@ func TestShowCmd_FormatJSON(t *testing.T) {
 		text  string
 	}{
 		{"owner", nil, 4, "first question\nwith detail"},
-		{"turn", []string{"--turn", "3"}, 1, "\n\nsecond\tquestion after blank lines"},
-		{"empty", []string{"--turn", "99"}, 0, ""},
+		{"turn", []string{"--messages", "4:4"}, 1, "\n\nsecond\tquestion after blank lines"},
+		{"empty", []string{"--messages", "99:"}, 0, ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			var out, errOut bytes.Buffer
@@ -183,7 +151,7 @@ func TestShowCmd_FormatJSON(t *testing.T) {
 }
 func TestShowCmd_FormatJSON_EmptyBulk(t *testing.T) {
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "--since", "2031-01-01"}, staticDB(newOutlineTestDB(t)), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--format", "json", "--since", "2031-01-01", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(newOutlineTestDB(t)), config{}, &out, &errOut)
 	if code != 0 || err != nil || len(decodeShowItems(t, out.Bytes())) != 0 {
 		t.Fatalf("%d %v %s", code, err, out.String())
 	}
@@ -304,10 +272,6 @@ func TestFormatFlag_Unknown(t *testing.T) {
 			var out, errOut bytes.Buffer
 			return projectsCmd([]string{"--format", "xml"}, openDB, config{}, &out, &errOut)
 		}},
-		{"outline", func() (int, error) {
-			var out, errOut bytes.Buffer
-			return outlineCmd([]string{"--format", "xml", fixtureREF(core.SourceClaudeCode, "sess-1")}, openDB, config{}, &out, &errOut)
-		}},
 		{"show", func() (int, error) {
 			var out, errOut bytes.Buffer
 			return showCmd([]string{"--format", "xml", fixtureREF(core.SourceClaudeCode, "sess-1")}, openDB, config{}, &out, &errOut)
@@ -320,8 +284,12 @@ func TestFormatFlag_Unknown(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			code, err := tt.run()
-			if code != 1 {
-				t.Errorf("exit code = %d, want 1", code)
+			wantCode := 1
+			if tt.name == "show" {
+				wantCode = 2
+			}
+			if code != wantCode {
+				t.Errorf("exit code = %d, want %d", code, wantCode)
 			}
 			if err == nil || !strings.Contains(err.Error(), "unknown format") {
 				t.Errorf("err = %v, want unknown format", err)

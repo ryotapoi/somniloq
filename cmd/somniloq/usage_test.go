@@ -73,21 +73,14 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return showCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Output (markdown):", "Each item: ref, messageNumber, role, timestamp, text, blocks, parentRef, rootRef, provenance", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --config default --turn 40..60 <REF>"},
-		},
-		{
-			name: "outline",
-			run: func(errOut *bytes.Buffer) (int, error) {
-				return outlineCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
-			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "body_size", "Recommended long-session flow", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --config default --turn 12..18 <REF>"},
+			want: []string{"Examples:", "Output (TSV/JSON):", "messageNumber", "--messages", "--one-line"},
 		},
 		{
 			name: "search",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return searchCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "JSON fields:", "source, sessionId, turn, timestamp, project, snippet", "turn: outline/show turn number", "-limit", "-offset", "Continue a fixed search", "somniloq search --config default --since 7d"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "JSON fields:", "source, sessionId, turn, timestamp, project, snippet", "turn: legacy user turn number", "-limit", "-offset", "Continue a fixed search", "somniloq search --config default --since 7d"},
 		},
 		{
 			name: "projects",

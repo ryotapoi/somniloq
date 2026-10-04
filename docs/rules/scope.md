@@ -2,7 +2,7 @@
 
 本書が CLI 仕様・コマンド挙動・スキーマの正。README.md / README.ja.md は本書の派生ビューなので、本書のこれらの記述を変更したら README 両方を同期する。
 
-v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF と専用 migrate は利用できる。共通 resolver による関係解決、単一 REF と確定子孫の show 原文 JSON は利用できる。新 search と show の複数 REF・発言フィルタ・ページ・TSV は後続実装。以下は現在利用できる CLI の仕様。
+v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF と専用 migrate は利用できる。共通 resolver による関係解決と、複数 REF・確定子孫・発言フィルタ・ページ・TSV/JSON による show 原文取得は利用できる。新 search は後続実装。以下は現在利用できる CLI の仕様。
 
 ## 主要機能
 
@@ -110,37 +110,19 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 内容表示（show）
 
-- セッション内容を Markdown で出力
-- `show [--source <source>] REF` は完全 REF の本人会話を選ぶ。裸 ID・短縮 REF・不存在 REF は exit 2。`--source` は DB 内部値または CLI 表記を受け取り、REF の source と一致する場合だけ利用できる。`all`、空値、未知値は不正で、期間による一括表示とは併用できない。
-- Markdown metadata は Session、Source、Project、Started。Started 行は `started_at ~ ended_at` の時刻範囲で、ended_at がない場合は `started_at ~`、両方未知なら空欄
-- `--since`/`--until` で期間指定して一括表示（`started_at` 基準）。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な started_at は時刻条件に一致しない。date-only は `projects` と同じくローカルタイムの 00:00 起点で、`dayBoundary` は適用しない
-- `--summary N` で各セッションの user メッセージから、除外後の先頭 N 件を表示。`0` または未指定で全文表示
-- `--exclude-user-message-pattern <regex>` は繰り返し指定でき、trim 済みの本文全文に対して Go 正規表現を OR で評価する。pattern はこの呼び出しにだけ適用する。照合は部分一致なので、先頭一致には `^` を明示する
-- `--no-exclude-user-messages` は除外なしを明示する。pattern 指定との併用はエラー。どちらの明示フラグも `--summary >= 1` が前提
-- 除外 pattern は `outline` と `show --summary` の user message 表示だけに適用する。全文 `show`、`--turn`、`--tail`、`search`、保存 DB には適用せず、`sessions` の一覧行も除外しない。pattern 未指定時は除外なしで、slash prefix や合成 `/clear`・caveat の固定除外もない
-- `--turn N` / `--turn N..M` で指定ターンだけ表示（両端含む）。1 ターンは user メッセージとそれに続く非 user メッセージ（assistant 応答等）。ターン番号は outline と同一の採番（GetMessages の全メッセージ列に対する採番）を共有する。範囲がセッションのターン数を超える場合は本文なしでセッションヘッダのみ出力し exit 0（エラーにしない）。`--turn ""`（空文字）は不正値としてエラー
-- `--tail N` で末尾 N ターンだけ表示
-- `--turn` と `--tail` は互いに排他。どちらも `--summary` とは併用不可
-- `--turn` / `--tail` は `--since`/`--until` の一括表示モードでも各セッションに適用される
-- メタデータ `Project` 行は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` をそのまま表示
-- `--short` は alias 非一致時に `filepath.Base(repo_path)`
-- `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ、alias 展開含む）
-- `--format markdown|json`（デフォルト `markdown`）。
-- `--descendants` は REF 必須で、期間一括表示との併用と不正値を exit 2・stdout 空で拒否する。
-- 単一の完全 REF を渡すと本人会話だけを取得し、子 REF から祖先の本文は取得しません。フラグは REF より前に置きます。`--descendants` は確定子孫だけを親先行 DFS・兄弟 REF 辞書順で展開し、root 所属だけで直接親不明の子は展開しません。Markdown は会話ごとに区切り、`--format json` は原文と発言番号を返します。JSON は発言単位の `{items,total,count,limit,offset,hasMore,nextOffset}` object で、各発言の `ref,messageNumber,role,timestamp,text,blocks,parentRef,rootRef,provenance` を常に出力します。本文・block 境界・保存番号・不正な非空日時を保持し、日時欠落は null、復元不能な legacy blocks は null、既知の空配列は []、由来は source_record / legacy_saved です。ページ指定はまだなく、total=count、limit=null、offset=0、hasMore=false、nextOffset=null です。複数 REF、新しい発言フィルタ・ページ・TSV と旧入口の統合は後続実装で、現行 summary/turn/tail/期間一括表示は維持します。
+`show --config NAME_OR_PATH REF... [--descendants] [--role user|assistant] [--messages A:B] [--since VALUE] [--until VALUE] [--day-boundary HH:MM] [--limit N] [--offset N] [--tail N] [--one-line] [--format tsv|json]`。フラグは REF の前後に置ける。
 
-### アウトライン表示（outline）
-
-- `outline REF` で、セッションの user メッセージだけを「ターン番号・時刻・本文合計サイズ・先頭 1 行」の TSV で時系列表示する。長いセッションを全文 show する前に構造を掴む用途
-- ターン番号は 1 始まり。show 対象の本人メッセージ列を発言番号順に走査し、user メッセージごとに 1 増える。Claude Code・Codex は本人 sidechain を含み、Cursor Agent は従来の sidechain 除外に従う。最初の user メッセージより前のメッセージはターン 1 に畳み込む
-- `/clear` エコーや `<local-command-caveat>` などの合成 user メッセージも turn 採番に数える。除外 pattern に一致すれば表示だけを省き、後続の turn 番号は元の値を保つ
-- 本人メッセージは保存済み発言番号順に取得する。outline と旧 `--turn` の番号はその列の user 発言から計算し、発言番号とは異なる
-- 会話の選択は show と同じ完全 REF。`--source` を付ける場合は REF の source と一致しなければならない
-- 時刻はローカルタイム `2006-01-02 15:04` 形式
-- 出力 TSV の列: `turn`, `time`, `body_size`, `first_line`
-- `body_size` はその turn に属する show 対象の本人メッセージ本文の合計サイズ（UTF-8 バイト数）。`show --turn` で読む範囲の重さを見積もるため、user メッセージだけでなくその turn の assistant 応答等も含む。スキーマや import 結果には保存せず、表示時に `GetMessages` 結果から計算する
-- 先頭 1 行は、前後の空白を除去した本文の最初の行。タブ・改行は空白に置換（TSV 保全）。切り詰めは行わない
-- `--format tsv|json`（デフォルト `tsv`）。JSON のフィールドは `turn`, `timestamp`, `bodySize`, `firstLine`（`firstLine` は TSV と同じ先頭 1 行抽出だが、タブ・改行の空白置換は行わない）
+- 完全 REF は最低一つ必要。全 REF を同じ read snapshot で先に検証し、一件でも不正・不存在なら stdout 空の exit 2。裸 ID・短縮 REF は受理しない。
+- REF の指定順に本人会話を選び、`--descendants` は確定子孫だけを親先行 DFS・兄弟 REF 辞書順で展開する。会話は初出だけを採用し、root 所属だけで直接親不明の子や祖先は含めない。各会話の保存済み発言番号順の列を連結する。
+- role・発言番号・日時で絞り、ページ化してから一行化する。`--role` は user / assistant。`--messages A:B` は両端を含む正整数の範囲で、`A:` / `:B` も指定できる。空両端・逆順は不正。各会話へ同じ番号条件を適用し、元の `messageNumber` は振り直さない。
+- `--since` / `--until` は発言自身の保存 timestamp の instant が基準で、下限包含・上限排他。日付 `YYYY-MM-DD` は設定の `dayBoundary`（既定 `00:00`、`--day-boundary HH:MM` で上書き）を起点にし、until 日付は翌日の境界までを含む。日付以外は zone 付き RFC3339 / RFC3339Nano のみ。相対時刻・zone なし日時は受理しない。未知・不正日時は期間なしなら保持し、期間ありなら不一致。session 開始日時で補完しない。
+- 既定は全文（limit=null、offset=0）。`--limit N` / `--offset N` は非負整数で、全 filter 後の発言列を会話をまたいでページ化する。limit=0 は空ページ、末尾を超えた offset でも total を返す。
+- `--tail N` は filter 後の全列末尾 N **発言**を元の順序で返す。limit / offset の明示とは 0 を含め併用できない。envelope は limit=N、offset=max(total-N,0)。tail=0 は空の末尾ページ。
+- `--one-line` はページ確定後の text の最初の LF より前だけを表示し、CRLF の CR は除く。空白は trim せず、先頭 LF は空 text。blocks は原文のまま。
+- 既定 TSV、JSON は発言単位の `{items,total,count,limit,offset,hasMore,nextOffset}` object。各発言は `ref,messageNumber,role,timestamp,text,blocks,parentRef,rootRef,provenance` を常に返す。欠落日時は null、不正な非空日時は保存値、復元不能な legacy blocks は null、既知の配列は空でも []。provenance は source_record / legacy_saved。
+- total は filter 後・page 前、count は items 数。hasMore は残件の有無、nextOffset は続きがあれば offset+count、なければ null。limit=0 の hasMore は offset<total、nextOffset は null。件数・本文・関係は同じ read snapshot から取得する。
+- TSV は先頭 `# page\t` の後に items を除く envelope の compact JSON、一行 header、その後は発言ごと一行。列順は上記 field 順。null は `\N`、配列は compact JSON、文字列は backslash→`\\`、tab→`\t`、LF→`\n`、CR→`\r` の順で可逆 escape する。
+- 成功は0（0件を含む）、入力・設定・REF・非対応 DB は2、I/O 失敗は1。旧 `outline` command、show の `--summary` / `--turn` / 表示除外 / `--source` / `--project` / `--short` / Markdown と、REF なしの期間入口は提供しない。user の一覧は `--role user --one-line`、番号範囲は `--messages` で取得する。
 
 ### 検索（search）
 
@@ -150,12 +132,12 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ。query の `%`、`_`、`\` は文字列として扱う
 - 継承 context と所属不明本文は検索しない。Claude Code・Codex の本人 sidechain は対象とし、Cursor Agent は従来の sidechain 除外に従う（show と同じ扱い）
 - 出力 TSV の列: `ref`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順（メッセージ `timestamp` 降順、同値は rowid 降順）
-- `turn` は outline / show --turn と同じ採番。ヒットしたメッセージが属する turn 番号を出すため、検索結果の完全 `ref` を `somniloq show --config NAME_OR_PATH --turn <N> REF` または `somniloq outline --config NAME_OR_PATH REF` に渡して再参照できる
+- 現行 search の `turn` は user 発言から計算する旧番号で、show の保存済み `messageNumber` とは異なる。`turn` を `--messages` へそのまま渡さない。検索結果の完全 `ref` を show に渡し、本人原文の発言番号を確認する
 - `time` はローカルタイム `2006-01-02 15:04` 形式
 - `project` は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` をそのまま
 - snippet はマッチの前後各 40 文字（rune 単位）。前後が切れている場合は `...` を付加。前後の空白は trim し、タブ・改行は空白に置換（TSV 保全）
 - JSON のフィールドは `ref`, `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet`。`timestamp` は DB 保存値、`snippet` はタブ・改行を置換しない生値（共通仕様は「JSON 出力」節参照）
-- `--since`/`--until` は**メッセージの timestamp 基準**。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な timestamp は時刻条件に一致しない。sessions / show のセッション開始基準とは異なる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と日時は `dayBoundary` の影響を受けない
+- `--since`/`--until` は**メッセージの timestamp 基準**。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な timestamp は時刻条件に一致しない。sessions のセッション開始基準とは異なり、show と同じ発言基準となる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と日時は `dayBoundary` の影響を受けない
 - `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ、alias 展開含む）
 - `--limit N` は最大 N 件を返す。未指定時は無制限、N は 1 以上。`--offset M` は順序付け済みの先頭 M 件を飛ばす。未指定時は 0、M は 0 以上。すべての既存 filter と新しい順（timestamp 降順、同値は rowid 降順）を適用した後にページ化する
 - 同じ query・filter・`--limit` で `--offset` を増やせば続きのページを取得できる。ただし、この保証は DB が固定で、相対時刻 filter を含む場合は解決済みの時刻条件も固定である場合だけ。DB の変更や snapshot はサポートしない
@@ -164,19 +146,19 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 機械消費（スクリプト・skill からの利用）向けの構造化出力。判断の経緯は `docs/decisions/0012-json-output-schema.md` 参照。
 
-- 対象コマンド: `sessions` / `projects` / `outline` / `search`（`--format tsv|json`、デフォルト `tsv`）、`show`（`--format markdown|json`、デフォルト `markdown`）
+- 対象コマンド: `sessions` / `projects` / `search` / `show`（`--format tsv|json`、デフォルト `tsv`）
 - show は発言 envelope object（前節参照）、その他は JSON 配列。結果 0 件は show の items=[]、その他は `[]`。show の関係・本文・件数は同じ read transaction から取得する。
 - フィールド名は camelCase
-- タイムスタンプは DB 保存値（RFC3339 UTC）をそのまま出す。ローカルタイム整形は TSV / Markdown 側だけの表示都合とする（タイムゾーン情報を失わないため）
+- タイムスタンプは DB 保存値をそのまま出す。show は元の offset・精度・不正な非空 raw 値も保持する。ローカルタイム整形は sessions / projects / search の TSV 側だけの表示都合とする（タイムゾーン情報を失わないため）
 - 文字列は生値（TSV のタブ・改行置換はしない。エスケープは JSON 側で担保される）
-- `title` は `custom_title` の生値（Markdown 表示のような session_id フォールバックはしない）
+- `title` は `custom_title` の生値（session_id フォールバックはしない）
 - `project` は alias canonical 表示と `--short` を反映した表示名（alias 一致時は canonical 名のみ、alias 非一致時のデフォルトは `repo_path` の生値）
 - 不正な `--format` 値はエラー（`unknown format: ...`）。DB を開く前に検証する
 - インデント 2 スペース、HTML エスケープ（`<` `>` `&` の `\uXXXX` 化）は無効
 
 ### 設定ファイル（config）
 
-全 DB コマンド（import / migrate / sessions / projects / search / show / outline）は `--config NAME_OR_PATH` が必須。コマンド名の前でも後でも指定できる。help / version / config init は設定不要。通常コマンドの `--db` は廃止。未指定・欠落時は exit 2、stderr に不足項目と `Run somniloq config init, then use --config default.` を表示し、DB・設定を自動生成しない。旧 JSON 設定は探索・変換しない。
+全 DB コマンド（import / migrate / sessions / projects / search / show）は `--config NAME_OR_PATH` が必須。コマンド名の前でも後でも指定できる。help / version / config init は設定不要。通常コマンドの `--db` は廃止。未指定・欠落時は exit 2、stderr に不足項目と `Run somniloq config init, then use --config default.` を表示し、DB・設定を自動生成しない。旧 JSON 設定は探索・変換しない。
 
 `config init [NAME] [--output PATH] [--db PATH]` は設定だけを作り、DB は開かない。NAME 省略時は default、名前は `[A-Za-z0-9_-]+`。既定出力は `~/.somniloq/config/NAME.toml`、既定 DB は `~/.somniloq/NAME.db`。任意出力でも NAME が既定 DB を決める。parent directory は作成し、通常ファイル・directory・symlink（dangling を含む）への上書きは exit 2 で拒否する。stdout は作成した設定の絶対 path 一行。
 
@@ -204,12 +186,12 @@ root = "~/.cursor/projects"
 ```
 
 - init は上記3入力を生成する。`dayBoundary` と `projectAliases` は任意（既定 `00:00` と空）。`inputs.name` は任意の表示文字列で、DB に保存せず入力 identity に使わない。
-- 全キーは上記だけ。未知キー・型違い・空 db/inputs/root・未知 source・不正 dayBoundary を拒否する。旧 `excludeUserMessagePatterns` は受理しない。表示除外が必要な現行 outline / summary では CLI の `--exclude-user-message-pattern` を使う。
+- 全キーは上記だけ。未知キー・型違い・空 db/inputs/root・未知 source・不正 dayBoundary を拒否する。旧 `excludeUserMessagePatterns` は受理しない。show の表示除外フラグも提供しない。
 - `--config` が名前規則を満たせば設定名、それ以外は path。`foo.toml` は path、拡張子なし相対ファイルは `./foo` と指定する。設定 path 自体の相対解決は実行 cwd 基準。
 - 設定 symlink の実体親を相対 db/root の基準とする。先頭 `~` または `~/` だけを home へ展開し（`~other`・環境変数は展開しない）、絶対化・Clean・既存 symlink 解決を行う。未存在末尾は存在する最長 parent を実体解決して接続する。大文字小文字は変換しない。
 - `projectAliases` は canonical 名から旧名配列への map。`--project` がグループ内の名に完全一致した場合だけ全名称へ OR 展開し、その他は literal substring。canonical/alias が別グループと重なる設定は拒否する。
 - project 表示は一致する canonical 名を使う。projects は表示名ごとに件数を合算し、DB の repo_path は変更しない。
-- `dayBoundary` はローカル時計の `HH:MM`。sessions/search の date-only フィルタと sessions の logical_day に適用し、DB に保存しない。DST 時の欠落・重複時刻は Go の `time.Date` の解決に従う。
+- `dayBoundary` はローカル時計の `HH:MM`。sessions/search/show の date-only フィルタと sessions の logical_day に適用し、DB に保存しない。DST 時の欠落・重複時刻は Go の `time.Date` の解決に従う。
 
 ## CLI インターフェース
 
@@ -224,10 +206,9 @@ somniloq sessions --config default --since 7d
 somniloq sessions --config default --imported-since 24h --format json
 somniloq search --config default --project somniloq "auth bug"
 somniloq search --config default --limit 50 --offset 50 "auth bug"
-somniloq outline --config default REF              # 一覧/検索の完全 REF を使う
-somniloq show --config default --turn 12..18 REF
-somniloq show --config default --format json REF
-somniloq show --config default --since 24h          # 現行の期間一括表示
+somniloq show --config default REF --role user --one-line
+somniloq show --config default REF --messages 12:18
+somniloq show --config default REF1 REF2 --since 2026-10-01 --until 2026-10-01 --format json
 somniloq projects --config default --short
 somniloq --config ./archive.toml sessions
 somniloq --version
@@ -248,7 +229,7 @@ DB path は TOML の db で指定する。新 DB は revision 1（`PRAGMA user_v
 
 入力キーは `sha256(UTF8(DB source) + NUL + UTF8(canonical root))` の64桁小文字 hex。同じ source/root は再処理や name 変更でも同入力、root 移動は別入力。Codex・Cursor Agent・Claude Code root の会話 identity は HTML escape なし・空白なし JSON 配列 `[sessionId]`。
 
-完全 REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`（padding なし RFC4648 URL alphabet）。path・name・DB rowid は含まない。同じ root/source/identity なら再 import・別 DB でも安定する。Codex は子本人の identity と明示親参照を保存し、各本人 REF で会話を選べる。Claude Code の子・孫は `[rootSessionId,agentId]` で個別 REF を発行・選択できる。まとまり・子孫を展開する query は後続実装。移行した旧会話は `slq1:legacy:<snapshot_sha256>:<source>:<base64url_legacy_session_id>` の完全 REF で選択でき、正常入力の同名会話と区別する。部分置換後も旧 REF と残行の番号を維持する。
+完全 REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`（padding なし RFC4648 URL alphabet）。path・name・DB rowid は含まない。同じ root/source/identity なら再 import・別 DB でも安定する。Codex は子本人の identity と明示親参照を保存し、各本人 REF で会話を選べる。Claude Code の子・孫は `[rootSessionId,agentId]` で個別 REF を発行・選択できる。まとまりの検索一覧は後続実装。確定子孫の show 展開と search の `--session REF` は利用できる。移行した旧会話は `slq1:legacy:<snapshot_sha256>:<source>:<base64url_legacy_session_id>` の完全 REF で選択でき、正常入力の同名会話と区別する。部分置換後も旧 REF と残行の番号を維持する。
 
 ## Known limitations
 

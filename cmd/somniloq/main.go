@@ -22,8 +22,7 @@ Commands:
   import    Import Claude Code, Codex, and Cursor Agent session logs from JSONL files
   migrate   Copy a fixed legacy snapshot and replace proven Codex conversations
   sessions  List sessions
-  show      Show session content in Markdown
-  outline   List a session's user messages as turn, time, body size, and first line
+  show      Show original messages with filters and pagination
   search    Search message content across sessions with turn numbers
   projects  List projects
   config init Create a TOML configuration
@@ -114,8 +113,6 @@ func runCommand(args []string, in io.Reader, out, errOut io.Writer, isTTY bool) 
 		return sessionsCmd(commandArgs, open, cfg, out, errOut)
 	case "show":
 		return showCmd(commandArgs, open, cfg, out, errOut)
-	case "outline":
-		return outlineCmd(commandArgs, open, cfg, out, errOut)
 	case "search":
 		return searchCmd(commandArgs, open, cfg, out, errOut)
 	case "projects":
@@ -170,6 +167,9 @@ func isHelpRequest(command string, args []string) bool {
 		}
 		name, hasValue, ok := splitFlagArg(arg)
 		if !ok {
+			if command == "show" {
+				continue
+			}
 			return false
 		}
 		if name == "h" || name == "help" {
@@ -225,9 +225,6 @@ func configCommandFlagSet(command string) *flag.FlagSet {
 		return fs
 	case "projects":
 		fs, _ := newProjectsFlagSet()
-		return fs
-	case "outline":
-		fs, _ := newOutlineFlagSet()
 		return fs
 	}
 	return nil

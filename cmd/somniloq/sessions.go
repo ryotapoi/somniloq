@@ -16,7 +16,7 @@ const sessionsHelpDetails = `Columns (TSV, in order):
   project: canonical alias name when configured, otherwise repo_path or basename with --short; tabs/newlines flattened.
   custom_title: session title with tabs/newlines flattened, empty when unavailable.
   message_count: stored message rows, including sidechain rows.
-  body_size: UTF-8 byte size of non-sidechain message bodies; use this to choose outline/show ranges.
+  body_size: UTF-8 byte size of non-sidechain message bodies; use this to choose show message ranges.
   source: internal source identifier: claude_code, codex, or cursor_agent.
 
 JSON fields:

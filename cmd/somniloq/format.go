@@ -5,8 +5,6 @@ import (
 	"io"
 	"strings"
 	"time"
-
-	"github.com/ryotapoi/somniloq/internal/core"
 )
 
 func formatLocalTime(utcStr string, loc *time.Location) string {
@@ -28,55 +26,11 @@ func formatTimeRange(startedAt, endedAt string, loc *time.Location) string {
 	return s + " ~ " + formatLocalTime(endedAt, loc)
 }
 
-var titleSanitizer = strings.NewReplacer("\n", " ", "\r", " ")
-
 var tsvReplacer = strings.NewReplacer("\t", " ", "\n", " ", "\r", " ")
 
 // sanitizeTSV replaces tabs and newlines with spaces to keep TSV output intact.
 func sanitizeTSV(s string) string {
 	return tsvReplacer.Replace(s)
-}
-
-// firstLine returns the first line of the content after trimming surrounding
-// whitespace, so leading blank lines do not produce an empty outline entry.
-func firstLine(s string) string {
-	line, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
-	return strings.TrimRight(line, "\r")
-}
-
-func formatSession(w io.Writer, session core.SessionRow, displayName string, messages []core.MessageRow, loc *time.Location) error {
-	title := session.CustomTitle
-	if title == "" {
-		title = session.SessionID
-	}
-	title = titleSanitizer.Replace(title)
-
-	if _, err := fmt.Fprintf(w, "## %s\n\n", title); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "- **Session**: `%s`\n", session.SessionID); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "- **Source**: `%s`\n", session.Source); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "- **Project**: `%s`\n", displayName); err != nil {
-		return err
-	}
-	if _, err := fmt.Fprintf(w, "- **Started**: `%s`\n", formatTimeRange(session.StartedAt, session.EndedAt, loc)); err != nil {
-		return err
-	}
-
-	for _, msg := range messages {
-		heading := msg.Role
-		if len(heading) > 0 {
-			heading = strings.ToUpper(heading[:1]) + heading[1:]
-		}
-		if _, err := fmt.Fprintf(w, "\n### %s\n\n%s\n", heading, msg.Content); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 func writeUsageError(w io.Writer, message string) {

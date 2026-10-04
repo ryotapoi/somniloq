@@ -26,7 +26,7 @@ Notes:
   With --source cursor-agent --full, only selected Cursor Agent inputs are rebuilt.
   Codex rebuilds each changed owner across all rollouts, ordered by relative path and physical line.
   Matching payload IDs deduplicate only identical role, text blocks, and raw timestamp; conflicts fail the group.
-  Codex inheritance context is stored separately and excluded from show, outline, and body search.
+  Codex inheritance context is stored separately and excluded from show and body search.
   Missing record timestamps remain unknown; session metadata does not supply message time.
   An unparsed final line without a newline is retried if the file grows; completed malformed lines are skipped.
   Claude Code messages need non-empty session and message IDs; Codex session metadata needs a non-empty ID.

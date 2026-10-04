@@ -1,13 +1,9 @@
 package main
 
 import (
-	"bytes"
 	"errors"
-	"strings"
 	"testing"
 	"time"
-
-	"github.com/ryotapoi/somniloq/internal/core"
 )
 
 var errFailWriter = errors.New("write failed")
@@ -66,59 +62,5 @@ func TestFormatTimeRange(t *testing.T) {
 				t.Errorf("formatTimeRange(%q, %q) = %q, want %q", tt.started, tt.ended, got, tt.want)
 			}
 		})
-	}
-}
-
-func TestFormatSession_WithTitle(t *testing.T) {
-	var buf bytes.Buffer
-
-	session := core.SessionRow{
-		Source:       core.SourceClaudeCode,
-		SessionID:    "abc-123",
-		StartedAt:    "2026-03-28T10:00:00Z",
-		CustomTitle:  "Title\twith\nline",
-		EndedAt:      "2026-03-28T10:30:00Z",
-		MessageCount: 2,
-	}
-	messages := []core.MessageRow{
-		{UUID: "m1", Role: "user", Content: "fix\tthe login\nwith detail", Timestamp: "2026-03-28T10:00:00Z"},
-		{UUID: "m2", Role: "assistant", Content: "done", Timestamp: "2026-03-28T10:01:00Z"},
-	}
-	displayName := "-Users-test-proj"
-
-	if err := formatSession(&buf, session, displayName, messages, time.UTC); err != nil {
-		t.Fatalf("formatSession failed: %v", err)
-	}
-	const want = "## Title\twith line\n\n" +
-		"- **Session**: `abc-123`\n- **Source**: `claude_code`\n" +
-		"- **Project**: `-Users-test-proj`\n- **Started**: `2026-03-28 10:00 ~ 2026-03-28 10:30`\n" +
-		"\n### User\n\nfix\tthe login\nwith detail\n\n### Assistant\n\ndone\n"
-	if got := buf.String(); got != want {
-		t.Errorf("Markdown = %q, want %q", got, want)
-	}
-}
-
-func TestFormatSession_EmptyTitle(t *testing.T) {
-	var buf bytes.Buffer
-
-	session := core.SessionRow{
-		SessionID: "abc-123",
-		StartedAt: "2026-03-28T10:00:00Z",
-	}
-
-	if err := formatSession(&buf, session, "-Users-test", nil, time.UTC); err != nil {
-		t.Fatalf("formatSession failed: %v", err)
-	}
-	got := buf.String()
-
-	if !strings.Contains(got, "## abc-123\n") {
-		t.Errorf("expected h2 with session_id fallback, got:\n%s", got)
-	}
-}
-
-func TestFormatSession_ReturnsWriteError(t *testing.T) {
-	err := formatSession(failWriter{}, core.SessionRow{SessionID: "abc-123"}, "project", nil, time.UTC)
-	if !errors.Is(err, errFailWriter) {
-		t.Errorf("formatSession error = %v, want %v", err, errFailWriter)
 	}
 }

@@ -41,13 +41,6 @@ type projectJSON struct {
 	SessionCount int    `json:"sessionCount"`
 }
 
-type outlineEntryJSON struct {
-	Turn      int    `json:"turn"`
-	Timestamp string `json:"timestamp"`
-	BodySize  int    `json:"bodySize"`
-	FirstLine string `json:"firstLine"`
-}
-
 type searchJSON struct {
 	REF       string `json:"ref"`
 	Source    string `json:"source"`

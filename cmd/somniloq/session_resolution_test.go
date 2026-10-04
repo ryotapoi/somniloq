@@ -36,20 +36,13 @@ func newCrossSourceSessionTestDB(t *testing.T) *core.DB {
 }
 
 func TestCommandsRejectBareSessionIDs(t *testing.T) {
-	for _, command := range []string{"show", "outline"} {
-		db := newCrossSourceSessionTestDB(t)
-		var out, errOut bytes.Buffer
-		var code int
-		var err error
-		if command == "show" {
-			code, err = showCmd([]string{"same-id"}, staticDB(db), config{}, &out, &errOut)
-		} else {
-			code, err = outlineCmd([]string{"same-id"}, staticDB(db), config{}, &out, &errOut)
-		}
-		if code != 2 || err == nil || out.Len() != 0 {
-			t.Fatalf("%s bare ID: %d %v %q", command, code, err, out.String())
-		}
+	db := newCrossSourceSessionTestDB(t)
+	var out, errOut bytes.Buffer
+	code, err := showCmd([]string{"same-id"}, staticDB(db), config{}, &out, &errOut)
+	if code != 2 || err == nil || out.Len() != 0 {
+		t.Fatalf("bare ID: %d %v %q", code, err, out.String())
 	}
+
 }
 
 func TestResolveSessionREFSelectsExactInputAndSource(t *testing.T) {

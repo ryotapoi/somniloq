@@ -16,7 +16,7 @@ const searchUsageLine = "somniloq search --config default [--session <REF>] [--s
 
 const searchHelpDetails = `Columns (TSV, in order):
   ref: full slq1 reference containing the matching message.
-  turn: outline/show turn number containing the hit.
+  turn: legacy user turn number containing the hit.
   time: local timestamp of the matching message.
   project: canonical alias name when configured, otherwise repo_path.
   snippet: first match with about 40 runes of context on each side; tabs/newlines flattened for TSV.
@@ -39,14 +39,14 @@ Notes:
   --limit returns at most N results (N >= 1); --offset skips N ordered results (N >= 0).
   Continue a fixed search with --limit and increasing --offset. Database changes or
   different resolved relative-time filters can change later pages.
-  Typical flow: search -> outline <REF> -> show --turn <turn-or-range> <REF>.
+  Typical flow: search -> show <REF> --role user --one-line -> show <REF> --messages A:B.
 
 Examples:
   somniloq search --config default "auth bug"
   somniloq search --config default --since 7d --project somniloq "migration"
   somniloq search --config default --limit 50 --offset 50 "auth bug"
   somniloq search --config default --format json "auth bug"
-  somniloq show --config default --turn 42 <REF>`
+  somniloq show --config default <REF> --messages 42:42`
 
 // snippetContext is the number of runes kept on each side of the match.
 const snippetContext = 40

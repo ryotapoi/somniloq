@@ -129,30 +129,6 @@ func TestSessionsCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
 	}
 }
 
-func TestShowCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
-	db := newProjectAliasDisplayDB(t)
-	cfg := config{ProjectAliases: map[string][]string{
-		"somniloq": {"Brimday"},
-	}}
-
-	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{fixtureREF(core.SourceClaudeCode, "old-1")}, staticDB(db), cfg, &out, &errOut)
-	if err != nil {
-		t.Fatalf("showCmd: %v", err)
-	}
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
-	}
-
-	got := out.String()
-	if !strings.Contains(got, "- **Project**: `somniloq`") {
-		t.Errorf("show header should use canonical project name:\n%s", got)
-	}
-	if strings.Contains(got, "Brimday") {
-		t.Errorf("show output should not leak old project name:\n%s", got)
-	}
-}
-
 func TestProjectsCmd_ProjectAliasDisplayAggregatesCanonical(t *testing.T) {
 	db := newProjectAliasDisplayDB(t)
 	cfg := config{ProjectAliases: map[string][]string{
@@ -291,9 +267,6 @@ func TestProjectAliasLiteralConditionsAcrossCommands(t *testing.T) {
 			}{
 				{"sessions", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
 					return sessionsCmd([]string{"--project", input}, staticDB(db), cfg, out, errOut)
-				}},
-				{"show", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
-					return showCmd([]string{"--since", "2026-03-28T00:00:00Z", "--project", input}, staticDB(db), cfg, out, errOut)
 				}},
 				{"search", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
 					return searchCmd([]string{"--project", input, "literal alias hit"}, staticDB(db), cfg, out, errOut)

@@ -26,8 +26,6 @@ type config struct {
 	Path           string
 	ProjectAliases map[string][]string
 	DayBoundary    string
-	// Retained for the existing summary command's in-process API only.
-	ExcludeUserMessagePatterns []string
 }
 
 // ConfigIOError distinguishes filesystem failures from invalid settings.

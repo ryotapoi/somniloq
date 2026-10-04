@@ -12,7 +12,7 @@ import (
 
 func TestMainDispatchRequiresExplicitConfig(t *testing.T) {
 	home := t.TempDir()
-	for _, command := range []string{"import", "sessions", "search", "show", "outline", "projects"} {
+	for _, command := range []string{"import", "sessions", "search", "show", "projects"} {
 		code, stdout, stderr := runSomniloqMain(t, home, command)
 		if code != 2 || stdout != "" || !strings.Contains(stderr, "Run somniloq config init, then use --config default.") {
 			t.Fatalf("%s: %d %q %q", command, code, stdout, stderr)
@@ -24,7 +24,7 @@ func TestMainDispatchRequiresExplicitConfig(t *testing.T) {
 }
 
 func TestMainDispatchHelpAndVersionWithoutConfig(t *testing.T) {
-	for _, command := range []string{"import", "sessions", "show", "outline", "search", "projects"} {
+	for _, command := range []string{"import", "sessions", "show", "search", "projects"} {
 		code, _, stderr := runSomniloqMain(t, t.TempDir(), command, "--help")
 		if code != 0 || !strings.Contains(stderr, "Usage:") {
 			t.Fatalf("%s help: %d %q", command, code, stderr)
@@ -126,4 +126,15 @@ func TestSomniloqMainHelper(t *testing.T) {
 	os.Args = append([]string{"somniloq"}, os.Args[sep+1:]...)
 	flag.CommandLine = flag.NewFlagSet(os.Args[0], flag.ExitOnError)
 	main()
+}
+
+func TestRemovedOutlineAndShowHelpAfterREF(t *testing.T) {
+	code, stdout, stderr := runSomniloqMain(t, t.TempDir(), "outline", "--help")
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "unknown command: outline") {
+		t.Fatalf("outline: %d %q %q", code, stdout, stderr)
+	}
+	code, stdout, stderr = runSomniloqMain(t, t.TempDir(), "show", "bare", "--help")
+	if code != 0 || stdout != "" || !strings.Contains(stderr, "--messages") {
+		t.Fatalf("show help: %d %q %q", code, stdout, stderr)
+	}
 }

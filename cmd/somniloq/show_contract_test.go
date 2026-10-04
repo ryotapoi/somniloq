@@ -138,6 +138,43 @@ func TestShowOriginalFixtureContract(t *testing.T) {
 		}
 	}
 
+	// Multiple selectors retain the first expansion order, including overlapping descendants.
+	for _, ids := range [][]string{{`["root"]`, `["child"]`}, {`["child"]`, `["root"]`}} {
+		args := []string{"--format", "json", "--descendants"}
+		for _, id := range ids {
+			args = append(args, ref(core.SourceCodex, id))
+		}
+		args = append(args, core.IdentityREF(core.InputKey(core.SourceCodex, other), core.SourceCodex, `["root"]`))
+		var out, diag bytes.Buffer
+		code, err := showCmd(args, open, config{}, &out, &diag)
+		if code != 0 || err != nil {
+			t.Fatalf("selectors: %d %v", code, err)
+		}
+		var got showJSON
+		if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		order := []string{}
+		seen := map[string]bool{}
+		for _, item := range got.Items {
+			if len(order) == 0 || order[len(order)-1] != item.REF {
+				if seen[item.REF] {
+					t.Fatalf("duplicate conversation: %+v", got)
+				}
+				seen[item.REF] = true
+				order = append(order, item.REF)
+			}
+		}
+		expected := []string{ref(core.SourceCodex, `["root"]`), ref(core.SourceCodex, `["child"]`), ref(core.SourceCodex, `["grandchild"]`), ref(core.SourceCodex, `["old-child"]`), ref(core.SourceCodex, `["ordinal-child"]`)}
+		if ids[0] == `["child"]` {
+			expected = []string{expected[1], expected[2], expected[0], expected[3], expected[4]}
+		}
+		expected = append(expected, core.IdentityREF(core.InputKey(core.SourceCodex, other), core.SourceCodex, `["root"]`))
+		if !reflect.DeepEqual(order, expected) {
+			t.Fatalf("order: %v want %v", order, expected)
+		}
+	}
+
 	for _, tc := range []struct {
 		src   core.Source
 		id    string

@@ -89,22 +89,13 @@ func TestCursorFixture_CrossCommandReferenceContract(t *testing.T) {
 		}
 	})
 
-	t.Run("show outline and projects expose the cursor session", func(t *testing.T) {
+	t.Run("show and projects expose the cursor session", func(t *testing.T) {
 		var out, errOut bytes.Buffer
 		db := newCursorCrossCommandDB(t, false)
 		ref := testREF(t, db, core.SourceCursorAgent, cursorFixtureSessionID)
 		code, err := showCmd([]string{ref}, staticDB(db), config{}, &out, &errOut)
-		if err != nil || code != 0 || !strings.Contains(out.String(), "- **Source**: `cursor_agent`") || !strings.Contains(out.String(), "- **Started**: ``") {
+		if err != nil || code != 0 || !strings.Contains(out.String(), "\t\\N\tPlan a harmless sample.") {
 			t.Fatalf("show = %d, %v, %q", code, err, out.String())
-		}
-
-		out.Reset()
-		errOut.Reset()
-		db = newCursorCrossCommandDB(t, false)
-		ref = testREF(t, db, core.SourceCursorAgent, cursorFixtureSessionID)
-		code, err = outlineCmd([]string{ref}, staticDB(db), config{}, &out, &errOut)
-		if err != nil || code != 0 || !strings.HasPrefix(out.String(), "1\t\t72\tPlan a harmless sample.\n2\t\t50\t") {
-			t.Fatalf("outline = %d, %v, %q", code, err, out.String())
 		}
 
 		out.Reset()

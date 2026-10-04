@@ -35,8 +35,8 @@ SQLite の変更目的から入口を選ぶ。schema・migration・書き込み�
 
 - session 行の SELECT / scan 列を変える: `internal/core/db_sessions_projects.go` の `sessionRowSelect` と `scanSessionRow` を合わせて読み、列順の対応を確認する。直接の利用箇所は `ListSessions` / `GetSession` / `LookupSessionsByID` で、複数行の読み取りは `scanSessionRows` を共有する。表示への影響は `cmd/somniloq/sessions.go`、`cmd/somniloq/show.go`、`cmd/somniloq/session_resolution.go` と `cmd/somniloq/jsonout.go` で確認する。`ListProjects` は同じファイル内の別の集約 query。
 - session / project の絞り込みや集約を変える: `ListSessions` と `ListProjects` の別経路を読み、共通の時刻条件は `timeFilterConditions`、session の project 条件は `projectsCondition` を確認する。検索への影響は `internal/core/db_search.go` の `SearchMessages` まで辿る。
-- 本文の取得や順序を変える: `internal/core/db_messages_summary.go` の `GetMessages` / `GetTurnMessages` を読み、本人原文の保存済み番号順と context 非混入を確認する。表示除外は cmd 層の matcher で行う。表示とターンへの影響は [Display and turns](display-and-turns.md) を辿る。
+- 本文の取得や順序を変える: `internal/core/db_messages_summary.go` の `GetIdentityMessages`（show）/ `GetMessages`（現行 search の turn 計算）を読み、本人原文の保存済み番号順と context 非混入を確認する。show の filter と表示変換は cmd 層で行う。表示と旧 search のターンへの影響は [Display and turns](display-and-turns.md) を辿る。
 
 SQLite driver 固有の補助知見が必要な場合は [SQLite driver notes](sqlite-driver-notes.md) を参照する。
 
-- REF の本人・まとまり・確定子孫の解決は `internal/core/session_relations.go` の `ResolveSession`。入力と source 内の保存関係だけを辿り、Codex 欠落親 key と Claude root 所属を区別する。本人 show/outline の選択と `SearchMessages` の `SessionREF` が共有する。検索 scope は SQL のページ化前に適用し、循環辺は未確定として診断する。回帰の入口は `internal/core/session_relations_test.go`。
+- REF の本人・まとまり・確定子孫の解決は `internal/core/session_relations.go` の `ResolveSession`。入力と source 内の保存関係だけを辿り、Codex 欠落親 key と Claude root 所属を区別する。本人 show の選択と `SearchMessages` の `SessionREF` が共有する。検索 scope は SQL のページ化前に適用し、循環辺は未確定として診断する。回帰の入口は `internal/core/session_relations_test.go`。

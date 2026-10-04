@@ -5,8 +5,7 @@ sources:
   - cmd/somniloq/import.go
   - cmd/somniloq/sessions.go
   - cmd/somniloq/show.go
-  - cmd/somniloq/format.go
-  - cmd/somniloq/outline.go
+  - cmd/somniloq/show_tsv.go
   - cmd/somniloq/turn.go
   - cmd/somniloq/search.go
   - cmd/somniloq/filter.go
@@ -31,8 +30,7 @@ CLI 入口を触る前に、まずこの表で「cmd 層」「core 層」「仕�
 | global routing | `cmd/somniloq/main.go` | `internal/core/db.go` の `OpenDB` | `cmd/somniloq/main_dispatch_test.go`, 各 cmd test | `docs/rules/scope.md` の CLI インターフェース |
 | `import` | `cmd/somniloq/import.go` | `internal/core/import.go`, `internal/ingest/*` | `cmd/somniloq/import*_test.go`, `internal/core/import_test.go`, `internal/core/codex_import_test.go` | `docs/rules/scope.md` の 取り込み |
 | `sessions` | `cmd/somniloq/sessions.go` | `internal/core/db_sessions_projects.go` の `ListSessions` | `cmd/somniloq/sessions_test.go`, `internal/core/db_sessions_projects_test.go` | `docs/rules/scope.md` の セッション一覧 |
-| `show` | `cmd/somniloq/show.go`, `cmd/somniloq/format.go` | `session_relations.go` の `ResolveSession`、`db_messages_summary.go` の `GetIdentityMessages`。summary の user message 除外は cmd 層の共有 matcher | `cmd/somniloq/show*_test.go`, `cmd/somniloq/format_test.go`, `cmd/somniloq/user_message_exclusion_test.go` | `docs/rules/scope.md` の 内容表示 |
-| `outline` | `cmd/somniloq/outline.go`, `cmd/somniloq/turn.go`, `cmd/somniloq/user_message_exclusion.go` | `internal/core/db_messages_summary.go` の `GetMessages` | `cmd/somniloq/outline_test.go`, `cmd/somniloq/turn_test.go`, `cmd/somniloq/user_message_exclusion_test.go` | `docs/rules/scope.md` の アウトライン表示 |
+| `show` | `cmd/somniloq/show.go`, `cmd/somniloq/show_tsv.go`, `cmd/somniloq/jsonout.go` | `session_relations.go` の `ResolveSession`、`db_messages_summary.go` の `GetIdentityMessages` を同じ `ReadSnapshot` で利用。発言 filter / page / one-line は cmd 層 | `cmd/somniloq/show_contract_test.go`, `cmd/somniloq/show_filters_test.go`, `cmd/somniloq/jsonout_test.go` | `docs/rules/scope.md` の 内容表示 |
 | `search` | `cmd/somniloq/search.go`, `cmd/somniloq/filter.go` | `SearchMessages` | `cmd/somniloq/search_test.go`, `internal/core/db_search_test.go` | `docs/rules/scope.md` の 検索 |
 | `projects` | `cmd/somniloq/projects.go` | `internal/core/db_sessions_projects.go` の `ListProjects` | `cmd/somniloq/jsonout_test.go`, `internal/core/db_sessions_projects_test.go` | `docs/rules/scope.md` の プロジェクト一覧 |
 

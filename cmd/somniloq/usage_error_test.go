@@ -19,25 +19,11 @@ func TestUsageErrorsKeepExactStderr(t *testing.T) {
 		want string
 	}{
 		{
-			name: "show",
-			run: func(errOut *bytes.Buffer) (int, error) {
-				return showCmd([]string{"one", "two"}, openDB, config{}, &bytes.Buffer{}, errOut)
-			},
-			want: "error: too many arguments\nusage: " + showUsageLine + "\n",
-		},
-		{
 			name: "search",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return searchCmd([]string{"one", "two"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
 			want: "error: too many arguments\nusage: " + searchUsageLine + "\n",
-		},
-		{
-			name: "outline",
-			run: func(errOut *bytes.Buffer) (int, error) {
-				return outlineCmd([]string{"one", "two"}, openDB, config{}, &bytes.Buffer{}, errOut)
-			},
-			want: "error: too many arguments\nusage: " + outlineUsageLine + "\n",
 		},
 		{
 			name: "projects",

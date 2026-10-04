@@ -7,9 +7,6 @@ sources:
   - cmd/somniloq/filter.go
   - cmd/somniloq/sessions.go
   - cmd/somniloq/show.go
-  - cmd/somniloq/outline.go
-  - cmd/somniloq/user_message_exclusion.go
-  - cmd/somniloq/turn.go
   - cmd/somniloq/shorten.go
   - cmd/somniloq/projects.go
   - cmd/somniloq/search.go
@@ -21,7 +18,7 @@ sources:
 
 # Configuration and projects
 
-`repo_path` / `--project` / config 周りを変えるときの地図。表示名、filter、集約キー、user message の表示除外、論理日境界が混ざりやすいので、入口を分けて見る。
+`repo_path` / `--project` / config 周りを変えるときの地図。表示名、filter、集約キー、論理日境界が混ざりやすいので、入口を分けて見る。
 
 ## repo_path
 
@@ -36,25 +33,17 @@ sources:
 - 展開後の `core.SessionFilter.Projects` は `internal/core/db_sessions_projects.go` の `sessionFilterConditions` → `projectsCondition` → `escapeLikeLiteral` へ進む。条件を変える際は `ListSessions` と `internal/core/db_search.go` の `SearchMessages` を併せて確認する。
 - alias の表示への波及は下の「集約と表示」を読む。filter の展開と表示名の解決は別の入口を持つ。
 
-## excludeUserMessagePatterns
-
-判定規則は `docs/rules/scope.md` の「設定ファイル（config）」、コマンド別の影響は「内容表示（show）」と「アウトライン表示（outline）」を参照する。
-
-- `cmd/somniloq/config.go` の `loadConfig` が `excludeUserMessagePatterns` を検証し、`cmd/somniloq/user_message_exclusion.go` の `userMessageMatcher` が trim 済み全文を Go regexp で照合する。
-- 利用側は `cmd/somniloq/outline.go` と `cmd/somniloq/show.go`。CLI pattern の置換・呼び出し単位の無効化も matcher の作成時に解決する。
-- `sessions` はメッセージ本文を読まず、user message による一覧行の除外も行わない。
-
 ## dayBoundary
 
-境界時刻・DST の契約は `docs/rules/scope.md` の「設定ファイル（config）」、filter と表示への適用は「セッション一覧（sessions）」と「検索（search）」を読む。
+境界時刻・DST の契約は `docs/rules/scope.md` の「設定ファイル（config）」、filter と表示への適用は「セッション一覧（sessions）」「検索（search）」「内容表示（show）」を読む。
 
-- `cmd/somniloq/config.go` の `resolveDayBoundary` / `parseDayBoundary` から、sessions / search の filter 構築へ値が渡る。呼び出し側を変える際は、`show.go` / `projects.go` が渡す `dayBoundary{}` との違いも確認する。
+- `cmd/somniloq/config.go` の `resolveDayBoundary` / `parseDayBoundary` から、sessions / search の filter 構築と show の日時選択へ値が渡る。show の `parseShowTime` は日付と zone 付き RFC3339 の受理を持ち、他コマンドの相対時刻・zone なし日時の経路とは分けて確認する。projects は論理日境界を適用しない。
 - 日付 filter は `cmd/somniloq/filter.go` の `resolveTimeFlag`、論理日表示は同ファイルの `sessionLogicalDay` が入口。両者はローカル暦日の境界を作る `dayBoundary.onDate` を共有するため、境界の変更は両経路を併せて確認する。
 - DST を含む境界の検証入口は `cmd/somniloq/resolve_test.go`。表示への受け渡しは `cmd/somniloq/sessions.go` の TSV / JSON 両経路を読む。
 
 ## 集約と表示
 
-- `sessions`, `show`, `search` は `--project` filter の対象。
+- `sessions`, `search` は `--project` filter の対象。show は完全 REF と発言 filter で選択する。
 - `internal/core.DB.ListProjects` は raw `repo_path` ごとの行を返す。`--project` filter は受けず、DB の保存事実は書き換えない。時刻条件があると NULL / 空 started_at は対象外、条件なしでは空 repo_path も 1 グループとして残る。
 - 表示名は `cmd/somniloq/shorten.go` の `resolveProjectDisplayName`。alias の canonical / old names が `repo_path` 全体または basename に一致したら canonical 名のみを出す。
 - alias 非一致時だけ、`--short` は従来どおり `resolveDisplayName` で basename にする。
