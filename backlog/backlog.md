@@ -12,56 +12,6 @@
 
 ## タスク
 
-### v0.13.0 メッセージ除外の統一とCLIの整理
-
-- [x] 公開の backfill コマンドを廃止する
-
-  公開の `backfill` コマンドと専用の旧データ修正・移行コードを削除し、関連する help・仕様・README・テストを更新する。利用者は実質プロジェクト所有者のみであるため削除を確定し、旧 DB 利用者向けの専用アップグレード手段は追加しない。一般的な schema 管理は維持する。
-
-- [x] user message の除外を統一する
-
-  `excludeUserMessagePatterns` に統一し、`outline` と `show --summary` に trim 済みの全文へ同じ Go 正規表現を適用する共有 matcher を導入する。config のパターン一覧が未設定なら除外なしとし、繰り返し指定できる CLI pattern は OR で評価して config のパターン一覧全体を置き換える。全除外をその呼び出しだけ無効化する指定を設け、override との併用と不正な regex はエラーにする。空正規表現は無効化の意味にしない。
-
-  除外は first line・件数制限より先に適用し、`outline` は元の turn 番号を維持、summary は除外後の先頭 N 件を表示する。保存 DB、全文 `show` / `--turn` / `--tail`、`search` には適用しない。user message の除外を理由に `sessions` の一覧行を除外しない。
-
-  summary 固定の `/clear`・caveat 除外と `--include-clear` を廃止し、新しい除外指定への移行例を示す。`sessions` 用の `commandPatterns`、slash-prefix 判定、`nonCommandUserTurnCount`、`firstNonCommandUserLine` とその算出処理も廃止し、TSV・JSON の公開出力から削除する。`sessions` に独自の除外ルールは残さず、user message の除外処理は共有 matcher を使う。
-
-  公開出力・設定の変更は v0.13.0 で行い、dayBoundary・logicalDay と summary 自体は維持する。関連する docs・help・README・config/output の移行案内とテストを更新し、設定と CLI の優先順位、共有 matcher と順序、元の turn ID、不正 regex、廃止項目が TSV・JSON に残らないことを自動検証する。
-
-#### 不具合修正
-
-- [x] 並行 import による本文の欠落を防ぐ
-
-  差分 `import` と `import --full` の並行実行で、成功扱いのまま既存本文が欠落する問題を防ぐ。`internal/core/import.go` には transaction 外で取得した古い offset を全削除後の DB に適用できる経路がある。静的な実行順序で確認した候補なので、2プロセスの順序を制御して再現し、両実行後と次回の差分 import 後に元ログの本文が欠落せず、重複も生じないことを検証する（`I01-001`）。
-
-- [x] 新規 DB を所有者限定の権限で作成する
-
-  会話ログを保存する新規 DB と新規保存先ディレクトリを、所有者限定の権限で作成する。`cmd/somniloq/main.go` の `openDB` と `internal/core/db.go` の `OpenDB` は、umask 022 の共有パスで DB を 0644 にする。親パスを他ユーザーが辿れる場合にも、新規 DB の本文を他ユーザーが読めないことを確認する。既存 DB の権限変更はこのタスクに含めない（`S01-002`）。
-
-- [x] repository 解決を Git 環境変数から隔離する
-
-  `internal/core/repo_path.go` の subprocess が呼び出し元の `GIT_DIR`・`GIT_WORK_TREE` 等を継承し、ログの cwd と無関係な root を `repo_path` として保存する問題を防ぐ。別 repository を指す環境下で Claude Code・Codex を取り込み、cwd に基づく正しい保存値・projects 集約・project filter を確認する（`I05-001`）。
-
-- [x] セッション別のメッセージ取得で全履歴の再走査を減らす
-
-  対象セッション数だけ `messages` 全体を繰り返し走査する問題を解消する。`internal/core/db_messages_summary.go` の `GetMessages` / `GetTurnMessages` と schema の接続を見直し、新規・既存 DB で query plan、複数セッションの `search` / `show` の処理時間、同時刻の rowid 順・turn 採番を確認する。合成10万メッセージ・100セッションの summary 表示では約0.95秒、比較用索引ありでは約0.15秒だった。本文検索の LIKE 全走査は変更しない（`S01-001`）。
-
-- [x] 不正 timestamp による sessions TSV の破損を防ぐ
-
-  `cmd/somniloq/sessions.go` の時刻欄は `formatLocalTime` が返す不正値の生文字列をそのまま出力する。タブ・改行を含む保存値でも8列・1セッション1行を維持し、JSON の生値と時刻フィルタの既存契約を保つことを検証する（`C03-001`）。
-
-- [x] RFC3339 時刻引数の不正な offset を拒否する
-
-  `internal/core/duration.go` の `ParseTimeRef` は `+09:60` を `+10:00` 相当、`+24:00` も有効値として扱う。`--since` / `--until` / `--imported-since` で不正 offset をエラーにし、正しい `Z`・数値 offset、相対時刻・ローカル日時の解釈を維持することを確認する（`I06-001`）。
-
-- [x] Markdown CI を診断結果の問題で失敗させる
-
-  `.github/workflows/ci.yml` は `mdhop diagnose` の終了コードだけを使うが、固定された mdhop v0.16.1 は phantom・壊れた anchor があっても JSON 出力成功時に exit 0 を返す。正常な vault は成功し、`basename_conflicts`・`asset_basename_conflicts`・`phantoms`・`anchors` の対象問題があれば job が失敗することを一時 vault で検証する（`O01-001`）。
-
-- [x] search の案内を受理される引数順に揃える
-
-  `docs/rules/scope.md` の synopsis は query の後に flag を示すが、`somniloq search auth --since 7d` は `too many arguments` で失敗する。CLI help・README 両言語・正本の案内を照合し、掲載した期間 filter 付きの構文をそのまま実行できることを確認する（`O01-003`）。
-
 ### セッションのまとまりを軸にした検索・閲覧の再設計
 
 対象版は未定。過去の作業を単語から見つけることと、指定日の Daily Note に使う原文を取り出すことを先に成立させる。以下は未着手の変更タスクであり、現行仕様を置き換えた記述ではない。
@@ -98,9 +48,9 @@
 
   独立した `sessions` を `search` の一覧へ統合し、横断検索の抜粋は対象セッション指定後に見る形へ変更する。期間だけで複数全文を直接出す入口は、`search` で参照名を選び `show` に複数渡す形へ移す。一括取得能力を保ちながら、変更する CLI・JSON の利用者向け案内、`docs/rules/scope.md`・該当 `docs/specs/`・README 両言語・skill を同期し、既存利用側の移行手順を示す。
 
-- [ ] 既存の版・backfill タスクとの関係を決める
+- [ ] 次期版と旧 DB の扱いを決める
 
-  この追記だけで既存の v0.13.0 項目や backfill 関連項目を撤回・完了扱いにしない。新しい出力と保存形式に合わせ、0.x での再リリースを含めて対象版と旧データの扱いを決め、必要なタスクの重複・順序を整理する。
+  v0.13.0 で専用 `backfill` は廃止済み。新しい出力と保存形式に合わせ、0.x での再リリースを含めて対象版と旧データの扱いを決め、必要なタスクの重複・順序を整理する。
 
 - [ ] 二つの利用場面と境界条件を fixture で検証する
 

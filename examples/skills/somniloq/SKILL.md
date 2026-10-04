@@ -56,7 +56,6 @@ somniloq search --help
 somniloq outline --help
 somniloq show --help
 somniloq projects --help
-somniloq backfill --help
 ```
 
 `outline -> show --turn`、`search -> outline -> show --turn` などの横断的な使い方も各 command help にあります。

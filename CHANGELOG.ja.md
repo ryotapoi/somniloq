@@ -2,6 +2,25 @@
 
 [English](CHANGELOG.md) | 日本語
 
+## v0.13.0 — 2026-10-04
+
+### 変更
+
+- `outline` と `show --summary` の user message 表示除外を、trim した本文全文に適用する任意の `excludeUserMessagePatterns` 設定へ統一した。繰り返し指定する `--exclude-user-message-pattern` はその呼び出しで設定値を置き換え、`--no-exclude-user-messages` は除外を一時的に無効化する。`outline` は除外後も元の turn 番号を保ち、summary は除外後の先頭 N 件を選ぶ。
+- `show --summary` は `/clear` と command caveat を既定では除外しなくなり、`--include-clear` を廃止した。旧 `commandPatterns` 設定は自動移行せず、`sessions` の非コマンド user turn 件数と先頭行のヒントも廃止した。TSV は `source` を最後に置く 8 列となり、JSON から `nonCommandUserTurnCount` と `firstNonCommandUserLine` を削除した。
+- `backfill` コマンドと旧 DB 専用の移行・補正コードを廃止した。一般的な schema 管理は続けるが、v0.3 形式の DB から現在の source 付き schema への移行成功は保証しない。
+- source と session ID によるメッセージ索引を追加し、複数セッションの本文取得で全メッセージを繰り返し走査する負荷を減らした。既存 DB を開く際にも索引を作る。
+
+### 修正
+
+- 差分 import と全件 import が並行したとき、古い取り込み位置によって保存済み本文が欠落したまま成功扱いになる問題を防いだ。
+- 新規 DB ファイルと新規作成する親ディレクトリを所有者限定の権限にした。既存のファイル・ディレクトリの権限は変更しない。
+- Claude Code・Codex の repository 判定で親プロセスの `GIT_*` 環境変数を無視し、別 repository の Git 設定による project の誤認を防いだ。保存済み path は自動更新しない。
+- `sessions` TSV の保存済み不正 timestamp にタブ・改行があっても、1 セッション 1 行・8 列を保つようにした。JSON は元の文字列を維持する。
+- 時刻 filter が RFC3339 の数値 offset で 24 時以上、または分が 60 以上の値を拒否するようにした。
+- Markdown の link 診断が basename の競合・存在しない参照先・壊れた anchor を報告したとき、診断コマンド自体が成功しても CI を失敗させるようにした。
+- search の文書で flag を検索語より前に置き、CLI が受理する構文に合わせた。
+
 ## v0.12.5 — 2026-10-02
 
 ### 変更

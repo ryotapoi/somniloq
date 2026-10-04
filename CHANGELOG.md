@@ -2,6 +2,25 @@
 
 English | [日本語](CHANGELOG.ja.md)
 
+## v0.13.0 — 2026-10-04
+
+### Changed
+
+- `outline` and `show --summary` now use the same optional `excludeUserMessagePatterns` configuration against each trimmed full user message. Repeated `--exclude-user-message-pattern` flags replace the configured list for one call; `--no-exclude-user-messages` disables exclusions for one call. Excluded outline entries retain the original turn numbering, and summary selects its first N messages after exclusions.
+- `show --summary` no longer skips `/clear` and command caveats by default; `--include-clear` has been removed. The former `commandPatterns` setting is not migrated, and `sessions` no longer emits non-command user-turn counts or first-line hints. Its TSV output has eight columns, with `source` last, and its JSON output omits `nonCommandUserTurnCount` and `firstNonCommandUserLine`.
+- The `backfill` command and dedicated legacy database migration and repair code have been removed. General schema management remains, but upgrading a v0.3 database to the current source-aware schema is not guaranteed.
+- Session message retrieval now uses an index on source and session ID, reducing repeated full-message scans when reading multiple sessions. The index is also created for existing databases when opened.
+
+### Fixed
+
+- Concurrent incremental and full imports now detect a changed import cursor before writing, instead of reporting success while leaving previously imported message bodies missing.
+- New database files and their newly created parent directories now have owner-only permissions. Existing files and directories retain their permissions.
+- Repository detection for imported Claude Code and Codex sessions now ignores inherited `GIT_*` overrides, so a Git environment for another repository does not assign the wrong project. Previously stored paths are not changed automatically.
+- `sessions` TSV now flattens tabs and line breaks in malformed stored timestamps, preserving one row and eight columns per session; JSON retains the original timestamp string.
+- Time filters now reject RFC3339 numeric offsets with hours of 24 or greater or minutes of 60 or greater.
+- Markdown CI now fails when link diagnostics report basename conflicts, missing targets, or broken anchors, even if the diagnostic command exits successfully.
+- Search documentation now places flags before the query, matching the accepted CLI syntax.
+
 ## v0.12.5 — 2026-10-02
 
 ### Changed
