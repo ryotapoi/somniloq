@@ -43,8 +43,17 @@ func TestRootBodyNumbersContinueAcrossAppend(t *testing.T) {
 			must(t, err)
 			rows, err := db.GetMessages(inputID, tc.source, tc.sessionID)
 			must(t, err)
-			if len(rows) != 2 || rows[0].Content != "first" || rows[0].Number != 1 || rows[1].Content != "second" || rows[1].Number != 2 {
+			want := []string{"first", "second"}
+			if tc.source == SourceClaudeCode {
+				want = []string{"first", "sidechain", "second"}
+			}
+			if len(rows) != len(want) {
 				t.Fatalf("body numbers after append = %+v", rows)
+			}
+			for i, text := range want {
+				if rows[i].Content != text || rows[i].Number != i+1 {
+					t.Fatalf("body numbers after append = %+v", rows)
+				}
 			}
 		})
 	}

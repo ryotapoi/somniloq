@@ -478,13 +478,13 @@ func TestImport_FileShrink(t *testing.T) {
 		t.Errorf("shrunk file should be re-imported, got imported=%d", res.FilesImported)
 	}
 
-	// Should have 3 messages total (2 old + 1 new, old not deleted)
+	// A shortened physical file replaces its previous canonical text.
 	var count int
 	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages").Scan(&count); err != nil {
 		t.Fatalf("COUNT failed: %v", err)
 	}
-	if count != 3 {
-		t.Errorf("expected 3 messages (orphans retained), got %d", count)
+	if count != 1 {
+		t.Errorf("expected 1 message (canonical snapshot replaced), got %d", count)
 	}
 
 	state, err := db.GetImportState(testOnlyInput(t, db), path)
@@ -653,7 +653,7 @@ func TestScanJSONLFiles_UnreadableProjectDirIsNonFatal(t *testing.T) {
 	}
 }
 
-func TestImport_ScanErrorsAreNonFatal(t *testing.T) {
+func TestImport_IncompleteClaudeInputAllowsOtherInputs(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("permission checks do not apply to root")
 	}
@@ -671,7 +671,10 @@ func TestImport_ScanErrorsAreNonFatal(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(projBad, 0o755) })
 
-	result, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: projectsDir}, {Source: SourceCodex, Root: filepath.Join(projectsDir, "no-codex-sessions")}}, Source: ImportSourceAll})
+	otherRoot := testTempDir(t)
+	must(t, os.MkdirAll(filepath.Join(otherRoot, "project"), 0755))
+	must(t, os.WriteFile(filepath.Join(otherRoot, "project", "s1.jsonl"), []byte(jsonl), 0644))
+	result, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: projectsDir}, {Source: SourceClaudeCode, Root: otherRoot}, {Source: SourceCodex, Root: filepath.Join(projectsDir, "no-codex-sessions")}}, Source: ImportSourceAll})
 	if err != nil {
 		t.Fatalf("Import failed: %v", err)
 	}

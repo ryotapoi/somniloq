@@ -157,12 +157,12 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 		var messages []core.MessageRow
 		if *flags.summary >= 1 {
-			messages, err = db.GetMessages(session.InputID, session.Source, session.SessionID)
+			messages, err = db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
 			if err == nil {
 				messages = filterSummaryMessages(messages, *flags.summary, matcher)
 			}
 		} else {
-			messages, err = db.GetMessages(session.InputID, session.Source, session.SessionID)
+			messages, err = db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
 			if err == nil && turnFiltered {
 				// Turn filtering must run on the full GetMessages output so the
 				// numbers match outline (see assignTurns).

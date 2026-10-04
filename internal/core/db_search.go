@@ -11,6 +11,7 @@ type SearchRow struct {
 	REF       string
 	Source    Source
 	UUID      string
+	Identity  string
 	SessionID string
 	RepoPath  string
 	Timestamp string
@@ -32,12 +33,12 @@ type SearchPagination struct {
 // the DESC order.
 func (d *DB) SearchMessages(filter SessionFilter, query string, pagination SearchPagination) ([]SearchRow, error) {
 	q := `
-		SELECT m.input_id, i.input_key, m.source, m.uuid, m.session_id, COALESCE(s.repo_path, ''), m.timestamp, m.content
+		SELECT m.input_id, i.input_key, m.source, m.uuid, m.session_id, m.identity, COALESCE(s.repo_path, ''), m.timestamp, m.content
 		FROM messages m
 		JOIN inputs i ON m.input_id=i.id
- JOIN sessions s ON m.input_id=s.input_id AND m.source = s.source AND m.session_id = s.session_id
+ JOIN sessions s ON m.input_id=s.input_id AND m.source = s.source AND m.identity = s.identity
 		WHERE m.membership = 'body'
-		  AND (m.source = 'codex' OR m.is_sidechain = 0)
+		  AND (m.source IN ('codex','claude_code') OR m.is_sidechain = 0)
 		  AND m.content LIKE '%' || ? || '%' ESCAPE '\'`
 	args := []any{escapeLikeLiteral(query)}
 	conditions, filterArgs := sessionFilterConditions(filter, messageTimestampColumn)
@@ -65,11 +66,11 @@ func (d *DB) SearchMessages(filter SessionFilter, query string, pagination Searc
 	for rows.Next() {
 		var r SearchRow
 		var src, inputKey string
-		if err := rows.Scan(&r.InputID, &inputKey, &src, &r.UUID, &r.SessionID, &r.RepoPath, &r.Timestamp, &r.Content); err != nil {
+		if err := rows.Scan(&r.InputID, &inputKey, &src, &r.UUID, &r.SessionID, &r.Identity, &r.RepoPath, &r.Timestamp, &r.Content); err != nil {
 			return nil, fmt.Errorf("search messages: scan row: %w", err)
 		}
 		r.Source = Source(src)
-		r.REF = RootREF(inputKey, r.Source, r.SessionID)
+		r.REF = IdentityREF(inputKey, r.Source, r.Identity)
 		result = append(result, r)
 	}
 	if err := rows.Err(); err != nil {

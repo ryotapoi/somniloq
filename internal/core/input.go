@@ -1,7 +1,6 @@
 package core
 
 import (
-	"bytes"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -10,6 +9,8 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
 // Input identifies one source's canonical scan root. Name is display-only.
@@ -76,23 +77,22 @@ func CanonicalPath(path, base string) (string, error) {
 	return filepath.Clean(parent), nil
 }
 
-func rootIdentity(sessionID string) string {
-	var b bytes.Buffer
-	enc := json.NewEncoder(&b)
-	enc.SetEscapeHTML(false)
-	_ = enc.Encode([]string{sessionID})
-	return strings.TrimSuffix(b.String(), "\n")
-}
+func rootIdentity(sessionID string) string { return ingest.Identity(sessionID) }
 
 func RootREF(inputKey string, source Source, sessionID string) string {
-	return "slq1:" + inputKey + ":" + string(source) + ":" + base64.RawURLEncoding.EncodeToString([]byte(rootIdentity(sessionID)))
+	return IdentityREF(inputKey, source, rootIdentity(sessionID))
+}
+
+// IdentityREF identifies a single source conversation in one input.
+func IdentityREF(inputKey string, source Source, identity string) string {
+	return "slq1:" + inputKey + ":" + string(source) + ":" + base64.RawURLEncoding.EncodeToString([]byte(identity))
 }
 
 type REFError struct{}
 
 func (*REFError) Error() string { return "invalid REF: expected slq1 full reference" }
 
-func parseRootREF(ref string) (key string, source Source, sessionID string, err error) {
+func parseREF(ref string) (key string, source Source, sessionID string, err error) {
 	invalid := func() (string, Source, string, error) {
 		return "", "", "", &REFError{}
 	}
@@ -113,13 +113,13 @@ func parseRootREF(ref string) (key string, source Source, sessionID string, err 
 		return invalid()
 	}
 	var identity []string
-	if json.Unmarshal(data, &identity) != nil || len(identity) != 1 || identity[0] == "" {
+	if json.Unmarshal(data, &identity) != nil || (len(identity) != 1 && !(source == SourceClaudeCode && len(identity) == 2)) || identity[0] == "" || (len(identity) == 2 && identity[1] == "") {
 		return invalid()
 	}
-	if RootREF(parts[1], source, identity[0]) != ref {
+	if IdentityREF(parts[1], source, ingest.Identity(identity...)) != ref {
 		return invalid()
 	}
-	return parts[1], source, identity[0], nil
+	return parts[1], source, ingest.Identity(identity...), nil
 }
 
 func (d *DB) EnsureInput(input Input) (int64, error) {
@@ -134,4 +134,17 @@ func (d *DB) EnsureInput(input Input) (int64, error) {
 	var id int64
 	err = d.db.QueryRow(`SELECT id FROM inputs WHERE input_key=?`, key).Scan(&id)
 	return id, err
+}
+
+func parseRootREF(ref string) (string, Source, string, error) {
+	key, source, identity, err := parseREF(ref)
+	if err != nil {
+		return "", "", "", err
+	}
+	var parts []string
+	_ = json.Unmarshal([]byte(identity), &parts)
+	if len(parts) != 1 {
+		return "", "", "", &REFError{}
+	}
+	return key, source, parts[0], nil
 }

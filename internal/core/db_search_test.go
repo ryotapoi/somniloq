@@ -20,18 +20,18 @@ func newSearchTestDB(t *testing.T) *DB {
 	return db
 }
 
-func TestSearchMessages_MatchesNewestFirstExcludingSidechain(t *testing.T) {
+func TestSearchMessages_MatchesNewestFirstIncludingOwnerSidechain(t *testing.T) {
 	db := newSearchTestDB(t)
 
 	rows, err := db.SearchMessages(SessionFilter{}, "auth", SearchPagination{})
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
-	if len(rows) != 3 {
-		t.Fatalf("rows = %d, want 3 (sidechain excluded): %+v", len(rows), rows)
+	if len(rows) != 4 {
+		t.Fatalf("rows = %d, want 4 (owner sidechain included): %+v", len(rows), rows)
 	}
 	// Newest first; "AUTH" matches because LIKE is ASCII case-insensitive.
-	wantContents := []string{"auth on another day", "the AUTH module looks fine", "fix the auth bug"}
+	wantContents := []string{"auth on another day", "auth in a sidechain", "the AUTH module looks fine", "fix the auth bug"}
 	for i, want := range wantContents {
 		if rows[i].Content != want {
 			t.Errorf("rows[%d].Content = %q, want %q", i, rows[i].Content, want)
@@ -95,8 +95,8 @@ func TestSearchMessages_TimeFilterUsesMessageTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
-	if len(rows) != 2 {
-		t.Fatalf("rows = %+v, want the two 03-28 messages", rows)
+	if len(rows) != 3 {
+		t.Fatalf("rows = %+v, want the three 03-28 messages", rows)
 	}
 }
 
@@ -140,8 +140,8 @@ func TestSearchMessages_MultipleProjectsMatchAny(t *testing.T) {
 	if err != nil {
 		t.Fatalf("SearchMessages: %v", err)
 	}
-	if len(rows) != 3 {
-		t.Fatalf("rows = %d, want 3 (both projects, sidechain excluded): %+v", len(rows), rows)
+	if len(rows) != 4 {
+		t.Fatalf("rows = %d, want 4 (both projects, owner sidechain included): %+v", len(rows), rows)
 	}
 }
 

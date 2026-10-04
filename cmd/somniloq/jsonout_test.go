@@ -58,7 +58,7 @@ func TestSessionsCmd_FormatJSON(t *testing.T) {
 		"endedAt":      "2026-03-28T16:00:00Z",
 		"logicalDay":   "2026-03-28",
 		"messageCount": float64(5),
-		"bodySize":     float64(86),
+		"bodySize":     float64(102),
 	}
 	for k, v := range want {
 		if got[0][k] != v {
@@ -107,8 +107,8 @@ func TestOutlineCmd_FormatJSON(t *testing.T) {
 	}
 
 	got := decodeJSONArray(t, out.Bytes())
-	if len(got) != 2 {
-		t.Fatalf("entries = %d, want 2: %v", len(got), got)
+	if len(got) != 3 {
+		t.Fatalf("entries = %d, want 3: %v", len(got), got)
 	}
 	if got[0]["turn"] != float64(1) || got[0]["bodySize"] != float64(36) || got[0]["firstLine"] != "first question" {
 		t.Errorf("entry 0 = %v", got[0])
@@ -118,8 +118,8 @@ func TestOutlineCmd_FormatJSON(t *testing.T) {
 		t.Errorf("timestamp = %#v, want RFC3339 UTC", got[0]["timestamp"])
 	}
 	// Tabs survive: JSON escapes natively, no TSV sanitizing.
-	if got[1]["firstLine"] != "second\tquestion after blank lines" {
-		t.Errorf("entry 1 firstLine = %#v", got[1]["firstLine"])
+	if got[2]["firstLine"] != "second\tquestion after blank lines" {
+		t.Errorf("entry 1 firstLine = %#v", got[2]["firstLine"])
 	}
 	if len(got[0]) != 4 {
 		t.Errorf("fields = %d, want 4: %v", len(got[0]), got[0])
@@ -161,8 +161,8 @@ func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 	if !ok {
 		t.Fatalf("messages is %T, want array", got[0]["messages"])
 	}
-	if len(msgs) != 3 {
-		t.Fatalf("messages = %d, want 3 (sidechain excluded)", len(msgs))
+	if len(msgs) != 4 {
+		t.Fatalf("messages = %d, want 4 (owner sidechain included)", len(msgs))
 	}
 	first := msgs[0].(map[string]any)
 	if first["role"] != "user" || first["content"] != "first question\nwith detail" || first["timestamp"] != "2026-03-28T15:00:00Z" {
@@ -181,9 +181,6 @@ func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 				t.Errorf("message missing %q: %v", key, message)
 			}
 		}
-		if message["content"] == "sidechain prompt" {
-			t.Error("sidechain message leaked into JSON output")
-		}
 	}
 }
 
@@ -194,7 +191,7 @@ func TestShowCmd_FormatJSON_TurnFilter(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "--turn", "2", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--format", "json", "--turn", "3", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -208,7 +205,7 @@ func TestShowCmd_FormatJSON_TurnFilter(t *testing.T) {
 	}
 	msgs := got[0]["messages"].([]any)
 	if len(msgs) != 1 {
-		t.Fatalf("messages = %d, want 1 (turn 2 only)", len(msgs))
+		t.Fatalf("messages = %d, want 1 (turn 3 only)", len(msgs))
 	}
 	if c := msgs[0].(map[string]any)["content"]; c != "\n\nsecond\tquestion after blank lines" {
 		t.Errorf("content = %#v", c)
@@ -250,7 +247,7 @@ func TestSearchCmd_FormatJSON(t *testing.T) {
 	want := map[string]any{
 		"source":    "claude_code",
 		"sessionId": "sess-1", "ref": fixtureREF(core.SourceClaudeCode, "sess-1"),
-		"turn":      float64(2),
+		"turn":      float64(3),
 		"timestamp": "2026-03-28T15:03:00Z",
 		"project":   "/Users/test/proj",
 		"snippet":   "second\tquestion after blank lines",

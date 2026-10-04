@@ -41,9 +41,9 @@ somniloq show --config default --turn 12..18 <REF> # 必要なターンを読む
 
 Codex の取り込みは rollout の本人会話と継承文脈を区別する。最初の有効な session metadata で本人を固定し、明示された直接親 ID は親が後着しても保持する。text block、元 path・物理行、元の発言日時（未知を含む）、1 始まりの発言番号を保存する。同じ本人の複数 rollout は相対 path・物理行順に並べ、前方の内容が変われば差分取り込みでも順序を再構築する。子本人の完全 REF を指定すればその会話を読める。現行 `show`、`outline`、`search` のフラグと出力形式は従来のまま。
 
-新 DB は schema revision 1。通常コマンドは旧形式・非対応 DB を変更せず拒否する。専用 `migrate` は後続実装。read コマンドは未存在 DB を作成せず拒否する。
+新 DB は schema revision 1。通常コマンドは旧形式・非対応 DB（以前の root-only revision 1 shape を含む）を変更せず拒否する。元ログから新 DB に取り込み直す。専用 `migrate` は後続実装。read コマンドは未存在 DB を作成せず拒否する。
 
-フラグ・出力形式は `somniloq <command> --help` を参照。`sessions`、`projects`、`search`、`outline` は `--format json` に対応し、`show` は Markdown または JSON で出力する。JSON は引き続き配列、search は literal substring 検索。Claude Code の子孫取り込み・まとまり検索・子孫選択・新しい原文取得の show は後続実装。
+フラグ・出力形式は `somniloq <command> --help` を参照。`sessions`、`projects`、`search`、`outline` は `--format json` に対応し、`show` は Markdown または JSON で出力する。JSON は引き続き配列、search は literal substring 検索。Claude Code の子・孫は root と sessionId を共有しても独立した本人 REF で取り込み・検索・閲覧でき、本人 sidechain の原文も保持する。直接親は同一物理ファイルの Agent/Task call と構造化結果を厳密に照合し、path の root 所属とは区別する。走査・読み取りが不完全な入力は前回保存の本文・関係・cursor を保持し、他入力の取り込みを続ける。まとまり検索・子孫選択・新しい原文取得の show は後続実装。
 
 ## 設定
 

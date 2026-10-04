@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
@@ -44,6 +45,19 @@ func (a Adapter) ScanFiles(projectsDir string) ([]string, []error) {
 		}
 		for _, se := range subEntries {
 			if se.IsDir() {
+				agents := filepath.Join(subPath, se.Name(), "subagents")
+				entries, err := os.ReadDir(agents)
+				if err != nil {
+					if !errors.Is(err, os.ErrNotExist) {
+						errs = append(errs, fmt.Errorf("scan %s: %w", agents, err))
+					}
+					continue
+				}
+				for _, e := range entries {
+					if !e.IsDir() && strings.HasPrefix(e.Name(), "agent-") && strings.HasSuffix(e.Name(), ".jsonl") {
+						files = append(files, filepath.Join(agents, e.Name()))
+					}
+				}
 				continue
 			}
 			name := se.Name()
@@ -53,6 +67,7 @@ func (a Adapter) ScanFiles(projectsDir string) ([]string, []error) {
 			files = append(files, filepath.Join(subPath, name))
 		}
 	}
+	sort.Strings(files)
 	return files, errs
 }
 
@@ -111,7 +126,7 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 			h.lineNumber++
 		}
 		rec, err := ParseRecord(bytes.TrimSpace(line))
-		if err != nil || (rec.Type != "user" && rec.Type != "assistant") || rec.IsSidechain {
+		if err != nil || (rec.Type != "user" && rec.Type != "assistant") {
 			return nil
 		}
 		normalized, err := NormalizeRecord(rec, "")
@@ -152,7 +167,7 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 		normalized.Message.OriginPath = h.path
 		normalized.Message.OriginLine = h.lineNumber
 		normalized.Message.Membership = "body"
-		if !rec.IsSidechain && strings.TrimSpace(normalized.Message.Content) != "" {
+		if strings.TrimSpace(normalized.Message.Content) != "" {
 			h.bodyNumbers[rec.SessionID]++
 			normalized.Message.Number = h.bodyNumbers[rec.SessionID]
 		}

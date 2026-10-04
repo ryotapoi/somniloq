@@ -50,7 +50,7 @@ func TestShowCmd_TurnRange(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--turn", "2", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--turn", "3", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}

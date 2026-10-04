@@ -22,6 +22,7 @@ CREATE TABLE sessions (
  identity TEXT NOT NULL,
  parent_session_id TEXT NOT NULL DEFAULT '',
  parent_identity TEXT NOT NULL DEFAULT '',
+ root_identity TEXT NOT NULL DEFAULT '',
  cwd TEXT,
  repo_path TEXT,
  git_branch TEXT,
@@ -31,7 +32,7 @@ CREATE TABLE sessions (
  started_at TEXT,
  ended_at TEXT,
  imported_at TEXT NOT NULL,
- PRIMARY KEY(input_id,source,session_id),
+ PRIMARY KEY(input_id,source,identity),
  UNIQUE(input_id,identity),
  FOREIGN KEY(input_id,source) REFERENCES inputs(id,source)
 );
@@ -40,6 +41,7 @@ CREATE TABLE messages (
  uuid TEXT NOT NULL,
  source TEXT NOT NULL CHECK(source <> ''),
  session_id TEXT NOT NULL,
+ identity TEXT NOT NULL,
  parent_uuid TEXT,
  role TEXT NOT NULL,
  content TEXT NOT NULL,
@@ -51,10 +53,10 @@ CREATE TABLE messages (
  origin_line INTEGER NOT NULL DEFAULT 0,
  membership TEXT NOT NULL DEFAULT 'body' CHECK(membership IN ('body','context','unresolved')),
  payload_id TEXT NOT NULL DEFAULT '',
- PRIMARY KEY(input_id,uuid),
- FOREIGN KEY(input_id,source,session_id) REFERENCES sessions(input_id,source,session_id)
+ PRIMARY KEY(input_id,identity,uuid),
+ FOREIGN KEY(input_id,source,identity) REFERENCES sessions(input_id,source,identity)
 );
-CREATE INDEX messages_session_idx ON messages(input_id,source,session_id);
+CREATE INDEX messages_session_idx ON messages(input_id,source,identity);
 CREATE TABLE import_state (
  input_id INTEGER NOT NULL,
  jsonl_path TEXT NOT NULL,

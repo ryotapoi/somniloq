@@ -61,7 +61,10 @@ func (d *DB) UpsertSession(inputID int64, meta SessionMeta, importedAt string) e
 }
 
 func upsertSession(e execer, inputID int64, meta SessionMeta, importedAt string) error {
-	identity := rootIdentity(meta.SessionID)
+	identity := meta.Identity
+	if identity == "" {
+		identity = rootIdentity(meta.SessionID)
+	}
 	parentIdentity := meta.ParentIdentity
 	if parentIdentity == "" && meta.ParentSessionID != "" {
 		parentIdentity = rootIdentity(meta.ParentSessionID)
@@ -87,9 +90,9 @@ func upsertSession(e execer, inputID int64, meta SessionMeta, importedAt string)
 	// custom_title and agent_name have source-specific update paths; excluding
 	// them here prevents ordinary message imports from overwriting that metadata.
 	_, err := e.Exec(`
-		INSERT INTO sessions (input_id, identity, source, session_id, parent_session_id, parent_identity, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
-		VALUES (?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
-		ON CONFLICT(input_id, source, session_id) DO UPDATE SET
+		INSERT INTO sessions (input_id, identity, source, session_id, parent_session_id, parent_identity, root_identity, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
+		ON CONFLICT(input_id, source, identity) DO UPDATE SET
 		  parent_session_id = CASE WHEN excluded.parent_session_id<>'' THEN excluded.parent_session_id ELSE sessions.parent_session_id END,
 		  parent_identity = CASE WHEN excluded.parent_identity<>'' THEN excluded.parent_identity ELSE sessions.parent_identity END,
 		  cwd = COALESCE(NULLIF(excluded.cwd, ''), sessions.cwd),
@@ -111,7 +114,7 @@ func upsertSession(e execer, inputID int64, meta SessionMeta, importedAt string)
 		    ELSE sessions.ended_at
 		  END,
 		  imported_at = excluded.imported_at`,
-		inputID, identity, string(meta.Source), meta.SessionID, meta.ParentSessionID, parentIdentity, meta.CWD, meta.RepoPath, meta.GitBranch,
+		inputID, identity, string(meta.Source), meta.SessionID, meta.ParentSessionID, parentIdentity, meta.RootIdentity, meta.CWD, meta.RepoPath, meta.GitBranch,
 		meta.Version, meta.StartedAt, meta.EndedAt, importedAt,
 	)
 	return err
@@ -122,6 +125,10 @@ func (d *DB) InsertMessage(inputID int64, msg NormalizedMessage) error {
 }
 
 func insertMessage(e execer, inputID int64, msg NormalizedMessage) error {
+	identity := msg.Identity
+	if identity == "" {
+		identity = rootIdentity(msg.SessionID)
+	}
 	blocks := msg.Blocks
 	if blocks == nil {
 		blocks = []string{}
@@ -135,9 +142,9 @@ func insertMessage(e execer, inputID int64, msg NormalizedMessage) error {
 		membership = "body"
 	}
 	_, err = e.Exec(`
-		INSERT OR IGNORE INTO messages (input_id, uuid, source, session_id, parent_uuid, role, content, blocks_json, timestamp, is_sidechain, number, origin_path, origin_line, membership, payload_id)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		inputID, msg.UUID, string(msg.Source), msg.SessionID, msg.ParentUUID, msg.Role,
+		INSERT OR IGNORE INTO messages (input_id, uuid, source, session_id, identity, parent_uuid, role, content, blocks_json, timestamp, is_sidechain, number, origin_path, origin_line, membership, payload_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		inputID, msg.UUID, string(msg.Source), msg.SessionID, identity, msg.ParentUUID, msg.Role,
 		msg.Content, string(encodedBlocks), msg.Timestamp, msg.IsSidechain, msg.Number, msg.OriginPath, msg.OriginLine, membership, msg.PayloadID,
 	)
 	return err

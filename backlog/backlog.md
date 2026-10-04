@@ -32,7 +32,7 @@
 
   Codex adapter、共通正規化型、SQLite 保存を一緒に変更し、本人 identity・直接親・子孫の独立本文・発言順序と未知日時を保持する。[Codex の継承境界](v0.14.0-reference.md#調査で確認した実装上の条件)を `subagent_history_start_ordinal` のあるログだけに適用し、親 metadata で本人 identity を上書きしない。子先行・親後着、差分再開・再処理、別入力の同名 ID を fixture で確認する。他 source の root も新規 DB で保存・取得できる状態を完了とする。
 
-- [ ] Claude Code の子・孫ログを独立した会話として取り込む
+- [x] Claude Code の子・孫ログを独立した会話として取り込む
 
   subagents を走査し、root と session ID を共有する子も独立した会話として保存する。[調査で確認した](v0.14.0-reference.md#調査で確認した実装上の条件) Agent call・tool result・構造化 `agentId` の厳密な照合で分かる直接親と、path から分かる root 所属を区別する。未確定の直接親・取得できない文脈は補わず、本人の原文を保持する。兄弟・孫、親後着、差分・再処理、別入力の同名 ID を fixture で確認する。
 

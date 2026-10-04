@@ -22,7 +22,11 @@ func TestOpenDB_ReturnsErrorForUnopenablePath(t *testing.T) {
 }
 
 func TestOpenDB_RejectsUnsupportedWithoutMutation(t *testing.T) {
+	oldSchema, err := os.ReadFile("testdata/revision1-root-only.sql")
+	must(t, err)
+	previousShape := string(oldSchema)
 	for _, tc := range []struct{ name, sql string }{
+		{"previous_revision_one", previousShape},
 		{"legacy", `CREATE TABLE sessions(session_id TEXT PRIMARY KEY, project_dir TEXT, imported_at TEXT); INSERT INTO sessions VALUES('kept','project','before')`},
 		{"unknown", `CREATE TABLE unrelated(body TEXT); INSERT INTO unrelated VALUES('kept')`},
 		{"future", `PRAGMA user_version=2; CREATE TABLE future(body TEXT); INSERT INTO future VALUES('kept')`},

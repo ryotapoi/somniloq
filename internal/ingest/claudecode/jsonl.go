@@ -9,18 +9,20 @@ import (
 )
 
 type RawRecord struct {
-	Type        string          `json:"type"`
-	UUID        string          `json:"uuid"`
-	ParentUUID  *string         `json:"parentUuid"`
-	SessionID   string          `json:"sessionId"`
-	Timestamp   string          `json:"timestamp"`
-	CWD         string          `json:"cwd"`
-	GitBranch   string          `json:"gitBranch"`
-	Version     string          `json:"version"`
-	IsSidechain bool            `json:"isSidechain"`
-	Message     json.RawMessage `json:"message"`
-	CustomTitle string          `json:"customTitle"`
-	AgentName   string          `json:"agentName"`
+	Type          string          `json:"type"`
+	UUID          string          `json:"uuid"`
+	ParentUUID    *string         `json:"parentUuid"`
+	SessionID     string          `json:"sessionId"`
+	Timestamp     string          `json:"timestamp"`
+	CWD           string          `json:"cwd"`
+	GitBranch     string          `json:"gitBranch"`
+	Version       string          `json:"version"`
+	IsSidechain   bool            `json:"isSidechain"`
+	Message       json.RawMessage `json:"message"`
+	CustomTitle   string          `json:"customTitle"`
+	AgentID       string          `json:"agentId"`
+	ToolUseResult json.RawMessage `json:"toolUseResult"`
+	AgentName     string          `json:"agentName"`
 }
 
 type MessageEnvelope struct {
@@ -32,8 +34,11 @@ type MessageEnvelope struct {
 // Claude Code ExtractText accepts only text blocks; the source-specific sets
 // must not be unified (ADR 0005).
 type ContentBlock struct {
-	Type string `json:"type"`
-	Text string `json:"text"`
+	Type      string `json:"type"`
+	Text      string `json:"text"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ToolUseID string `json:"tool_use_id"`
 }
 
 func ParseRecord(line []byte) (*RawRecord, error) {

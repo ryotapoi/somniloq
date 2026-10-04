@@ -32,7 +32,7 @@ func TestSessionsCmd_OutputColumns(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
 	}
 
-	want := fixtureREF(core.SourceClaudeCode, "sess-1") + "\t2026-03-28 15:00 ~ 2026-03-28 16:00\t2026-03-28\t/Users/test/proj\tTitle with line\t5\t86\tclaude_code\n"
+	want := fixtureREF(core.SourceClaudeCode, "sess-1") + "\t2026-03-28 15:00 ~ 2026-03-28 16:00\t2026-03-28\t/Users/test/proj\tTitle with line\t5\t102\tclaude_code\n"
 	if got := out.String(); got != want {
 		t.Errorf("TSV = %q, want %q", got, want)
 	}

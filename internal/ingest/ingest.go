@@ -1,5 +1,11 @@
 package ingest
 
+import (
+	"bytes"
+	"encoding/json"
+	"strings"
+)
+
 // Source identifies the origin of normalized session log records.
 type Source string
 
@@ -21,6 +27,7 @@ type ImportState struct {
 
 // NormalizedMessage is a source-independent message row ready for persistence.
 type NormalizedMessage struct {
+	Identity    string
 	UUID        string
 	Source      Source
 	ParentUUID  *string
@@ -40,6 +47,8 @@ type NormalizedMessage struct {
 // SessionMeta is a source-independent session row ready for persistence.
 type SessionMeta struct {
 	Source          Source
+	Identity        string
+	RootIdentity    string
 	SessionID       string
 	ParentSessionID string
 	ParentIdentity  string
@@ -91,4 +100,13 @@ type Adapter interface {
 	// the source is unused and yields no files and no errors.
 	ScanFiles(rootDir string) (files []string, errs []error)
 	ProcessFile(newTransaction NewImportTransaction, path string, offset, fileSize int64, importedAt string) (ProcessResult, error)
+}
+
+// Identity encodes the source identity without HTML escaping or whitespace.
+func Identity(parts ...string) string {
+	var b bytes.Buffer
+	enc := json.NewEncoder(&b)
+	enc.SetEscapeHTML(false)
+	_ = enc.Encode(parts)
+	return strings.TrimSuffix(b.String(), "\n")
 }

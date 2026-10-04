@@ -195,14 +195,14 @@ func TestImportConcurrentFull(t *testing.T) {
 			assertBodies()
 			r, err = Import(db, opts)
 			must(t, err)
-			t.Logf("next incremental: %+v", r)
+			t.Logf("next incremental canonicalizes the test wrapper cursor: %+v", r)
 			assertBodies()
 			if deltaResult.Failed != 1 || deltaResult.Imported != 0 || len(deltaResult.Errors) != 1 {
 				t.Errorf("stale delta must report failure: %+v", deltaResult)
 			} else if phase == "before" && !strings.Contains(deltaResult.Errors[0], "import state changed") {
 				t.Errorf("unexpected stale-state error: %v", deltaResult.Errors)
 			}
-			if fullResult.Imported != 1 || fullResult.Failed != 0 || len(fullResult.Errors) != 0 || r.FilesSkipped != 1 || len(r.Errors) != 0 {
+			if fullResult.Imported != 1 || fullResult.Failed != 0 || len(fullResult.Errors) != 0 || r.FilesImported != 1 || len(r.Errors) != 0 {
 				t.Errorf("full / next import: %+v / %+v", fullResult, r)
 			}
 		})

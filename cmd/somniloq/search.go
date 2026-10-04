@@ -26,7 +26,7 @@ JSON fields:
 
 Notes:
   Search scans own message bodies using SQLite LIKE; Codex inheritance context and unresolved records are excluded.
-  Codex body sidechain records are included; other sources keep their existing sidechain filter.
+  Claude Code and Codex body sidechain records are included.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   LIKE is ASCII-case-insensitive; query text, including %, _, and \, is literal.
   --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
@@ -103,7 +103,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	turnCache := map[searchSessionKey]map[string]int{}
 	entries := make([]searchJSON, 0, len(rows))
 	for _, r := range rows {
-		turns, err := searchTurnsByUUID(db, turnCache, r.InputID, r.Source, r.SessionID)
+		turns, err := searchTurnsByUUID(db, turnCache, r.InputID, r.Source, r.Identity)
 		if err != nil {
 			return 1, err
 		}
@@ -172,7 +172,7 @@ func searchTurnsByUUID(db *core.DB, cache map[searchSessionKey]map[string]int, i
 	if turns, ok := cache[key]; ok {
 		return turns, nil
 	}
-	messages, err := db.GetTurnMessages(inputID, source, sessionID)
+	messages, err := db.GetIdentityTurnMessages(inputID, source, sessionID)
 	if err != nil {
 		return nil, err
 	}

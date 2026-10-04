@@ -85,7 +85,7 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), cfg config, out,
 		return code, err
 	}
 
-	messages, err := db.GetMessages(session.InputID, session.Source, session.SessionID)
+	messages, err := db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
 	if err != nil {
 		return 1, err
 	}

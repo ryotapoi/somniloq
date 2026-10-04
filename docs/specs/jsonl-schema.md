@@ -2,7 +2,7 @@
 
 Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造。
 
-この文書の取り込み・保存記述は現行実装の契約。Codex の本人／継承・原文日時は実装済みで、Claude Code の子孫は後続実装。[元ログ調査](v0.14.0-log-evidence.md) と合成 fixture は観測根拠であり、観測追記だけで現行 parser の対応を意味しない。
+この文書の取り込み・保存記述は現行実装の契約。Codex の本人／継承・原文日時と Claude Code の子・孫の独立取り込み・直接親と root 所属の保存は実装済み。[元ログ調査](v0.14.0-log-evidence.md) と合成 fixture は観測根拠であり、観測追記だけで現行 parser の対応を意味しない。
 
 ## source 値
 
@@ -25,9 +25,11 @@ Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造
 - project-dir: プロジェクトパスを `-` 区切りでエンコードしたもの（例: `-Users-ryota-Sources-ryotapoi-Brimday`）
 - session-id: UUID v4（例: `a8171355-f84f-48e5-b27c-9e15c00da934`）
 
-### 子孫ファイルの観測（v0.14.0 調査）
+### 子孫ファイルの取り込み
 
 root JSONL と同じ project 配下の `<root-session-id>/subagents/agent-<agent-id>.jsonl` に子と孫が保存される。子本人は path の root session ID と agent ID の組で識別する。root 所属は直接親を意味しない。同一物理親ファイルの Agent/Task `tool_use.id` と `tool_result.tool_use_id`、同 record の `toolUseResult.agentId` と子の agent ID の厳密な一致を直接親の根拠にする。prompt の一致だけでは解決しない。`fork-context-ref` は未取得 context の参照であり、参照先本文を仮造しない。観測件数と未確定例は [調査根拠](v0.14.0-log-evidence.md#観測根拠) を参照する。
+
+本文は sidechain も含め本人ごとに物理順で保存し、最初の prompt を削らない。空白-only と tool-only は本文番号を消費しない。text block の空白・境界・元 timestamp は保持する。会話 record の agentId が path の agent ID と一致しない行は unparsed とする。同一親の重複根拠は許容し、複数親候補・循環は診断して未確定にする。全物理ファイルの非本文材料を毎回照合するため、親後着・子後着・call/result の追記分割でも再判定する。変更した本人の本文・関係・cursor は同じ保存 transaction に置き、未変更本文の取り込み時刻は更新しない。通常／full とも、入力の走査・ファイル読み取りが不完全な場合はその入力を置換せず、前回正常保存の本文・関係・cursor を保持する。他入力の取り込みは続行する。
 
 ### レコード構造
 

@@ -129,7 +129,9 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 	if opts.Full {
 		ids := make([]int64, 0, len(selected))
 		for _, item := range selected {
-			if item.input.Source != SourceCodex {
+			_, codexSnapshot := item.adapter.(codex.Adapter)
+			_, claudeSnapshot := item.adapter.(claudecode.Adapter)
+			if !codexSnapshot && !claudeSnapshot {
 				ids = append(ids, item.id)
 			}
 		}
@@ -143,6 +145,8 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 		var err error
 		if a, ok := item.adapter.(codex.Adapter); ok {
 			r, err = importCodexGroups(db, item.id, item.input.Root, a, importedAt, opts.Full)
+		} else if a, ok := item.adapter.(claudecode.Adapter); ok {
+			r, err = importClaudeSnapshots(db, item.id, item.input.Root, a, importedAt, opts.Full)
 		} else {
 			r, err = importWithAdapter(db, item.id, item.input.Root, item.adapter, importedAt)
 		}
@@ -202,6 +206,9 @@ func (r *ImportResult) addUnparsedDiagnostics(diagnostics []error) {
 func importWithAdapter(db *DB, inputID int64, rootDir string, adapter ingest.Adapter, importedAt string) (*ImportResult, error) {
 	if a, ok := adapter.(codex.Adapter); ok {
 		return importCodexGroups(db, inputID, rootDir, a, importedAt, false)
+	}
+	if a, ok := adapter.(claudecode.Adapter); ok {
+		return importClaudeSnapshots(db, inputID, rootDir, a, importedAt, false)
 	}
 	files, scanErrs := adapter.ScanFiles(rootDir)
 

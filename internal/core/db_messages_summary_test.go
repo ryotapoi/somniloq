@@ -40,7 +40,7 @@ func TestMessagesWithoutNumberUseRowidAndPreserveRawTimestamp(t *testing.T) {
 
 }
 
-func TestGetMessages_ExcludesSidechain(t *testing.T) {
+func TestGetMessages_IncludesOwnerSidechain(t *testing.T) {
 	db := testDB(t)
 
 	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
@@ -52,11 +52,11 @@ func TestGetMessages_ExcludesSidechain(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMessages failed: %v", err)
 	}
-	if len(msgs) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(msgs))
+	if len(msgs) != 3 {
+		t.Fatalf("expected 3 messages, got %d", len(msgs))
 	}
-	if msgs[0].UUID != "m1" || msgs[1].UUID != "m3" {
-		t.Errorf("expected m1 and m3 (sidechain m2 excluded), got %s and %s", msgs[0].UUID, msgs[1].UUID)
+	if msgs[0].UUID != "m1" || msgs[1].UUID != "m2" || msgs[2].UUID != "m3" {
+		t.Errorf("expected m1, m2 and m3 (owner sidechain included), got %s and %s", msgs[0].UUID, msgs[1].UUID)
 	}
 }
 
@@ -85,7 +85,7 @@ func TestGetTurnMessages_NumberingPopulationWithoutBodies(t *testing.T) {
 		source Source
 		want   []MessageRow
 	}{
-		{SourceClaudeCode, []MessageRow{{UUID: "latest", Role: "assistant"}, {UUID: "tie-user", Role: "user"}, {UUID: "tie-reply", Role: "assistant"}, {UUID: "unknown", Role: "assistant"}, {UUID: "invalid", Role: "user"}, {UUID: "earliest", Role: "user"}}},
+		{SourceClaudeCode, []MessageRow{{UUID: "latest", Role: "assistant"}, {UUID: "tie-user", Role: "user"}, {UUID: "tie-reply", Role: "assistant"}, {UUID: "unknown", Role: "assistant"}, {UUID: "invalid", Role: "user"}, {UUID: "earliest", Role: "user"}, {UUID: "sidechain", Role: "user"}}},
 		{SourceCodex, []MessageRow{{UUID: "codex", Role: "user"}}},
 		{SourceCursorAgent, []MessageRow{{UUID: "cursor", Role: "assistant"}}},
 	} {

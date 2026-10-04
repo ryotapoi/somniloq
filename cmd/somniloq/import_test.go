@@ -297,8 +297,8 @@ func TestImportCmd_CursorAgentRootWiring(t *testing.T) {
 	}
 }
 
-// Pins the CLI contract for non-fatal scan failures: discovered files are
-// still imported, the error goes to stderr, and the exit code is 1.
+// Incomplete Claude snapshots preserve their input; errors remain non-fatal
+// to the command, appear on stderr, and produce exit code 1.
 func TestImportCmd_ScanErrorExitsNonZero(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("permission checks do not apply to root")
@@ -336,7 +336,7 @@ func TestImportCmd_ScanErrorExitsNonZero(t *testing.T) {
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (stderr: %q)", code, errOut.String())
 	}
-	want := "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)\n"
+	want := "Imported 0 files (1 scanned, 0 skipped, 1 failed, 0 unparsed lines)\n"
 	if out.String() != want {
 		t.Errorf("stdout = %q, want %q", out.String(), want)
 	}

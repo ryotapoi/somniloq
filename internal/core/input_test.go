@@ -51,3 +51,19 @@ func TestRootREF_StrictCanonicalIdentity(t *testing.T) {
 		}
 	}
 }
+
+func TestClaudeREFStrictChildIdentity(t *testing.T) {
+	key := InputKey(SourceClaudeCode, "/root")
+	identity := `["root<&>","child日本語"]`
+	ref := IdentityREF(key, SourceClaudeCode, identity)
+	gotKey, source, got, err := parseREF(ref)
+	must(t, err)
+	if gotKey != key || source != SourceClaudeCode || got != identity {
+		t.Fatalf("parse=%s %s %s", gotKey, source, got)
+	}
+	for _, invalid := range []string{`["root",""]`, `["root","child","grandchild"]`, `[ "root", "child" ]`} {
+		if _, _, _, err := parseREF(IdentityREF(key, SourceClaudeCode, invalid)); err == nil {
+			t.Fatalf("accepted %s", invalid)
+		}
+	}
+}
