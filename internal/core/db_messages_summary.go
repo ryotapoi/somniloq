@@ -43,7 +43,7 @@ func (d *DB) GetIdentityMessages(inputID int64, source Source, identity string) 
 		return result, nil
 	}
 	rows, err := d.execer().Query(`
-		SELECT uuid, role, content, timestamp, blocks_json, number, origin_path, origin_line, payload_id, '', 0
+		SELECT uuid, role, content, timestamp, blocks_json, number, origin_path, origin_line, payload_id, 'source_record', 0
 		FROM messages
 		WHERE input_id = ? AND source = ? AND identity = ?
 		  AND membership = 'body'
@@ -109,9 +109,6 @@ func scanMessages(rows *sql.Rows, operation string) ([]MessageRow, error) {
 		}
 		if err := json.Unmarshal([]byte(blocksJSON), &m.Blocks); err != nil {
 			return nil, fmt.Errorf("%s: decode blocks: %w", operation, err)
-		}
-		if len(m.Blocks) == 0 {
-			m.Blocks = nil
 		}
 		result = append(result, m)
 	}

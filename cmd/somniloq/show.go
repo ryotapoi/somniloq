@@ -5,24 +5,27 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"strings"
 	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const showUsageLine = "somniloq show --config default [--source <source>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>] <REF>\n" +
+const showUsageLine = "somniloq show --config default [--source <source>] [--descendants] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>] <REF>\n" +
 	"  somniloq show --config default [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>]"
 
 const showHelpDetails = `Output (markdown):
   One or more sessions. Each session has a title, Session, Source, Project, Started metadata, then message sections headed by role.
-  Multiple sessions in time-range mode are separated by ---.
+  Multiple conversations are separated by ---.
 
 JSON fields:
-  ref, source, sessionId, project, title, startedAt, endedAt, messages
-  messages fields: role, content, timestamp
+  Envelope: items, total, count, limit (null), offset (0), hasMore (false), nextOffset (null)
+  Each item: ref, messageNumber, role, timestamp, text, blocks, parentRef, rootRef, provenance
+  JSON preserves raw text, block boundaries and original message numbers.
 
 Notes:
   Flags must come before <REF>.
+  --descendants requires REF and includes only confirmed descendants in parent-first order.
   Codex messages follow canonical owner order; inheritance context and unresolved records are excluded.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   Unknown or invalid stored start times do not match time filters.
@@ -48,8 +51,15 @@ Examples:
 func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs, flags := newShowFlagSet()
 	setUsage(fs, "Show session content in Markdown", showUsageLine, showHelpDetails)
-	if code, ok := parseFlags(fs, errOut, args); !ok {
-		return code, nil
+	fs.SetOutput(errOut)
+	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			return 0, nil
+		}
+		if strings.Contains(err.Error(), "for -descendants:") {
+			return 2, nil
+		}
+		return 1, nil
 	}
 
 	if *flags.summary < 0 {
@@ -99,6 +109,10 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	}
 
 	sessionID := fs.Arg(0)
+
+	if flagWasProvided(fs, "descendants") && (sessionID == "" || *flags.since != "" || *flags.until != "") {
+		return 2, errors.New("--descendants requires REF and cannot be combined with --since/--until")
+	}
 	sourceSet := flagWasProvided(fs, "source")
 	var source *core.Source
 	if sourceSet {
@@ -126,71 +140,93 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	}
 	defer db.Close()
 
-	var sessions []core.SessionRow
-	if sessionID != "" {
-		session, code, err := resolveSessionREF(db, sessionID, source, errOut)
-		if code != 0 {
-			return code, err
-		}
-		sessions = []core.SessionRow{session}
-	} else {
-		filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, dayBoundary{})
-		if err != nil {
-			return 1, err
-		}
-		sessions, err = db.ListSessions(filter)
-		if err != nil {
-			return 1, err
-		}
+	type conversation struct {
+		session  core.SessionRow
+		messages []core.MessageRow
 	}
-
-	var entries []showSessionJSON
-	if *flags.format == "json" {
-		entries = make([]showSessionJSON, 0, len(sessions))
-	}
-	for i, session := range sessions {
-		if *flags.format == "markdown" && i > 0 {
-			if _, err := fmt.Fprint(out, "\n---\n\n"); err != nil {
-				return 1, err
+	conversations := []conversation{}
+	selectionCode := 1
+	err = db.ReadSnapshot(func(snapshot *core.DB) error {
+		var sessions []core.SessionRow
+		if sessionID != "" {
+			resolved, err := snapshot.ResolveSession(sessionID)
+			if err != nil {
+				var refError *core.REFError
+				if errors.As(err, &refError) {
+					selectionCode = 2
+				}
+				return err
 			}
-		}
-
-		var messages []core.MessageRow
-		if *flags.summary >= 1 {
-			messages, err = db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
-			if err == nil {
-				messages = filterSummaryMessages(messages, *flags.summary, matcher)
+			if resolved == nil || source != nil && resolved.Self.Source != *source {
+				selectionCode = 2
+				return fmt.Errorf("session not found: %s", sessionID)
+			}
+			for _, diagnostic := range resolved.Diagnostics {
+				fmt.Fprintln(errOut, diagnostic)
+			}
+			sessions = []core.SessionRow{resolved.Self}
+			if *flags.descendants {
+				sessions = resolved.Descendants
 			}
 		} else {
-			messages, err = db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
-			if err == nil && turnFiltered {
-				// Turn filtering must run on the full GetMessages output so the
-				// numbers match outline (see assignTurns).
+			filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, dayBoundary{})
+			if err != nil {
+				return err
+			}
+			sessions, err = snapshot.ListSessions(filter)
+			if err != nil {
+				return err
+			}
+			for i, session := range sessions {
+				resolved, err := snapshot.ResolveSession(session.REF)
+				if err != nil {
+					return err
+				}
+				sessions[i] = resolved.Self
+			}
+		}
+		for _, session := range sessions {
+			messages, err := snapshot.GetIdentityMessages(session.InputID, session.Source, session.Identity)
+			if err != nil {
+				return err
+			}
+			if *flags.summary >= 1 {
+				messages = filterSummaryMessages(messages, *flags.summary, matcher)
+			} else if turnFiltered {
 				if *flags.tail > 0 {
 					messages = filterLastTurns(messages, *flags.tail)
 				} else {
 					messages = filterTurns(messages, turnLo, turnHi)
 				}
 			}
+			conversations = append(conversations, conversation{session, messages})
 		}
-		if err != nil {
-			return 1, err
-		}
-
-		project := resolveProjectDisplayName(session.RepoPath, *flags.short, cfg)
-		if *flags.format == "json" {
-			entries = append(entries, newShowSessionJSON(session, project, messages))
-			continue
-		}
-		if err := formatSession(out, session, project, messages, time.Local); err != nil {
-			return 1, err
-		}
+		return nil
+	})
+	if err != nil {
+		return selectionCode, err
 	}
 	if *flags.format == "json" {
-		// Always an array, so consumers parse single-session and time-range
-		// output the same way.
-		if err := writeJSON(out, entries); err != nil {
+		items := []showMessageJSON{}
+		for _, c := range conversations {
+			for _, message := range c.messages {
+				items = append(items, newShowMessageJSON(c.session, message))
+			}
+		}
+		if err := writeJSON(out, showJSON{Items: items, Total: len(items), Count: len(items)}); err != nil {
 			return 1, err
+		}
+	} else {
+		for i, c := range conversations {
+			if i > 0 {
+				if _, err := fmt.Fprint(out, "\n---\n\n"); err != nil {
+					return 1, err
+				}
+			}
+			project := resolveProjectDisplayName(c.session.RepoPath, *flags.short, cfg)
+			if err := formatSession(out, c.session, project, c.messages, time.Local); err != nil {
+				return 1, err
+			}
 		}
 	}
 	return 0, nil
@@ -198,7 +234,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 type showFlags struct {
 	since, until, project, turnRange, format, source *string
-	short, noExclusions                              *bool
+	short, noExclusions, descendants                 *bool
 	summary, tail                                    *int
 	excludePatterns                                  *stringListFlag
 }
@@ -211,6 +247,7 @@ func newShowFlagSet() (*flag.FlagSet, showFlags) {
 		since:           fs.String("since", "", "filter by start time (relative, local date/datetime, or RFC3339 instant)"),
 		until:           fs.String("until", "", "filter sessions started before a relative, local date/datetime, or RFC3339 instant"),
 		project:         fs.String("project", "", "filter by repo path (literal substring match)"),
+		descendants:     fs.Bool("descendants", false, "include confirmed descendants of REF, conversation by conversation"),
 		short:           fs.Bool("short", false, "shorten unaliased project to repo basename"),
 		summary:         fs.Int("summary", 0, "show first N user messages after exclusions (0 disables)"),
 		noExclusions:    fs.Bool("no-exclude-user-messages", false, "disable user-message exclusions for this --summary invocation"),

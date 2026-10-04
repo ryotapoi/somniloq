@@ -2,7 +2,7 @@
 
 本書が CLI 仕様・コマンド挙動・スキーマの正。README.md / README.ja.md は本書の派生ビューなので、本書のこれらの記述を変更したら README 両方を同期する。
 
-v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF と専用 migrate は利用できる。まとまりの解決、新 search/show の原文・ページ仕様は後続実装。以下は現在利用できる CLI の仕様。
+v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF と専用 migrate は利用できる。共通 resolver による関係解決、単一 REF と確定子孫の show 原文 JSON は利用できる。新 search と show の複数 REF・発言フィルタ・ページ・TSV は後続実装。以下は現在利用できる CLI の仕様。
 
 ## 主要機能
 
@@ -125,7 +125,9 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - メタデータ `Project` 行は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` をそのまま表示
 - `--short` は alias 非一致時に `filepath.Base(repo_path)`
 - `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ、alias 展開含む）
-- `--format markdown|json`（デフォルト `markdown`）。JSON はセッションの配列で、各要素は `ref`, `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `messages`（`role`, `content`, `timestamp` の配列）。単一セッション指定でも要素 1 の配列で出す（消費側のパースを一本化するため）。`--summary` / `--turn` / `--tail` のフィルタは `messages` にそのまま反映される
+- `--format markdown|json`（デフォルト `markdown`）。
+- `--descendants` は REF 必須で、期間一括表示との併用と不正値を exit 2・stdout 空で拒否する。
+- 単一の完全 REF を渡すと本人会話だけを取得し、子 REF から祖先の本文は取得しません。フラグは REF より前に置きます。`--descendants` は確定子孫だけを親先行 DFS・兄弟 REF 辞書順で展開し、root 所属だけで直接親不明の子は展開しません。Markdown は会話ごとに区切り、`--format json` は原文と発言番号を返します。JSON は発言単位の `{items,total,count,limit,offset,hasMore,nextOffset}` object で、各発言の `ref,messageNumber,role,timestamp,text,blocks,parentRef,rootRef,provenance` を常に出力します。本文・block 境界・保存番号・不正な非空日時を保持し、日時欠落は null、復元不能な legacy blocks は null、既知の空配列は []、由来は source_record / legacy_saved です。ページ指定はまだなく、total=count、limit=null、offset=0、hasMore=false、nextOffset=null です。複数 REF、新しい発言フィルタ・ページ・TSV と旧入口の統合は後続実装で、現行 summary/turn/tail/期間一括表示は維持します。
 
 ### アウトライン表示（outline）
 
@@ -163,7 +165,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 機械消費（スクリプト・skill からの利用）向けの構造化出力。判断の経緯は `docs/decisions/0012-json-output-schema.md` 参照。
 
 - 対象コマンド: `sessions` / `projects` / `outline` / `search`（`--format tsv|json`、デフォルト `tsv`）、`show`（`--format markdown|json`、デフォルト `markdown`）
-- 常に JSON 配列を出力する。結果 0 件は `[]`（show の単一セッション指定も要素 1 の配列）
+- show は発言 envelope object（前節参照）、その他は JSON 配列。結果 0 件は show の items=[]、その他は `[]`。show の関係・本文・件数は同じ read transaction から取得する。
 - フィールド名は camelCase
 - タイムスタンプは DB 保存値（RFC3339 UTC）をそのまま出す。ローカルタイム整形は TSV / Markdown 側だけの表示都合とする（タイムゾーン情報を失わないため）
 - 文字列は生値（TSV のタブ・改行置換はしない。エスケープは JSON 側で担保される）

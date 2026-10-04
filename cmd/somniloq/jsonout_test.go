@@ -126,105 +126,66 @@ func TestOutlineCmd_FormatJSON(t *testing.T) {
 	}
 }
 
-func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
-	db := newOutlineTestDB(t)
-	if err := db.UpsertSession(testInputID(t, db, core.SourceClaudeCode), core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
-		t.Fatalf("UpsertSession: %v", err)
+func decodeShowItems(t *testing.T, data []byte) []any {
+	t.Helper()
+	var envelope map[string]any
+	if err := json.Unmarshal(data, &envelope); err != nil {
+		t.Fatal(err)
 	}
-
-	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
-	if err != nil {
-		t.Fatalf("showCmd: %v", err)
-	}
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
-	}
-
-	got := decodeJSONArray(t, out.Bytes())
-	if len(got) != 1 {
-		t.Fatalf("entries = %d, want 1 (single session still wrapped in an array)", len(got))
-	}
-	wantHeader := map[string]any{
-		"sessionId": "sess-1", "ref": fixtureREF(core.SourceClaudeCode, "sess-1"), "source": "claude_code", "project": "/Users/test/proj",
-		"title": "", "startedAt": "2026-03-28T15:00:00Z", "endedAt": "2026-03-28T16:00:00Z",
-	}
-	for key, want := range wantHeader {
-		if got[0][key] != want {
-			t.Errorf("%s = %#v, want %#v", key, got[0][key], want)
-		}
-	}
-	if len(got[0]) != len(wantHeader)+1 {
-		t.Errorf("session fields = %v, want header plus messages", got[0])
-	}
-	msgs, ok := got[0]["messages"].([]any)
+	items, ok := envelope["items"].([]any)
 	if !ok {
-		t.Fatalf("messages is %T, want array", got[0]["messages"])
+		t.Fatalf("items must be array: %s", data)
 	}
-	if len(msgs) != 4 {
-		t.Fatalf("messages = %d, want 4 (owner sidechain included)", len(msgs))
+	if len(envelope) != 7 || envelope["total"] != float64(len(items)) || envelope["count"] != float64(len(items)) || envelope["limit"] != nil || envelope["offset"] != float64(0) || envelope["hasMore"] != false || envelope["nextOffset"] != nil {
+		t.Fatalf("envelope: %s", data)
 	}
-	first := msgs[0].(map[string]any)
-	if first["role"] != "user" || first["content"] != "first question\nwith detail" || first["timestamp"] != "2026-03-28T15:00:00Z" {
-		t.Errorf("message 0 = %v", first)
-	}
-	if second := msgs[1].(map[string]any); second["role"] != "assistant" || second["content"] != "answer one" || second["timestamp"] != "2026-03-28T15:01:00Z" {
-		t.Errorf("message 1 = %v, want raw assistant fields", second)
-	}
-	for _, m := range msgs {
-		message := m.(map[string]any)
-		if len(message) != 3 {
-			t.Errorf("message fields = %v, want only role/content/timestamp", message)
-		}
-		for _, key := range []string{"role", "content", "timestamp"} {
-			if _, ok := message[key]; !ok {
-				t.Errorf("message missing %q: %v", key, message)
+	return items
+}
+func TestShowCmd_FormatJSON(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		args  []string
+		count int
+		text  string
+	}{
+		{"owner", nil, 4, "first question\nwith detail"},
+		{"turn", []string{"--turn", "3"}, 1, "\n\nsecond\tquestion after blank lines"},
+		{"empty", []string{"--turn", "99"}, 0, ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out, errOut bytes.Buffer
+			args := append([]string{"--format", "json"}, tc.args...)
+			args = append(args, fixtureREF(core.SourceClaudeCode, "sess-1"))
+			code, err := showCmd(args, staticDB(newOutlineTestDB(t)), config{}, &out, &errOut)
+			if code != 0 || err != nil {
+				t.Fatalf("%d %v", code, err)
 			}
-		}
+			items := decodeShowItems(t, out.Bytes())
+			if len(items) != tc.count {
+				t.Fatalf("items: %v", items)
+			}
+			for _, raw := range items {
+				item := raw.(map[string]any)
+				for _, key := range []string{"ref", "messageNumber", "role", "timestamp", "text", "blocks", "parentRef", "rootRef", "provenance"} {
+					if _, ok := item[key]; !ok {
+						t.Fatalf("missing %s: %v", key, item)
+					}
+				}
+				if len(item) != 9 || item["provenance"] != "source_record" {
+					t.Fatalf("item: %v", item)
+				}
+			}
+			if tc.count > 0 && items[0].(map[string]any)["text"] != tc.text {
+				t.Fatalf("text: %v", items)
+			}
+		})
 	}
 }
-
-func TestShowCmd_FormatJSON_TurnFilter(t *testing.T) {
-	db := newOutlineTestDB(t)
-	if err := db.UpdateSessionTitle(testInputID(t, db, core.SourceClaudeCode), core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
-		t.Fatalf("UpdateSessionTitle: %v", err)
-	}
-
-	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "--turn", "3", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
-	if err != nil {
-		t.Fatalf("showCmd: %v", err)
-	}
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
-	}
-
-	got := decodeJSONArray(t, out.Bytes())
-	if got[0]["title"] != "Title\twith\nline" {
-		t.Errorf("title = %#v, want raw custom title", got[0]["title"])
-	}
-	msgs := got[0]["messages"].([]any)
-	if len(msgs) != 1 {
-		t.Fatalf("messages = %d, want 1 (turn 3 only)", len(msgs))
-	}
-	if c := msgs[0].(map[string]any)["content"]; c != "\n\nsecond\tquestion after blank lines" {
-		t.Errorf("content = %#v", c)
-	}
-}
-
 func TestShowCmd_FormatJSON_EmptyBulk(t *testing.T) {
-	db := newOutlineTestDB(t)
-
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "--since", "2031-01-01"}, staticDB(db), config{}, &out, &errOut)
-	if err != nil {
-		t.Fatalf("showCmd: %v", err)
-	}
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
-	}
-	if strings.TrimSpace(out.String()) != "[]" {
-		t.Errorf("output = %q, want []", out.String())
+	code, err := showCmd([]string{"--format", "json", "--since", "2031-01-01"}, staticDB(newOutlineTestDB(t)), config{}, &out, &errOut)
+	if code != 0 || err != nil || len(decodeShowItems(t, out.Bytes())) != 0 {
+		t.Fatalf("%d %v %s", code, err, out.String())
 	}
 }
 

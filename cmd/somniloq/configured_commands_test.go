@@ -61,17 +61,17 @@ func TestConfiguredCommandsKeepSameSessionAndMessageIDsSeparate(t *testing.T) {
 	for _, hit := range hits {
 		seen[hit.Turn] = true
 		text := run("show", "--format", "json", hit.REF)
-		var shown []showSessionJSON
+		var shown showJSON
 		if err := json.Unmarshal([]byte(text), &shown); err != nil {
 			t.Fatal(err)
 		}
-		if len(shown) != 1 || shown[0].REF != hit.REF {
+		if len(shown.Items) == 0 || shown.Items[0].REF != hit.REF {
 			t.Fatalf("show: %s", text)
 		}
-		if strings.Contains(hit.Snippet, "input a") && (len(shown[0].Messages) != 1 || !strings.Contains(shown[0].Messages[0].Content, "input a")) {
+		if strings.Contains(hit.Snippet, "input a") && (len(shown.Items) != 1 || !strings.Contains(shown.Items[0].Text, "input a")) {
 			t.Fatalf("mixed input a: %s", text)
 		}
-		if strings.Contains(hit.Snippet, "input b") && (len(shown[0].Messages) != 2 || !strings.Contains(shown[0].Messages[1].Content, "input b")) {
+		if strings.Contains(hit.Snippet, "input b") && (len(shown.Items) != 2 || !strings.Contains(shown.Items[1].Text, "input b")) {
 			t.Fatalf("mixed input b: %s", text)
 		}
 	}

@@ -42,9 +42,9 @@ func TestInvalidSavedTimestampsRemainReadable(t *testing.T) {
 	messages, err := db.GetMessages(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "invalid")
 	must(t, err)
 	want := []MessageRow{
-		{UUID: "bad-1", Role: "user", Content: "needle bad one", Timestamp: "bad-message"},
-		{UUID: "bad-2", Role: "user", Content: "needle bad two", Timestamp: "also-bad"},
-		{UUID: "early", Role: "user", Content: "needle early", Timestamp: "2026-03-28T10:00:00+02:00"},
+		{UUID: "bad-1", Role: "user", Content: "needle bad one", Blocks: []string{}, Provenance: "source_record", Timestamp: "bad-message"},
+		{UUID: "bad-2", Role: "user", Content: "needle bad two", Blocks: []string{}, Provenance: "source_record", Timestamp: "also-bad"},
+		{UUID: "early", Role: "user", Content: "needle early", Blocks: []string{}, Provenance: "source_record", Timestamp: "2026-03-28T10:00:00+02:00"},
 	}
 	if !reflect.DeepEqual(messages, want) {
 		t.Fatalf("messages = %+v, want %+v", messages, want)

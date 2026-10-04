@@ -326,7 +326,7 @@ func (d *DB) LookupSessionREF(ref string) (*SessionRow, error) {
 		}
 		return &r, nil
 	}
-	row := d.db.QueryRow(sessionRowSelect+` WHERE i.input_key=? AND s.source=? AND s.identity=? GROUP BY s.input_id,s.source,s.identity`, key, source, id)
+	row := d.execer().QueryRow(sessionRowSelect+` WHERE i.input_key=? AND s.source=? AND s.identity=? GROUP BY s.input_id,s.source,s.identity`, key, source, id)
 	r, err := scanSessionRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

@@ -125,12 +125,8 @@ func TestUserMessageExclusionsShareOutlineAndSummaryFiltering(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("show summary = (%d, %v), stderr %q", code, err, errOut.String())
 	}
-	showEntries := decodeJSONArray(t, summaryOut.Bytes())
-	if len(showEntries) != 1 {
-		t.Fatalf("show entries = %d, want 1: %s", len(showEntries), summaryOut.String())
-	}
-	messages := showEntries[0]["messages"].([]any)
-	if len(messages) != 2 || messages[0].(map[string]any)["content"] != "<command-name>/clear</command-name>" || messages[1].(map[string]any)["content"] != "normal work" {
+	messages := decodeShowItems(t, summaryOut.Bytes())
+	if len(messages) != 2 || messages[0].(map[string]any)["text"] != "<command-name>/clear</command-name>" || messages[1].(map[string]any)["text"] != "normal work" {
 		t.Errorf("summary messages = %v, want first two remaining user messages after filtering", messages)
 	}
 
@@ -174,12 +170,8 @@ func TestShowSummaryMaxIntLimitWithOneUserMessage(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("showCmd with max-int summary = (%d, %v), stderr %q", code, err, errOut.String())
 	}
-	entries := decodeJSONArray(t, out.Bytes())
-	if len(entries) != 1 {
-		t.Fatalf("show entries = %d, want 1: %s", len(entries), out.String())
-	}
-	messages := entries[0]["messages"].([]any)
-	if len(messages) != 1 || messages[0].(map[string]any)["content"] != "available message" {
+	messages := decodeShowItems(t, out.Bytes())
+	if len(messages) != 1 || messages[0].(map[string]any)["text"] != "available message" {
 		t.Errorf("summary messages = %v, want the one available user message", messages)
 	}
 }
@@ -200,9 +192,8 @@ func TestUserMessageExclusionScopeAndLegacyBehavior(t *testing.T) {
 		if err != nil || code != 0 {
 			t.Fatalf("showCmd(%v) = (%d, %v), stderr %q", tt.args, code, err, errOut.String())
 		}
-		entries := decodeJSONArray(t, out.Bytes())
-		messages := entries[0]["messages"].([]any)
-		if len(messages) == 0 || !strings.Contains(messages[0].(map[string]any)["content"].(string), tt.wantMarkup) {
+		messages := decodeShowItems(t, out.Bytes())
+		if len(messages) == 0 || !strings.Contains(messages[0].(map[string]any)["text"].(string), tt.wantMarkup) {
 			t.Errorf("showCmd(%v) messages = %v, want unfiltered content containing %q", tt.args, messages, tt.wantMarkup)
 		}
 	}
@@ -222,8 +213,8 @@ func TestUserMessageExclusionScopeAndLegacyBehavior(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("unconfigured summary = (%d, %v)", code, err)
 	}
-	defaultMessages := decodeJSONArray(t, defaultSummary.Bytes())[0]["messages"].([]any)
-	if len(defaultMessages) != 5 || defaultMessages[1].(map[string]any)["content"] != "<command-name>/clear</command-name>" || defaultMessages[2].(map[string]any)["content"] != "<local-command-caveat>marker</local-command-caveat>" {
+	defaultMessages := decodeShowItems(t, defaultSummary.Bytes())
+	if len(defaultMessages) != 5 || defaultMessages[1].(map[string]any)["text"] != "<command-name>/clear</command-name>" || defaultMessages[2].(map[string]any)["text"] != "<local-command-caveat>marker</local-command-caveat>" {
 		t.Errorf("unconfigured summary messages = %v, want all five stored user messages including synthetic prefixes", defaultMessages)
 	}
 
@@ -232,7 +223,7 @@ func TestUserMessageExclusionScopeAndLegacyBehavior(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("disabled summary = (%d, %v)", code, err)
 	}
-	disabledMessages := decodeJSONArray(t, disabledSummary.Bytes())[0]["messages"].([]any)
+	disabledMessages := decodeShowItems(t, disabledSummary.Bytes())
 	if len(disabledMessages) != 5 {
 		t.Errorf("disabled summary messages = %d, want all five", len(disabledMessages))
 	}
@@ -242,9 +233,9 @@ func TestUserMessageExclusionScopeAndLegacyBehavior(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("all-excluded summary = (%d, %v)", code, err)
 	}
-	allExcludedEntries := decodeJSONArray(t, allExcludedOut.Bytes())
-	if len(allExcludedEntries) != 1 || len(allExcludedEntries[0]["messages"].([]any)) != 0 {
-		t.Errorf("all-excluded summary output = %v, want one session with empty messages", allExcludedEntries)
+	allExcludedEntries := decodeShowItems(t, allExcludedOut.Bytes())
+	if len(allExcludedEntries) != 0 {
+		t.Errorf("all-excluded summary output = %v, want empty items", allExcludedEntries)
 	}
 
 	var emptyRegexOut bytes.Buffer

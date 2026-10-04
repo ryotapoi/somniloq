@@ -73,7 +73,7 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return showCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Output (markdown):", "messages fields: role, content, timestamp", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --config default --turn 40..60 <REF>"},
+			want: []string{"Examples:", "Output (markdown):", "Each item: ref, messageNumber, role, timestamp, text, blocks, parentRef, rootRef, provenance", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --config default --turn 40..60 <REF>"},
 		},
 		{
 			name: "outline",

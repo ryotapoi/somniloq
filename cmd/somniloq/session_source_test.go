@@ -80,7 +80,7 @@ func TestSessionSourceSelectsOnlyRequestedSource(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("show = %d, %v (stderr %q)", code, err, errOut.String())
 	}
-	if !strings.Contains(out.String(), `"source": "codex"`) || !strings.Contains(out.String(), "codex question") || strings.Contains(out.String(), "claude question") {
+	if !strings.Contains(out.String(), fixtureREF(core.SourceCodex, "same-id")) || !strings.Contains(out.String(), "codex question") || strings.Contains(out.String(), "claude question") {
 		t.Fatalf("show output = %q", out.String())
 	}
 

@@ -32,7 +32,8 @@ func init() {
 }
 
 type DB struct {
-	db *sql.DB
+	db     *sql.DB
+	readTx *sql.Tx
 }
 
 // execer abstracts *sql.DB and *sql.Tx for shared query methods.
@@ -111,5 +112,21 @@ func (d *DB) Begin() (*sql.Tx, error) {
 }
 
 func (d *DB) execer() execer {
+	if d.readTx != nil {
+		return d.readTx
+	}
 	return d.db
+}
+
+// ReadSnapshot runs related reads against one saved database state.
+func (d *DB) ReadSnapshot(read func(*DB) error) error {
+	tx, err := d.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	if err := read(&DB{db: d.db, readTx: tx}); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
