@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -11,7 +12,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const searchUsageLine = "somniloq search --config default [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] <query>"
+const searchUsageLine = "somniloq search --config default [--session <REF>] [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] <query>"
 
 const searchHelpDetails = `Columns (TSV, in order):
   ref: full slq1 reference containing the matching message.
@@ -27,6 +28,7 @@ JSON fields:
 Notes:
   Search scans own message bodies using SQLite LIKE; Codex inheritance context and unresolved records are excluded.
   Claude Code and Codex body sidechain records are included.
+  --session selects the named full REF and confirmed descendants, excluding ancestors, siblings, and root-only members.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   LIKE is ASCII-case-insensitive; query text, including %, _, and \, is literal.
   --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
@@ -95,8 +97,17 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	}
 	defer db.Close()
 
-	rows, err := db.SearchMessages(filter, query, core.SearchPagination{Limit: *flags.limit, Offset: *flags.offset})
+	if flagWasProvided(fs, "session") {
+		if _, code, err := resolveSessionREF(db, *flags.session, nil, errOut); code != 0 {
+			return code, err
+		}
+	}
+	rows, err := db.SearchMessages(filter, query, core.SearchPagination{Limit: *flags.limit, Offset: *flags.offset, SessionREF: *flags.session})
 	if err != nil {
+		var refErr *core.REFError
+		if errors.As(err, &refErr) {
+			return 2, err
+		}
 		return 1, err
 	}
 
@@ -143,13 +154,14 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 }
 
 type searchFlags struct {
-	since, until, dayBoundary, project, format *string
-	limit, offset                              *int
+	since, until, dayBoundary, project, format, session *string
+	limit, offset                                       *int
 }
 
 func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
 	flags := searchFlags{
+		session:     fs.String("session", "", "search the named full REF and confirmed descendants"),
 		since:       fs.String("since", "", "filter by message time (relative, local date/datetime, or RFC3339 instant)"),
 		until:       fs.String("until", "", "filter messages before a relative, local date/datetime, or RFC3339 instant"),
 		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)"),

@@ -128,7 +128,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 	var sessions []core.SessionRow
 	if sessionID != "" {
-		session, code, err := resolveSessionREF(db, sessionID, source)
+		session, code, err := resolveSessionREF(db, sessionID, source, errOut)
 		if code != 0 {
 			return code, err
 		}

@@ -18,6 +18,10 @@ func TestLegacyHistoryReadAndCoexistence(t *testing.T) {
 	must(t, db.UpsertSession(input, SessionMeta{Source: SourceCodex, SessionID: "shared"}, "now"))
 	must(t, db.InsertMessage(input, NormalizedMessage{Source: SourceCodex, SessionID: "shared", UUID: "normal", Role: "user", Content: "normal"}))
 	ref := LegacyREF(digest, SourceCodex, "shared")
+	resolved := requireResolution(t, db, ref)
+	if resolved.Parent != nil || resolved.Root != nil || len(resolved.Members) != 1 || len(resolved.Descendants) != 1 || resolved.Self.REF != ref {
+		t.Fatalf("legacy resolution: %+v", resolved)
+	}
 	key, src, id, err := parseREF(ref)
 	must(t, err)
 	if key != "legacy:"+digest || src != SourceCodex || id != "shared" {
@@ -48,7 +52,7 @@ func TestLegacyHistoryReadAndCoexistence(t *testing.T) {
 	if meta == nil || meta.MessageCount != 0 {
 		t.Fatalf("metadata %+v", meta)
 	}
-	results, err := db.SearchMessages(SessionFilter{}, "legacy", SearchPagination{})
+	results, err := db.SearchMessages(SessionFilter{}, "legacy", SearchPagination{SessionREF: ref})
 	must(t, err)
 	if len(results) != 1 || results[0].REF != ref {
 		t.Fatalf("search %+v", results)

@@ -53,8 +53,8 @@ const sessionRowSelect = `
 	       COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.membership = 'body' AND (m.source IN ('codex','claude_code') OR m.is_sidechain = 0)), 0)
 	FROM sessions s
  JOIN inputs i ON s.input_id=i.id
-	LEFT JOIN sessions p ON p.input_id=s.input_id AND p.identity=s.parent_identity
-	LEFT JOIN sessions r ON r.input_id=s.input_id AND r.identity=s.root_identity
+	LEFT JOIN sessions p ON p.input_id=s.input_id AND p.source=s.source AND p.identity=s.parent_identity
+	LEFT JOIN sessions r ON r.input_id=s.input_id AND r.source=s.source AND r.identity=s.root_identity
  LEFT JOIN messages m ON s.input_id=m.input_id AND s.source = m.source AND s.identity = m.identity`
 
 // rowScanner abstracts *sql.Row and *sql.Rows so scanSessionRow serves both

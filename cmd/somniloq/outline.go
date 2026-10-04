@@ -80,7 +80,7 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), cfg config, out,
 	}
 	defer db.Close()
 
-	session, code, err := resolveSessionREF(db, sessionID, source)
+	session, code, err := resolveSessionREF(db, sessionID, source, errOut)
 	if code != 0 {
 		return code, err
 	}

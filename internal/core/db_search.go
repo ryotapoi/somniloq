@@ -23,6 +23,8 @@ type SearchRow struct {
 type SearchPagination struct {
 	Limit  int
 	Offset int
+	// SessionREF limits search to the named session and its confirmed descendants.
+	SessionREF string
 }
 
 // SearchMessages returns body messages whose content contains the
@@ -32,6 +34,17 @@ type SearchPagination struct {
 // message. rowid breaks timestamp ties like GetMessages, inverted to follow
 // the DESC order.
 func (d *DB) SearchMessages(filter SessionFilter, query string, pagination SearchPagination) ([]SearchRow, error) {
+	var scope *SessionResolution
+	if pagination.SessionREF != "" {
+		var err error
+		scope, err = d.ResolveSession(pagination.SessionREF)
+		if err != nil {
+			return nil, err
+		}
+		if scope == nil {
+			return nil, fmt.Errorf("session not found: %s", pagination.SessionREF)
+		}
+	}
 	q := `
  SELECT m.input_id, m.input_key, m.source, m.uuid, m.session_id, m.identity, COALESCE(s.repo_path,''), COALESCE(m.timestamp,''), m.content
  FROM (
@@ -39,9 +52,9 @@ func (d *DB) SearchMessages(filter SessionFilter, query string, pagination Searc
  UNION ALL
  SELECT -1,uuid,source,session_id,session_id,parent_uuid,role,content,COALESCE(blocks_json,'null'),timestamp,is_sidechain,number,'',0,'body','', 'legacy:' || snapshot_sha256,legacy_rowid FROM legacy_messages
  ) m JOIN (
- SELECT input_id,source,identity,repo_path,imported_at FROM sessions
- UNION ALL SELECT -1,source,session_id,repo_path,imported_at FROM legacy_sessions
- ) s ON m.input_id=s.input_id AND m.source=s.source AND m.identity=s.identity
+ SELECT s.input_id,s.source,s.identity,s.repo_path,s.imported_at,i.input_key FROM sessions s JOIN inputs i ON s.input_id=i.id
+ UNION ALL SELECT -1,source,session_id,repo_path,imported_at,'legacy:' || snapshot_sha256 FROM legacy_sessions
+ ) s ON m.input_id=s.input_id AND m.source=s.source AND m.identity=s.identity AND m.input_key=s.input_key
  WHERE m.membership='body' AND (m.source IN ('codex','claude_code') OR COALESCE(m.is_sidechain,0)=0)
  AND m.content LIKE '%' || ? || '%' ESCAPE '\'`
 	args := []any{escapeLikeLiteral(query)}
@@ -49,6 +62,11 @@ func (d *DB) SearchMessages(filter SessionFilter, query string, pagination Searc
 	if len(conditions) > 0 {
 		q += " AND " + strings.Join(conditions, " AND ")
 		args = append(args, filterArgs...)
+	}
+	if scope != nil {
+		condition, scopeArgs := sessionScopeCondition(scope.Descendants)
+		q += " AND " + condition
+		args = append(args, scopeArgs...)
 	}
 	q += " ORDER BY rfc3339_utc_nanos(m.timestamp) DESC, m.saved_rowid DESC"
 	if pagination.Limit > 0 {

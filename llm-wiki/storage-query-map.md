@@ -13,6 +13,7 @@ sources:
   - internal/core/import_codex.go
   - internal/core/db_import_state.go
   - internal/core/db_sessions_projects.go
+  - internal/core/session_relations.go
   - internal/core/db_messages_summary.go
   - internal/core/db_search.go
   - cmd/somniloq/sessions.go
@@ -37,3 +38,5 @@ SQLite の変更目的から入口を選ぶ。schema・migration・書き込み�
 - 本文の取得や順序を変える: `internal/core/db_messages_summary.go` の `GetMessages` / `GetTurnMessages` を読み、本人原文の保存済み番号順と context 非混入を確認する。表示除外は cmd 層の matcher で行う。表示とターンへの影響は [Display and turns](display-and-turns.md) を辿る。
 
 SQLite driver 固有の補助知見が必要な場合は [SQLite driver notes](sqlite-driver-notes.md) を参照する。
+
+- REF の本人・まとまり・確定子孫の解決は `internal/core/session_relations.go` の `ResolveSession`。入力と source 内の保存関係だけを辿り、Codex 欠落親 key と Claude root 所属を区別する。本人 show/outline の選択と `SearchMessages` の `SessionREF` が共有する。検索 scope は SQL のページ化前に適用し、循環辺は未確定として診断する。回帰の入口は `internal/core/session_relations_test.go`。

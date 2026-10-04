@@ -39,7 +39,8 @@ func TestCodexCanonicalGroupRebuildAndConflictRollback(t *testing.T) {
 	}
 	read := func() []MessageRow {
 		t.Helper()
-		rows, err := db.GetMessages(id, SourceCodex, "child")
+		resolved := requireResolution(t, db, relationREF(root, SourceCodex, "child"))
+		rows, err := db.GetIdentityMessages(resolved.Self.InputID, resolved.Self.Source, resolved.Self.Identity)
 		if err != nil {
 			t.Fatal(err)
 		}
