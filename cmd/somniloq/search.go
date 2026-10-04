@@ -11,10 +11,10 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const searchUsageLine = "somniloq search [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] <query>"
+const searchUsageLine = "somniloq search --config default [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] <query>"
 
 const searchHelpDetails = `Columns (TSV, in order):
-  session_id: source-local session identifier containing the matching message.
+  ref: full slq1 reference containing the matching message.
   turn: outline/show turn number containing the hit.
   time: local timestamp of the matching message.
   project: canonical alias name when configured, otherwise repo_path.
@@ -22,7 +22,7 @@ const searchHelpDetails = `Columns (TSV, in order):
   source: internal source identifier: claude_code, codex, or cursor_agent.
 
 JSON fields:
-  source, sessionId, turn, timestamp, project, snippet
+  ref, source, sessionId, turn, timestamp, project, snippet
 
 Notes:
   Search scans non-sidechain message bodies using SQLite LIKE.
@@ -36,14 +36,14 @@ Notes:
   --limit returns at most N results (N >= 1); --offset skips N ordered results (N >= 0).
   Continue a fixed search with --limit and increasing --offset. Database changes or
   different resolved relative-time filters can change later pages.
-  Typical flow: search -> outline <session-id> -> show --turn <turn-or-range> <session-id>.
+  Typical flow: search -> outline <REF> -> show --turn <turn-or-range> <REF>.
 
 Examples:
-  somniloq search "auth bug"
-  somniloq search --since 7d --project somniloq "migration"
-  somniloq search --limit 50 --offset 50 "auth bug"
-  somniloq search --format json "auth bug"
-  somniloq show --turn 42 <session-id>`
+  somniloq search --config default "auth bug"
+  somniloq search --config default --since 7d --project somniloq "migration"
+  somniloq search --config default --limit 50 --offset 50 "auth bug"
+  somniloq search --config default --format json "auth bug"
+  somniloq show --config default --turn 42 <REF>`
 
 // snippetContext is the number of runes kept on each side of the match.
 const snippetContext = 40
@@ -102,7 +102,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	turnCache := map[searchSessionKey]map[string]int{}
 	entries := make([]searchJSON, 0, len(rows))
 	for _, r := range rows {
-		turns, err := searchTurnsByUUID(db, turnCache, r.Source, r.SessionID)
+		turns, err := searchTurnsByUUID(db, turnCache, r.InputID, r.Source, r.SessionID)
 		if err != nil {
 			return 1, err
 		}
@@ -114,6 +114,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 		snippet := searchSnippet(r.Content, query)
 		if *flags.format == "json" {
 			entries = append(entries, searchJSON{
+				REF:       r.REF,
 				Source:    string(r.Source),
 				SessionID: r.SessionID,
 				Turn:      turn,
@@ -124,7 +125,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 			continue
 		}
 		if _, err := fmt.Fprintf(out, "%s\t%d\t%s\t%s\t%s\t%s\n",
-			r.SessionID,
+			r.REF,
 			turn,
 			sanitizeTSV(formatLocalTime(r.Timestamp, time.Local)),
 			sanitizeTSV(project),
@@ -160,16 +161,17 @@ func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 }
 
 type searchSessionKey struct {
+	inputID   int64
 	source    core.Source
 	sessionID string
 }
 
-func searchTurnsByUUID(db *core.DB, cache map[searchSessionKey]map[string]int, source core.Source, sessionID string) (map[string]int, error) {
-	key := searchSessionKey{source: source, sessionID: sessionID}
+func searchTurnsByUUID(db *core.DB, cache map[searchSessionKey]map[string]int, inputID int64, source core.Source, sessionID string) (map[string]int, error) {
+	key := searchSessionKey{inputID: inputID, source: source, sessionID: sessionID}
 	if turns, ok := cache[key]; ok {
 		return turns, nil
 	}
-	messages, err := db.GetTurnMessages(source, sessionID)
+	messages, err := db.GetTurnMessages(inputID, source, sessionID)
 	if err != nil {
 		return nil, err
 	}

@@ -20,14 +20,14 @@ cmd/somniloq → internal/core → internal/ingest/...
 - `internal/core` は `import.go` の `importSourceSpecs` で各 source adapter の constructor を登録するため、`internal/ingest/<source>` に通常の依存を持つ。これは `cmd/somniloq → internal/core → internal/ingest/<source>` という正規の依存経路であり、ADR 0008 の例外ではない
 - ADR 0008 の例外は、`internal/core` の `importTx` が `claudecode.SessionMetaWriter` を実装することのコンパイル時確認に限る。この例外は constructor 登録以外の source 固有依存を自由に追加してよいことを意味しない
 - `internal/core` は外部ライブラリとして `modernc.org/sqlite` のみ使用
-- `cmd/somniloq` は stdlib `flag` + `go-isatty` を使用（外部 CLI フレームワーク不使用）
+- `cmd/somniloq` は stdlib `flag` + `go-isatty` + TOML decoder `github.com/pelletier/go-toml/v2` を使用（外部 CLI フレームワーク不使用）
 
 ## 責務の境界
 
 | モジュール | 責務 | やらないこと |
 |-----------|------|-------------|
-| `cmd/somniloq` | CLI 入出力、フラグ解析、出力フォーマット（text/Markdown）、エラーメッセージ表示 | DB 操作、JSONL パース |
-| `internal/core` | DB スキーマ管理、インポート制御、クエリ、adapter から呼ばれる SQLite 書き込み実装 | CLI フラグ解析、出力フォーマット、`os.Exit`、source 固有 JSONL パース |
+| `cmd/somniloq` | CLI 入出力、フラグ解析、TOML 設定生成・検証・path 正規化、出力フォーマット（text/Markdown）、エラーメッセージ表示 | DB 操作、JSONL パース |
+| `internal/core` | DB スキーマ・revision 検査、入力 identity・root REF、入力ごとのインポート制御、クエリ、adapter から呼ばれる SQLite 書き込み実装 | CLI フラグ解析、出力フォーマット、`os.Exit`、source 固有 JSONL パース |
 | `internal/ingest` | 共通正規化型、adapter interface、source 固有のファイル走査・JSONL パース・正規化 | CLI フラグ解析、出力フォーマット、SQLite SQL、`os.Exit` |
 
 ## 新モジュールを切る判断基準

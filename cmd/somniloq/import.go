@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"path/filepath"
 	"strings"
 
 	"github.com/ryotapoi/somniloq/internal/core"
@@ -20,41 +21,54 @@ const importHelpDetails = `Output:
   Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.
 
 Notes:
-  Default import is differential. Use --full to delete the whole somniloq DB and re-import from the selected source(s).
-  With --source cursor-agent --full, existing rows are deleted too, then only Cursor Agent rows are imported.
+  Default import is differential. Use --full to rebuild only selected inputs, preserving other inputs.
+  With --source cursor-agent --full, only selected Cursor Agent inputs are rebuilt.
   An unparsed final line without a newline is retried if the file grows; completed malformed lines are skipped.
   Claude Code messages need non-empty session and message IDs; Codex session metadata needs a non-empty ID.
   Claude Code and Codex sessions from existing linked Git worktrees are grouped under the main repository.
   Previously stored invalid IDs or worktree paths are not repaired by differential import; --full
-  can rebuild them if the original logs remain. Check all sources before clearing the DB.
+  can rebuild them if the original logs remain. Check selected inputs before rebuilding them.
   Non-fatal scan/file errors are printed to stderr; import continues and exits 1 if any occurred.
 
 Examples:
-  somniloq import
-  somniloq import --source cursor-agent
-  somniloq import --full --yes`
+  somniloq import --config default
+  somniloq import --config default --source cursor-agent
+  somniloq import --config default --full --yes`
 
-// importCmd runs the import subcommand without calling os.Exit, so it can be
-// tested directly. openDB is invoked only after argument parsing and
-// confirmation succeed.
-func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, codexSessionsDir, cursorProjectsDir string, in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
+// importConfiguredCmd opens the DB only after argument validation and confirmation.
+func importConfiguredCmd(args []string, openDB func() (*core.DB, error), cfg config, in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
 	fs := flag.NewFlagSet("import", flag.ContinueOnError)
-	full := fs.Bool("full", false, "full re-import (delete all and re-import)")
+	full := fs.Bool("full", false, "rebuild only selected inputs")
 	yes := fs.Bool("yes", false, "skip confirmation prompt")
+	var inputs stringListFlag
+	fs.Var(&inputs, "input", "input root path to import (repeatable; OR, intersected with --source)")
 	sourceValue := fs.String("source", string(core.ImportSourceAll), "source to import: "+importSourceCommaList())
-	setUsage(fs, "Import Claude Code, Codex, and Cursor Agent session logs from JSONL files", "somniloq import [--source "+importSourcePipeList()+"] [flags]", importHelpDetails)
+	setUsage(fs, "Import Claude Code, Codex, and Cursor Agent session logs from JSONL files", "somniloq import --config default [--source "+importSourcePipeList()+"] [flags]", importHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
+		if code != 0 {
+			code = 2
+		}
 		return code, nil
 	}
 	if fs.NArg() != 0 {
 		writeUsageError(errOut, "unexpected arguments")
-		fmt.Fprintln(errOut, "usage: somniloq import [flags]")
-		return 1, nil
+		fmt.Fprintln(errOut, "usage: somniloq import --config default [flags]")
+		return 2, nil
 	}
 
 	source, err := parseImportSource(*sourceValue)
 	if err != nil {
-		return 1, err
+		return 2, err
+	}
+
+	for i, path := range inputs {
+		if path == "" {
+			return 2, fmt.Errorf("--input requires a non-empty path")
+		}
+		inputs[i], err = core.CanonicalPath(path, filepath.Dir(cfg.Path))
+		if err != nil {
+			return 2, fmt.Errorf("invalid --input: %w", err)
+		}
 	}
 
 	if *full && !*yes {
@@ -77,11 +91,10 @@ func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, code
 	defer db.Close()
 
 	result, err := core.Import(db, core.ImportOptions{
-		Full:              *full,
-		ProjectsDir:       projectsDir,
-		CodexSessionsDir:  codexSessionsDir,
-		CursorProjectsDir: cursorProjectsDir,
-		Source:            source,
+		Full:       *full,
+		Inputs:     cfg.Inputs,
+		InputPaths: inputs,
+		Source:     source,
 	})
 	if err != nil {
 		return 1, err

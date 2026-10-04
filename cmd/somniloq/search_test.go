@@ -22,7 +22,7 @@ func TestSearchCmd_OutputColumns(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
 	}
 
-	want := fmt.Sprintf("sess-1\t2\t%s\t/Users/test/proj\tsecond question after blank lines\tclaude_code\n",
+	want := fmt.Sprintf(fixtureREF(core.SourceClaudeCode, "sess-1")+"\t2\t%s\t/Users/test/proj\tsecond question after blank lines\tclaude_code\n",
 		formatLocalTime("2026-03-28T15:03:00Z", time.Local))
 	if out.String() != want {
 		t.Errorf("output = %q, want %q", out.String(), want)
@@ -41,7 +41,7 @@ func TestSearchCmd_AssistantHitUsesOwningTurn(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
 	}
 
-	want := fmt.Sprintf("sess-1\t1\t%s\t/Users/test/proj\tanswer one\tclaude_code\n",
+	want := fmt.Sprintf(fixtureREF(core.SourceClaudeCode, "sess-1")+"\t1\t%s\t/Users/test/proj\tanswer one\tclaude_code\n",
 		formatLocalTime("2026-03-28T15:01:00Z", time.Local))
 	if out.String() != want {
 		t.Errorf("output = %q, want %q", out.String(), want)
@@ -59,7 +59,8 @@ func TestSearchCmd_DayBoundaryFiltersDateOnlySince(t *testing.T) {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	if err := db.UpsertSession(core.SessionMeta{
+	if err := db.UpsertSession(testInputID(t, db,
+		core.SourceClaudeCode), core.SessionMeta{
 		Source:    core.SourceClaudeCode,
 		SessionID: "s1",
 		RepoPath:  "/Users/test/proj",
@@ -76,7 +77,8 @@ func TestSearchCmd_DayBoundaryFiltersDateOnlySince(t *testing.T) {
 		{"after", "2026-03-28T19:00:00Z", "needle after boundary"},
 	}
 	for _, msg := range messages {
-		if err := db.InsertMessage(core.NormalizedMessage{
+		if err := db.InsertMessage(testInputID(t, db,
+			core.SourceClaudeCode), core.NormalizedMessage{
 			Source:    core.SourceClaudeCode,
 			UUID:      msg.uuid,
 			SessionID: "s1",
@@ -127,7 +129,7 @@ func TestSearchCmd_PaginationTSVPreservesTurns(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("TSV search = %d, %v (stderr: %q)", code, err, errOut.String())
 	}
-	if got := tsvOut.String(); !strings.Contains(got, "page\t2\t") || !strings.Contains(got, "needle second") || !strings.Contains(got, "page\t1\t") || !strings.Contains(got, "needle first") || strings.Contains(got, "needle third") {
+	if got := tsvOut.String(); !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "page")+"\t2\t") || !strings.Contains(got, "needle second") || !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "page")+"\t1\t") || !strings.Contains(got, "needle first") || strings.Contains(got, "needle third") {
 		t.Errorf("TSV page = %q, want the second and first hits with original turns", got)
 	}
 }
@@ -138,7 +140,8 @@ func newSearchPaginationTestDB(t *testing.T) *core.DB {
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
 	}
-	if err := db.UpsertSession(core.SessionMeta{
+	if err := db.UpsertSession(testInputID(t, db,
+		core.SourceClaudeCode), core.SessionMeta{
 		Source: core.SourceClaudeCode, SessionID: "page", RepoPath: "/Users/test/proj",
 	}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession: %v", err)
@@ -150,7 +153,7 @@ func newSearchPaginationTestDB(t *testing.T) *core.DB {
 	} {
 		message.Source = core.SourceClaudeCode
 		message.SessionID = "page"
-		if err := db.InsertMessage(message); err != nil {
+		if err := db.InsertMessage(testInputID(t, db, message.Source), message); err != nil {
 			t.Fatalf("InsertMessage(%d): %v", i, err)
 		}
 	}
@@ -244,7 +247,7 @@ func TestSearchCmd_FilteredAssistantRetainsFullConversationTurn(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "filtered"}, "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpsertSession(testInputID(t, db, core.SourceClaudeCode), core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "filtered"}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatal(err)
 	}
 	for i, m := range []core.NormalizedMessage{
@@ -255,7 +258,7 @@ func TestSearchCmd_FilteredAssistantRetainsFullConversationTurn(t *testing.T) {
 		{Role: "assistant", Content: "needle answer", Timestamp: "2026-03-28T10:01:00Z"},
 	} {
 		m.Source, m.SessionID, m.UUID = core.SourceClaudeCode, "filtered", fmt.Sprintf("filtered-%d", i)
-		if err := db.InsertMessage(m); err != nil {
+		if err := db.InsertMessage(testInputID(t, db, m.Source), m); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -264,7 +267,7 @@ func TestSearchCmd_FilteredAssistantRetainsFullConversationTurn(t *testing.T) {
 	if code != 0 || err != nil || errOut.Len() != 0 {
 		t.Fatalf("search = %d, %v, stderr %q", code, err, errOut.String())
 	}
-	want := fmt.Sprintf("filtered\t2\t%s\t\tneedle answer\tclaude_code\n", formatLocalTime("2026-03-28T10:01:00Z", time.Local))
+	want := fmt.Sprintf(fixtureREF(core.SourceClaudeCode, "filtered")+"\t2\t%s\t\tneedle answer\tclaude_code\n", formatLocalTime("2026-03-28T10:01:00Z", time.Local))
 	if out.String() != want {
 		t.Fatalf("output = %q, want %q", out.String(), want)
 	}

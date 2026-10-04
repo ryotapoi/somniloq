@@ -9,14 +9,14 @@ func newSearchTestDB(t *testing.T) *DB {
 	t.Helper()
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "fix the auth bug", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "the AUTH module looks fine", Timestamp: "2026-03-28T10:01:00Z"}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s1", Role: "user", Content: "auth in a sidechain", Timestamp: "2026-03-28T10:02:00Z", IsSidechain: true}))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "fix the auth bug", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "the AUTH module looks fine", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s1", Role: "user", Content: "auth in a sidechain", Timestamp: "2026-03-28T10:02:00Z", IsSidechain: true}))
 
-	must(t, db.UpsertSession(SessionMeta{Source: SourceCodex, SessionID: "s2", RepoPath: "/Users/test/somniloq", StartedAt: "2026-03-29T10:00:00Z"}, "2026-03-29T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m4", SessionID: "s2", Role: "user", Content: "auth on another day", Timestamp: "2026-03-29T10:00:00Z"}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCodex, UUID: "m5", SessionID: "s2", Role: "user", Content: "nothing relevant", Timestamp: "2026-03-29T10:01:00Z"}))
+	must(t, db.UpsertSession(testInput(t, db, SourceCodex), SessionMeta{Source: SourceCodex, SessionID: "s2", RepoPath: "/Users/test/somniloq", StartedAt: "2026-03-29T10:00:00Z"}, "2026-03-29T15:00:00Z"))
+	must(t, db.InsertMessage(testInput(t, db, SourceCodex), NormalizedMessage{Source: SourceCodex, UUID: "m4", SessionID: "s2", Role: "user", Content: "auth on another day", Timestamp: "2026-03-29T10:00:00Z"}))
+	must(t, db.InsertMessage(testInput(t, db, SourceCodex), NormalizedMessage{Source: SourceCodex, UUID: "m5", SessionID: "s2", Role: "user", Content: "nothing relevant", Timestamp: "2026-03-29T10:01:00Z"}))
 	return db
 }
 
@@ -44,7 +44,7 @@ func TestSearchMessages_MatchesNewestFirstExcludingSidechain(t *testing.T) {
 
 func TestSearchMessages_LiteralMetacharacters(t *testing.T) {
 	db := testDB(t)
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "literal", RepoPath: "/Users/test/literal", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "literal", RepoPath: "/Users/test/literal", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
 	for _, message := range []NormalizedMessage{
 		{Source: SourceClaudeCode, UUID: "percent", SessionID: "literal", Role: "user", Content: "rate_100% is exact", Timestamp: "2026-03-28T10:01:00Z"},
 		{Source: SourceClaudeCode, UUID: "underscore", SessionID: "literal", Role: "user", Content: "rate_100 only", Timestamp: "2026-03-28T10:02:00Z"},
@@ -52,7 +52,7 @@ func TestSearchMessages_LiteralMetacharacters(t *testing.T) {
 		{Source: SourceClaudeCode, UUID: "combined", SessionID: "literal", Role: "user", Content: `mix%_\`, Timestamp: "2026-03-28T10:04:00Z"},
 		{Source: SourceClaudeCode, UUID: "false", SessionID: "literal", Role: "user", Content: "rateX100anything mixZZ", Timestamp: "2026-03-28T10:05:00Z"},
 	} {
-		must(t, db.InsertMessage(message))
+		must(t, db.InsertMessage(testInput(t, db, message.Source), message))
 	}
 
 	for _, tt := range []struct {
@@ -102,9 +102,9 @@ func TestSearchMessages_TimeFilterUsesMessageTimestamp(t *testing.T) {
 
 func TestSearchMessages_FiltersExcludeUnknownTimestampAndRepoPath(t *testing.T) {
 	db := testDB(t)
-	must(t, db.UpsertSession(SessionMeta{Source: SourceCursorAgent, SessionID: "unknown", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCursorAgent, UUID: "unknown-time", SessionID: "unknown", Role: "user", Content: "needle", Timestamp: ""}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceCursorAgent, UUID: "known-time", SessionID: "unknown", Role: "user", Content: "needle", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.UpsertSession(testInput(t, db, SourceCursorAgent), SessionMeta{Source: SourceCursorAgent, SessionID: "unknown", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(testInput(t, db, SourceCursorAgent), NormalizedMessage{Source: SourceCursorAgent, UUID: "unknown-time", SessionID: "unknown", Role: "user", Content: "needle", Timestamp: ""}))
+	must(t, db.InsertMessage(testInput(t, db, SourceCursorAgent), NormalizedMessage{Source: SourceCursorAgent, UUID: "known-time", SessionID: "unknown", Role: "user", Content: "needle", Timestamp: "2026-03-28T10:00:00Z"}))
 
 	rows, err := db.SearchMessages(SessionFilter{}, "needle", SearchPagination{})
 	if err != nil {
@@ -150,8 +150,8 @@ func TestSearchMessages_CombinedFiltersUseMessageTimestamp(t *testing.T) {
 
 	// This session began before the range, but its matching message is inside
 	// it. ADR 0013 requires search to filter the message timestamp instead.
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "long-brim", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "late-auth", SessionID: "long-brim", Role: "user", Content: "late auth update", Timestamp: "2026-03-28T12:00:00Z"}))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "long-brim", RepoPath: "/Users/test/Brimday", StartedAt: "2026-03-27T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "late-auth", SessionID: "long-brim", Role: "user", Content: "late auth update", Timestamp: "2026-03-28T12:00:00Z"}))
 
 	rows, err := db.SearchMessages(SessionFilter{
 		Since:    "2026-03-28T11:00:00.000Z",
@@ -171,8 +171,8 @@ func TestSearchMessages_CombinedFiltersUseMessageTimestamp(t *testing.T) {
 // .000Z, and the string comparison must still include same-second rows.
 func TestSearchMessages_TimeFiltersCompareVariableFractionalSecondsAsInstants(t *testing.T) {
 	db := testDB(t)
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "fractional", StartedAt: "2026-03-28T14:10:45.123Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "fractional-message", SessionID: "fractional", Role: "user", Content: "fractional auth", Timestamp: "2026-03-28T14:10:45.123Z"}))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "fractional", StartedAt: "2026-03-28T14:10:45.123Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "fractional-message", SessionID: "fractional", Role: "user", Content: "fractional auth", Timestamp: "2026-03-28T14:10:45.123Z"}))
 
 	for _, filter := range []struct {
 		name   string
@@ -198,14 +198,14 @@ func TestSearchMessages_TimeFiltersCompareVariableFractionalSecondsAsInstants(t 
 
 func TestSearchMessages_OrderByInstantBeforePagination(t *testing.T) {
 	db := testDB(t)
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "instant-search"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "instant-search"}, "2026-03-28T15:00:00Z"))
 	for _, message := range []NormalizedMessage{
 		{Source: SourceClaudeCode, UUID: "earliest", SessionID: "instant-search", Role: "user", Content: "instant needle", Timestamp: "2026-03-28T10:00:00+02:00"},
 		{Source: SourceClaudeCode, UUID: "tie-first", SessionID: "instant-search", Role: "user", Content: "instant needle", Timestamp: "2026-03-28T08:00:00.1Z"},
 		{Source: SourceClaudeCode, UUID: "tie-second", SessionID: "instant-search", Role: "user", Content: "instant needle", Timestamp: "2026-03-28T09:00:00.100+01:00"},
 		{Source: SourceClaudeCode, UUID: "latest", SessionID: "instant-search", Role: "user", Content: "instant needle", Timestamp: "2026-03-28T08:00:00.2Z"},
 	} {
-		must(t, db.InsertMessage(message))
+		must(t, db.InsertMessage(testInput(t, db, message.Source), message))
 	}
 
 	all, err := db.SearchMessages(SessionFilter{}, "instant needle", SearchPagination{})
@@ -231,15 +231,15 @@ func TestSearchMessages_OrderByInstantBeforePagination(t *testing.T) {
 
 func TestSearchMessages_PaginationPreservesOrderedPages(t *testing.T) {
 	db := testDB(t)
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "page-a", RepoPath: "/Users/test/Brimday"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(SessionMeta{Source: SourceCodex, SessionID: "page-b", RepoPath: "/Users/test/other"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "page-a", RepoPath: "/Users/test/Brimday"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(testInput(t, db, SourceCodex), SessionMeta{Source: SourceCodex, SessionID: "page-b", RepoPath: "/Users/test/other"}, "2026-03-28T15:00:00Z"))
 	for _, message := range []NormalizedMessage{
 		{Source: SourceClaudeCode, UUID: "old", SessionID: "page-a", Role: "user", Content: "page needle old", Timestamp: "2026-03-28T10:00:00Z"},
 		{Source: SourceClaudeCode, UUID: "tie-a", SessionID: "page-a", Role: "user", Content: "page needle tie a", Timestamp: "2026-03-28T11:00:00Z"},
 		{Source: SourceClaudeCode, UUID: "tie-b", SessionID: "page-a", Role: "user", Content: "page needle tie b", Timestamp: "2026-03-28T11:00:00Z"},
 		{Source: SourceCodex, UUID: "new", SessionID: "page-b", Role: "user", Content: "page needle new", Timestamp: "2026-03-28T12:00:00Z"},
 	} {
-		must(t, db.InsertMessage(message))
+		must(t, db.InsertMessage(testInput(t, db, message.Source), message))
 	}
 
 	all, err := db.SearchMessages(SessionFilter{}, "page needle", SearchPagination{})

@@ -15,10 +15,10 @@ func TestSessionsCmd_OutputColumns(t *testing.T) {
 	time.Local = time.UTC
 	defer func() { time.Local = oldLocal }()
 	db := newOutlineTestDB(t)
-	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
+	if err := db.UpsertSession(testInputID(t, db, core.SourceClaudeCode), core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession: %v", err)
 	}
-	if err := db.UpdateSessionTitle(core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
+	if err := db.UpdateSessionTitle(testInputID(t, db, core.SourceClaudeCode), core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionTitle: %v", err)
 	}
 	insertOutlineMessage(t, db, "sess-1", "raw-first", "user", "first\tline\nmore", "2026-03-28T14:59:00Z", false)
@@ -32,7 +32,7 @@ func TestSessionsCmd_OutputColumns(t *testing.T) {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
 	}
 
-	const want = "sess-1\t2026-03-28 15:00 ~ 2026-03-28 16:00\t2026-03-28\t/Users/test/proj\tTitle with line\t5\t86\tclaude_code\n"
+	want := fixtureREF(core.SourceClaudeCode, "sess-1") + "\t2026-03-28 15:00 ~ 2026-03-28 16:00\t2026-03-28\t/Users/test/proj\tTitle with line\t5\t86\tclaude_code\n"
 	if got := out.String(); got != want {
 		t.Errorf("TSV = %q, want %q", got, want)
 	}
@@ -66,10 +66,11 @@ func TestSessionsCmd_DayBoundaryFiltersDateOnlySinceAndDisplaysLogicalDay(t *tes
 		{Source: core.SourceClaudeCode, SessionID: "at-boundary", RepoPath: "/Users/test/proj", StartedAt: "2026-03-28T19:00:00Z", EndedAt: "2026-03-28T19:01:00Z"},
 	}
 	for _, session := range sessions {
-		if err := db.UpsertSession(session, "2026-03-29T00:00:00Z"); err != nil {
+		if err := db.UpsertSession(testInputID(t, db, session.Source), session, "2026-03-29T00:00:00Z"); err != nil {
 			t.Fatalf("UpsertSession(%s): %v", session.SessionID, err)
 		}
-		if err := db.InsertMessage(core.NormalizedMessage{
+		if err := db.InsertMessage(testInputID(t, db,
+			session.Source), core.NormalizedMessage{
 			Source:    session.Source,
 			UUID:      session.SessionID + "-m1",
 			SessionID: session.SessionID,
@@ -95,7 +96,7 @@ func TestSessionsCmd_DayBoundaryFiltersDateOnlySinceAndDisplaysLogicalDay(t *tes
 		t.Fatalf("date-only --since should exclude the pre-boundary session:\n%s", line)
 	}
 	fields := strings.Split(line, "\t")
-	if fields[0] != "at-boundary" {
+	if fields[0] != fixtureREF(core.SourceClaudeCode, "at-boundary") {
 		t.Fatalf("session column = %q, want at-boundary (line %q)", fields[0], line)
 	}
 	if fields[2] != "2026-03-29" {
@@ -115,7 +116,8 @@ func TestSessionsCmd_TimeFilterBoundaryWithSecondsPrecisionStartedAt(t *testing.
 			t.Fatalf("OpenDB: %v", err)
 		}
 		t.Cleanup(func() { db.Close() })
-		if err := db.UpsertSession(core.SessionMeta{
+		if err := db.UpsertSession(testInputID(t, db,
+			core.SourceClaudeCode), core.SessionMeta{
 			Source:    core.SourceClaudeCode,
 			SessionID: "at-boundary",
 			RepoPath:  "/Users/test/proj",
@@ -135,7 +137,7 @@ func TestSessionsCmd_TimeFilterBoundaryWithSecondsPrecisionStartedAt(t *testing.
 		if code != 0 {
 			t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
 		}
-		if !strings.HasPrefix(out.String(), "at-boundary\t") {
+		if !strings.HasPrefix(out.String(), fixtureREF(core.SourceClaudeCode, "at-boundary")+"\t") {
 			t.Fatalf("equal seconds-precision started_at must match --since boundary:\n%s", out.String())
 		}
 	})
@@ -165,7 +167,7 @@ func TestSessionsCmd_ImportedSinceFiltersUnknownStartedAt(t *testing.T) {
 		t.Fatalf("OpenDB: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceCursorAgent, SessionID: "unknown-start"}, "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpsertSession(testInputID(t, db, core.SourceCursorAgent), core.SessionMeta{Source: core.SourceCursorAgent, SessionID: "unknown-start"}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession: %v", err)
 	}
 
@@ -174,7 +176,7 @@ func TestSessionsCmd_ImportedSinceFiltersUnknownStartedAt(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("sessionsCmd = %d, %v (stderr: %q)", code, err, errOut.String())
 	}
-	if !strings.HasPrefix(out.String(), "unknown-start\t") || !strings.HasSuffix(out.String(), "\tcursor_agent\n") {
+	if !strings.HasPrefix(out.String(), fixtureREF(core.SourceCursorAgent, "unknown-start")+"\t") || !strings.HasSuffix(out.String(), "\tcursor_agent\n") {
 		t.Fatalf("output = %q, want source/session pair for the unknown-started session", out.String())
 	}
 }
@@ -198,7 +200,8 @@ func TestSessionsCmdAt_RelativeFiltersShareSubsecondNow(t *testing.T) {
 		{"at-until", "2026-03-29T12:00:00.500Z", "2026-03-29T12:00:01Z"},
 		{"before-imported-since", "2026-03-29T11:59:00.600Z", "2026-03-29T12:00:00Z"},
 	} {
-		if err := db.UpsertSession(core.SessionMeta{
+		if err := db.UpsertSession(testInputID(t, db,
+			core.SourceClaudeCode), core.SessionMeta{
 			Source:    core.SourceClaudeCode,
 			SessionID: session.id,
 			StartedAt: session.startedAt,
@@ -213,7 +216,7 @@ func TestSessionsCmdAt_RelativeFiltersShareSubsecondNow(t *testing.T) {
 	if err != nil || code != 0 {
 		t.Fatalf("sessionsCmdAt = %d, %v (stderr: %q)", code, err, errOut.String())
 	}
-	if got, want := out.String(), "included\t2026-03-29 11:59 ~\t2026-03-29\t\t\t0\t0\tclaude_code\n"; got != want {
+	if got, want := out.String(), fixtureREF(core.SourceClaudeCode, "included")+"\t2026-03-29 11:59 ~\t2026-03-29\t\t\t0\t0\tclaude_code\n"; got != want {
 		t.Errorf("output = %q, want %q", got, want)
 	}
 }
@@ -226,7 +229,8 @@ func newSessionUserMessageExclusionDB(t *testing.T) *core.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	if err := db.UpsertSession(core.SessionMeta{
+	if err := db.UpsertSession(testInputID(t, db,
+		core.SourceCodex), core.SessionMeta{
 		Source:    core.SourceCodex,
 		SessionID: "exclude-all",
 		CWD:       "/Users/test/proj",
@@ -251,7 +255,8 @@ func newSessionUserMessageExclusionDB(t *testing.T) *core.DB {
 		{"u4", "user", "follow up", "2026-03-28T15:05:00Z", false},
 	}
 	for _, m := range messages {
-		if err := db.InsertMessage(core.NormalizedMessage{
+		if err := db.InsertMessage(testInputID(t, db,
+			core.SourceCodex), core.NormalizedMessage{
 			Source:      core.SourceCodex,
 			UUID:        m.uuid,
 			SessionID:   "exclude-all",
@@ -284,7 +289,7 @@ func TestSessionsCmd_DoesNotFilterRowsByUserMessageExclusions(t *testing.T) {
 	if len(fields) != 8 {
 		t.Fatalf("fields = %d, want 8: %q", len(fields), line)
 	}
-	if fields[0] != "exclude-all" || fields[7] != "codex" {
+	if fields[0] != fixtureREF(core.SourceCodex, "exclude-all") || fields[7] != "codex" {
 		t.Errorf("session columns = %v, want included row with source in final column", fields)
 	}
 }
@@ -373,7 +378,7 @@ func TestSessionsCmd_InvalidTimestampOutputBoundaries(t *testing.T) {
 				if err != nil {
 					return nil, err
 				}
-				if err := db.UpsertSession(core.SessionMeta{Source: core.SourceCodex, SessionID: "invalid-time", StartedAt: tt.startedAt, EndedAt: tt.endedAt}, "2026-03-28T16:00:00Z"); err != nil {
+				if err := db.UpsertSession(testInputID(t, db, core.SourceCodex), core.SessionMeta{Source: core.SourceCodex, SessionID: "invalid-time", StartedAt: tt.startedAt, EndedAt: tt.endedAt}, "2026-03-28T16:00:00Z"); err != nil {
 					db.Close()
 					return nil, err
 				}

@@ -9,7 +9,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const outlineUsageLine = "somniloq outline [--source <source>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--format <fmt>] <session-id>"
+const outlineUsageLine = "somniloq outline --config default [--source <source>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--format <fmt>] <REF>"
 
 const outlineHelpDetails = `Columns (TSV, in order):
   turn: 1-based user turn number shared with show --turn and search results.
@@ -23,17 +23,17 @@ JSON fields:
 Notes:
   A turn is a user message plus following non-user messages until the next user message.
   Sidechain messages are excluded. User-message exclusions do not change turn numbers, so numbering stays aligned with show --turn.
-  --exclude-user-message-pattern may be repeated; patterns are ORed and replace config excludeUserMessagePatterns.
-  --no-exclude-user-messages disables config exclusions for this invocation and cannot be combined with pattern flags.
-  Recommended long-session flow: outline -> choose turn numbers -> show --turn N..M <session-id>.
-  --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent to select a session ID from search results.
+  --exclude-user-message-pattern may be repeated; patterns are ORed.
+  --no-exclude-user-messages disables user-message exclusions for this invocation and cannot be combined with pattern flags.
+  Recommended long-session flow: outline -> choose turn numbers -> show --turn N..M <REF>.
+  --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent to restrict the full REF source.
 
 Examples:
-  somniloq outline <session-id>
-  somniloq outline --source cursor_agent <session-id>
-  somniloq outline --exclude-user-message-pattern '^/clear' <session-id>
-  somniloq outline --format json <session-id>
-  somniloq show --turn 12..18 <session-id>`
+  somniloq outline --config default <REF>
+  somniloq outline --config default --source cursor_agent <REF>
+  somniloq outline --config default --exclude-user-message-pattern '^/clear' <REF>
+  somniloq outline --config default --format json <REF>
+  somniloq show --config default --turn 12..18 <REF>`
 
 // outlineCmd runs the outline subcommand without calling os.Exit, so it can
 // be tested directly.
@@ -80,12 +80,12 @@ func outlineCmd(args []string, openDB func() (*core.DB, error), cfg config, out,
 	}
 	defer db.Close()
 
-	session, code, err := resolveSessionByID(db, sessionID, source, errOut)
+	session, code, err := resolveSessionREF(db, sessionID, source)
 	if code != 0 {
 		return code, err
 	}
 
-	messages, err := db.GetMessages(session.Source, session.SessionID)
+	messages, err := db.GetMessages(session.InputID, session.Source, session.SessionID)
 	if err != nil {
 		return 1, err
 	}
@@ -135,10 +135,10 @@ func newOutlineFlagSet() (*flag.FlagSet, outlineFlags) {
 	var excludePatterns stringListFlag
 	flags := outlineFlags{
 		format:          fs.String("format", "tsv", "output format (tsv, json)"),
-		source:          fs.String("source", "", "source for session-id (claude_code, claude-code, codex, cursor_agent, cursor-agent)"),
-		noExclusions:    fs.Bool("no-exclude-user-messages", false, "disable configured user-message exclusions for this invocation"),
+		source:          fs.String("source", "", "restrict REF source (claude_code, claude-code, codex, cursor_agent, cursor-agent)"),
+		noExclusions:    fs.Bool("no-exclude-user-messages", false, "disable user-message exclusions for this invocation"),
 		excludePatterns: &excludePatterns,
 	}
-	fs.Var(&excludePatterns, "exclude-user-message-pattern", "exclude matching user messages (repeatable; replaces config patterns)")
+	fs.Var(&excludePatterns, "exclude-user-message-pattern", "exclude matching user messages (repeatable; OR)")
 	return fs, flags
 }

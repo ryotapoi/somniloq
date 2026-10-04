@@ -18,13 +18,14 @@ func scanJSONLFiles(projectsDir string) ([]string, []error) {
 	return claudecode.NewAdapter(ResolveRepoPath).ScanFiles(projectsDir)
 }
 
-func newImportTransaction(db *DB) ingest.NewImportTransaction {
+func newImportTransaction(t *testing.T, db *DB, source Source) ingest.NewImportTransaction {
+	inputID := testInput(t, db, source)
 	return func() (ingest.ImportTransaction, error) {
 		tx, err := db.Begin()
 		if err != nil {
 			return nil, err
 		}
-		return importTx{tx: tx}, nil
+		return importTx{tx: tx, inputID: inputID}, nil
 	}
 }
 
@@ -49,7 +50,7 @@ func (a *failingFileAdapter) ProcessFile(_ ingest.NewImportTransaction, path str
 
 func TestImportWithAdapter_StatFailureContinues(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 	missingPath := filepath.Join(dir, "missing.jsonl")
 	successPath := filepath.Join(dir, "success.jsonl")
 	if err := os.WriteFile(successPath, nil, 0o644); err != nil {
@@ -57,7 +58,7 @@ func TestImportWithAdapter_StatFailureContinues(t *testing.T) {
 	}
 	adapter := &failingFileAdapter{files: []string{missingPath, successPath}}
 
-	result, err := importWithAdapter(db, dir, adapter)
+	result, err := importWithAdapter(db, testInput(t, db, SourceClaudeCode), dir, adapter, "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("importWithAdapter failed: %v", err)
 	}
@@ -77,7 +78,7 @@ func TestImportWithAdapter_StatFailureContinues(t *testing.T) {
 
 func TestImportWithAdapter_ProcessFileFailureContinues(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 	failPath := filepath.Join(dir, "fail.jsonl")
 	successPath := filepath.Join(dir, "success.jsonl")
 	for _, path := range []string{failPath, successPath} {
@@ -88,7 +89,7 @@ func TestImportWithAdapter_ProcessFileFailureContinues(t *testing.T) {
 	processErr := errors.New("process failure")
 	adapter := &failingFileAdapter{files: []string{failPath, successPath}, failPath: failPath, failErr: processErr}
 
-	result, err := importWithAdapter(db, dir, adapter)
+	result, err := importWithAdapter(db, testInput(t, db, SourceClaudeCode), dir, adapter, "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("importWithAdapter failed: %v", err)
 	}
@@ -106,13 +107,13 @@ func TestImportWithAdapter_ProcessFileFailureContinues(t *testing.T) {
 	}
 }
 
-func processFile(db *DB, path string, offset, fileSize int64, importedAt string) error {
-	_, err := claudecode.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db), path, offset, fileSize, importedAt)
+func processFile(t *testing.T, db *DB, path string, offset, fileSize int64, importedAt string) error {
+	_, err := claudecode.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(t, db, SourceClaudeCode), path, offset, fileSize, importedAt)
 	return err
 }
 
 func TestScanJSONLFiles(t *testing.T) {
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	projA := filepath.Join(dir, "-Users-test-projA")
 	projB := filepath.Join(dir, "-Users-test-projB")
@@ -153,7 +154,7 @@ func TestScanJSONLFiles(t *testing.T) {
 
 func TestProcessFile(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	jsonl := `{"type":"user","uuid":"u1","parentUuid":"p1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
 {"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"hi there"}]}}
@@ -162,7 +163,7 @@ func TestProcessFile(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
+	err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
@@ -186,7 +187,7 @@ func TestProcessFile(t *testing.T) {
 
 func TestProcessFile_ResolvesRepoPath(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/Users/test/projA/.claude/worktrees/feature-x","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
 {"type":"user","uuid":"u2","sessionId":"s2","timestamp":"2026-03-28T14:01:00Z","cwd":"/Users/test/projB/.claude/worktrees/feature-y","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"world"}}
@@ -195,7 +196,7 @@ func TestProcessFile_ResolvesRepoPath(t *testing.T) {
 	path := filepath.Join(dir, "s.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+	if err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
 
@@ -226,7 +227,7 @@ func TestProcessFile_ResolvesRepoPath(t *testing.T) {
 
 func TestImport_CountsUnparsedLines(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	projDir := filepath.Join(dir, "-Users-test-proj")
 	os.MkdirAll(projDir, 0o755)
@@ -241,7 +242,7 @@ func TestImport_CountsUnparsedLines(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	res, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode})
 	if err != nil {
 		t.Fatalf("Import failed: %v", err)
 	}
@@ -300,7 +301,7 @@ func TestImportResultAdd_CapsDiagnosticsAcrossBatches(t *testing.T) {
 
 func TestImport_ReportsClaudeCodeDiagnosticLineAfterOffset(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 	projDir := filepath.Join(dir, "-Users-test-proj")
 	if err := os.MkdirAll(projDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -310,14 +311,14 @@ func TestImport_ReportsClaudeCodeDiagnosticLineAfterOffset(t *testing.T) {
 	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("initial Import failed: %v", err)
 	}
 	if err := os.WriteFile(path, []byte(first+"{broken json\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	res, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode})
 	if err != nil {
 		t.Fatalf("incremental Import failed: %v", err)
 	}
@@ -335,7 +336,7 @@ func TestImport_ReportsClaudeCodeDiagnosticLineAfterOffset(t *testing.T) {
 
 func TestImport_ReportsClaudeCodeDiagnosticOnUnterminatedPrefixLine(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 	projDir := filepath.Join(dir, "-Users-test-proj")
 	if err := os.MkdirAll(projDir, 0o755); err != nil {
 		t.Fatal(err)
@@ -345,14 +346,14 @@ func TestImport_ReportsClaudeCodeDiagnosticOnUnterminatedPrefixLine(t *testing.T
 	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("initial Import failed: %v", err)
 	}
 	if err := os.WriteFile(path, []byte(first+"{broken json\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	res, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode})
 	if err != nil {
 		t.Fatalf("incremental Import failed: %v", err)
 	}
@@ -370,16 +371,16 @@ func TestImport_ReportsClaudeCodeDiagnosticOnUnterminatedPrefixLine(t *testing.T
 
 func TestProcessFile_EmptyFile(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	path := filepath.Join(dir, "empty.jsonl")
 	os.WriteFile(path, []byte(""), 0o644)
 
-	err := processFile(db, path, 0, 0, "2026-03-28T15:00:00Z")
+	err := processFile(t, db, path, 0, 0, "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
-	state, err := db.GetImportState(path)
+	state, err := db.GetImportState(testOnlyInput(t, db), path)
 	if err != nil {
 		t.Fatalf("GetImportState failed: %v", err)
 	}
@@ -390,7 +391,7 @@ func TestProcessFile_EmptyFile(t *testing.T) {
 
 func TestProcessFile_SkipsEmptyContent(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	// tool_use only message: ExtractText returns "" for this content
 	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
@@ -399,7 +400,7 @@ func TestProcessFile_SkipsEmptyContent(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
+	err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
@@ -425,7 +426,7 @@ func TestProcessFile_SkipsEmptyContent(t *testing.T) {
 
 func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
 {"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":"   \n  "}}
@@ -433,7 +434,7 @@ func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
 	path := filepath.Join(dir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
+	err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
@@ -449,7 +450,7 @@ func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
 
 func TestImport_FileShrink(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	projDir := filepath.Join(dir, "-test-proj")
 	os.MkdirAll(projDir, 0o755)
@@ -460,7 +461,7 @@ func TestImport_FileShrink(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("first Import failed: %v", err)
 	}
 
@@ -469,7 +470,7 @@ func TestImport_FileShrink(t *testing.T) {
 `
 	os.WriteFile(path, []byte(smallJsonl), 0o644)
 
-	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	res, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode})
 	if err != nil {
 		t.Fatalf("Import after shrink failed: %v", err)
 	}
@@ -486,7 +487,7 @@ func TestImport_FileShrink(t *testing.T) {
 		t.Errorf("expected 3 messages (orphans retained), got %d", count)
 	}
 
-	state, err := db.GetImportState(path)
+	state, err := db.GetImportState(testOnlyInput(t, db), path)
 	if err != nil {
 		t.Fatalf("GetImportState: %v", err)
 	}
@@ -500,9 +501,9 @@ func TestImport_FileShrink(t *testing.T) {
 
 func TestImport_AllSources(t *testing.T) {
 	db := testDB(t)
-	claudeRoot := t.TempDir()
-	codexRoot := t.TempDir()
-	cursorRoot := t.TempDir()
+	claudeRoot := testTempDir(t)
+	codexRoot := testTempDir(t)
+	cursorRoot := testTempDir(t)
 
 	claudeProjectDir := filepath.Join(claudeRoot, "-test-claude")
 	if err := os.MkdirAll(claudeProjectDir, 0o755); err != nil {
@@ -534,11 +535,9 @@ func TestImport_AllSources(t *testing.T) {
 		t.Fatalf("WriteFile Cursor JSONL failed: %v", err)
 	}
 
-	result, err := Import(db, ImportOptions{
-		ProjectsDir:       claudeRoot,
-		CodexSessionsDir:  codexRoot,
-		CursorProjectsDir: cursorRoot,
-		Source:            ImportSourceAll,
+	result, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: claudeRoot}, {Source: SourceCodex, Root: codexRoot}, {Source: SourceCursorAgent, Root: cursorRoot}},
+
+		Source: ImportSourceAll,
 	})
 	if err != nil {
 		t.Fatalf("Import failed: %v", err)
@@ -567,8 +566,8 @@ func TestImport_AllSources(t *testing.T) {
 
 func TestImport_InvalidSourceDoesNotDelete(t *testing.T) {
 	db := testDB(t)
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "kept"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "kept"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{
 		Source:    SourceClaudeCode,
 		UUID:      "kept-message",
 		SessionID: "kept",
@@ -628,7 +627,7 @@ func TestScanJSONLFiles_UnreadableProjectDirIsNonFatal(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("permission checks do not apply to root")
 	}
-	dir := t.TempDir()
+	dir := testTempDir(t)
 	projA := filepath.Join(dir, "-Users-test-projA")
 	os.MkdirAll(projA, 0o755)
 	os.WriteFile(filepath.Join(projA, "sess1.jsonl"), []byte("{}"), 0o644)
@@ -659,7 +658,7 @@ func TestImport_ScanErrorsAreNonFatal(t *testing.T) {
 		t.Skip("permission checks do not apply to root")
 	}
 	db := testDB(t)
-	projectsDir := t.TempDir()
+	projectsDir := testTempDir(t)
 	projA := filepath.Join(projectsDir, "-Users-test-projA")
 	os.MkdirAll(projA, 0o755)
 	jsonl := `{"type":"user","uuid":"u1","parentUuid":null,"sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
@@ -672,11 +671,7 @@ func TestImport_ScanErrorsAreNonFatal(t *testing.T) {
 	}
 	t.Cleanup(func() { os.Chmod(projBad, 0o755) })
 
-	result, err := Import(db, ImportOptions{
-		ProjectsDir:      projectsDir,
-		CodexSessionsDir: filepath.Join(projectsDir, "no-codex-sessions"),
-		Source:           ImportSourceAll,
-	})
+	result, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: projectsDir}, {Source: SourceCodex, Root: filepath.Join(projectsDir, "no-codex-sessions")}}, Source: ImportSourceAll})
 	if err != nil {
 		t.Fatalf("Import failed: %v", err)
 	}
@@ -693,14 +688,14 @@ func TestImport_ScanErrorsAreNonFatal(t *testing.T) {
 
 func TestProcessFile_MetaOnly_NoSessionRow(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	jsonl := `{"type":"custom-title","customTitle":"meta only","sessionId":"meta1"}
 `
 	path := filepath.Join(dir, "meta1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+	if err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
 
@@ -715,14 +710,14 @@ func TestProcessFile_MetaOnly_NoSessionRow(t *testing.T) {
 
 func TestProcessFile_AgentNameOnly_NoSessionRow(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	jsonl := `{"type":"agent-name","agentName":"orphan","sessionId":"meta1"}
 `
 	path := filepath.Join(dir, "meta1.jsonl")
 	os.WriteFile(path, []byte(jsonl), 0o644)
 
-	if err := processFile(db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+	if err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("processFile failed: %v", err)
 	}
 
@@ -740,7 +735,7 @@ func TestImport_MetaBeforeBody_AcrossInvocations(t *testing.T) {
 	// advance, so a later Import that sees a body record can re-read the meta
 	// from offset 0 and apply the title/agent_name to the freshly created row.
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	projDir := filepath.Join(dir, "-test-proj")
 	os.MkdirAll(projDir, 0o755)
@@ -751,13 +746,13 @@ func TestImport_MetaBeforeBody_AcrossInvocations(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(metaOnly), 0o644)
 
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("first Import failed: %v", err)
 	}
 
 	// import_state for a meta-only file must remain unset, so the next Import
 	// re-reads from offset 0 once the body is appended.
-	state, err := db.GetImportState(path)
+	state, err := db.GetImportState(testOnlyInput(t, db), path)
 	if err != nil {
 		t.Fatalf("GetImportState failed: %v", err)
 	}
@@ -769,7 +764,7 @@ func TestImport_MetaBeforeBody_AcrossInvocations(t *testing.T) {
 `
 	os.WriteFile(path, []byte(appended), 0o644)
 
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("second Import failed: %v", err)
 	}
 
@@ -787,7 +782,7 @@ func TestImport_MetaBeforeBody_AcrossInvocations(t *testing.T) {
 
 func TestImport_MetaAfterBody_AcrossInvocations(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	projDir := filepath.Join(dir, "-test-proj")
 	os.MkdirAll(projDir, 0o755)
@@ -797,7 +792,7 @@ func TestImport_MetaAfterBody_AcrossInvocations(t *testing.T) {
 	path := filepath.Join(projDir, "s1.jsonl")
 	os.WriteFile(path, []byte(body), 0o644)
 
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("first Import failed: %v", err)
 	}
 
@@ -806,7 +801,7 @@ func TestImport_MetaAfterBody_AcrossInvocations(t *testing.T) {
 `
 	os.WriteFile(path, []byte(appended), 0o644)
 
-	if _, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode}); err != nil {
 		t.Fatalf("second Import failed: %v", err)
 	}
 
@@ -834,12 +829,12 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 		t.Fatal(err)
 	}
 	db := testDB(t)
-	claudeRoot, codexRoot := t.TempDir(), t.TempDir()
+	claudeRoot, codexRoot := testTempDir(t), testTempDir(t)
 	project := filepath.Join(claudeRoot, "project")
 	if err := os.Mkdir(project, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	other := t.TempDir()
+	other := testTempDir(t)
 	for i, cwd := range []string{sub, worktree, other} {
 		claude := fmt.Sprintf(`{"type":"user","uuid":"u%d","sessionId":"claude-%d","timestamp":"2026-05-01T00:00:00Z","cwd":%q,"message":{"role":"user","content":"hello"}}`+"\n", i, i, cwd)
 		codex := fmt.Sprintf(`{"timestamp":"2026-05-01T00:00:00Z","type":"session_meta","payload":{"id":"codex-%d","cwd":%q}}
@@ -858,7 +853,7 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 	t.Setenv("GIT_DIR", strings.TrimRight(string(foreignGitDir), "\r\n"))
 	t.Setenv("GIT_WORK_TREE", foreignWorktree)
 	t.Setenv("GIT_COMMON_DIR", filepath.Join(foreignRepo, ".git"))
-	result, err := Import(db, ImportOptions{ProjectsDir: claudeRoot, CodexSessionsDir: codexRoot, CursorProjectsDir: t.TempDir(), Source: ImportSourceAll})
+	result, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: claudeRoot}, {Source: SourceCodex, Root: codexRoot}, {Source: SourceCursorAgent, Root: testTempDir(t)}}, Source: ImportSourceAll})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -882,7 +877,7 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 	if _, err := db.db.Exec("UPDATE sessions SET repo_path=? WHERE session_id IN ('claude-1', 'codex-1')", foreignRepo); err != nil {
 		t.Fatal(err)
 	}
-	opts := ImportOptions{ProjectsDir: claudeRoot, CodexSessionsDir: codexRoot, CursorProjectsDir: t.TempDir(), Source: ImportSourceAll}
+	opts := ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: claudeRoot}, {Source: SourceCodex, Root: codexRoot}, {Source: SourceCursorAgent, Root: testTempDir(t)}}, Source: ImportSourceAll}
 	result, err = Import(db, opts)
 	if err != nil || result.FilesSkipped != 6 {
 		t.Fatalf("unchanged import: %+v, %v", result, err)
@@ -942,7 +937,7 @@ func TestImport_LinkedWorktreeProjects(t *testing.T) {
 
 func TestImport_ClaudeCodeMissingIDs(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 	projDir := filepath.Join(dir, "-test-proj")
 	must(t, os.MkdirAll(projDir, 0o755))
 	path := filepath.Join(projDir, "s1.jsonl")
@@ -954,7 +949,7 @@ func TestImport_ClaudeCodeMissingIDs(t *testing.T) {
 {"type":"assistant","sessionId":null,"uuid":"bad-assistant","message":{"role":"assistant","content":"bad"}}
 ` + after
 	must(t, os.WriteFile(path, []byte(jsonl), 0o644))
-	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	res, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode})
 	must(t, err)
 	if res.FilesImported != 1 || res.FilesFailed != 0 || len(res.Errors) != 0 || res.UnparsedLines != 4 || len(res.UnparsedDiagnostics) != 4 {
 		t.Fatalf("Import result: %+v", res)
@@ -1000,7 +995,7 @@ func TestImport_ClaudeCodeMissingIDs(t *testing.T) {
 	duplicate := strings.Replace(before, `"before"`, `"replacement"`, 1)
 	appended := jsonl + duplicate + `{"type":"user","uuid":"u2","sessionId":"s1","timestamp":"2026-03-28T14:02:00Z","message":{"role":"user","content":"appended"}}` + "\n"
 	must(t, os.WriteFile(path, []byte(appended), 0o644))
-	res, err = Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	res, err = Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode})
 	must(t, err)
 	if res.FilesImported != 1 || res.FilesFailed != 0 || len(res.Errors) != 0 || res.UnparsedLines != 0 {
 		t.Fatalf("incremental Import result: %+v", res)
@@ -1010,13 +1005,13 @@ func TestImport_ClaudeCodeMissingIDs(t *testing.T) {
 
 func TestImport_ClaudeCodeInvalidIDsOnly(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 	projDir := filepath.Join(dir, "-test-proj")
 	must(t, os.MkdirAll(projDir, 0o755))
 	path := filepath.Join(projDir, "invalid.jsonl")
 	must(t, os.WriteFile(path, []byte(`{"type":"user","sessionId":"new-session","message":{"role":"user","content":""}}
 `), 0o644))
-	res, err := Import(db, ImportOptions{ProjectsDir: dir, Source: ImportSourceClaudeCode})
+	res, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: dir}}, Source: ImportSourceClaudeCode})
 	must(t, err)
 	if res.UnparsedLines != 1 || res.FilesFailed != 0 || len(res.Errors) != 0 {
 		t.Fatalf("Import result: %+v", res)
@@ -1028,7 +1023,7 @@ func TestImport_ClaudeCodeInvalidIDsOnly(t *testing.T) {
 			t.Errorf("%s = %d, want 0", table, count)
 		}
 	}
-	state, err := db.GetImportState(path)
+	state, err := db.GetImportState(testOnlyInput(t, db), path)
 	must(t, err)
 	if state != nil {
 		t.Fatalf("invalid-only file advanced body save boundary: %+v", state)

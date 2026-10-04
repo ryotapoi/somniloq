@@ -25,6 +25,7 @@ func validateFormat(format string, supported ...string) error {
 // empty — so consumers get a stable schema.
 
 type sessionJSON struct {
+	REF          string `json:"ref"`
 	Source       string `json:"source"`
 	SessionID    string `json:"sessionId"`
 	Project      string `json:"project"`
@@ -49,6 +50,7 @@ type outlineEntryJSON struct {
 }
 
 type searchJSON struct {
+	REF       string `json:"ref"`
 	Source    string `json:"source"`
 	SessionID string `json:"sessionId"`
 	Turn      int    `json:"turn"`
@@ -64,6 +66,7 @@ type messageJSON struct {
 }
 
 type showSessionJSON struct {
+	REF       string        `json:"ref"`
 	Source    string        `json:"source"`
 	SessionID string        `json:"sessionId"`
 	Project   string        `json:"project"`
@@ -75,6 +78,7 @@ type showSessionJSON struct {
 
 func newSessionJSON(r core.SessionRow, project, logicalDay string) sessionJSON {
 	return sessionJSON{
+		REF:          r.REF,
 		Source:       string(r.Source),
 		SessionID:    r.SessionID,
 		Project:      project,
@@ -93,6 +97,7 @@ func newShowSessionJSON(r core.SessionRow, project string, messages []core.Messa
 		msgs[i] = messageJSON{Role: m.Role, Content: m.Content, Timestamp: m.Timestamp}
 	}
 	return showSessionJSON{
+		REF:       r.REF,
 		Source:    string(r.Source),
 		SessionID: r.SessionID,
 		Project:   project,

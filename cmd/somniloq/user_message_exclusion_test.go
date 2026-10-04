@@ -72,7 +72,8 @@ func newUserMessageExclusionDB(t *testing.T) *core.DB {
 		t.Fatalf("OpenDB: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := db.UpsertSession(core.SessionMeta{
+	if err := db.UpsertSession(testInputID(t, db,
+		core.SourceClaudeCode), core.SessionMeta{
 		Source:    core.SourceClaudeCode,
 		SessionID: "exclude-1",
 		RepoPath:  "/Users/test/proj",
@@ -104,7 +105,7 @@ func TestUserMessageExclusionsShareOutlineAndSummaryFiltering(t *testing.T) {
 	}}
 
 	var outlineOut, errOut bytes.Buffer
-	code, err := outlineCmd([]string{"--format", "json", "exclude-1"}, staticDB(newUserMessageExclusionDB(t)), cfg, &outlineOut, &errOut)
+	code, err := outlineCmd([]string{"--format", "json", fixtureREF(core.SourceClaudeCode, "exclude-1")}, staticDB(newUserMessageExclusionDB(t)), cfg, &outlineOut, &errOut)
 	if err != nil || code != 0 {
 		t.Fatalf("outlineCmd = (%d, %v), stderr %q", code, err, errOut.String())
 	}
@@ -120,7 +121,7 @@ func TestUserMessageExclusionsShareOutlineAndSummaryFiltering(t *testing.T) {
 	}
 
 	var summaryOut bytes.Buffer
-	code, err = showCmd([]string{"--summary", "2", "--format", "json", "exclude-1"}, staticDB(newUserMessageExclusionDB(t)), cfg, &summaryOut, &errOut)
+	code, err = showCmd([]string{"--summary", "2", "--format", "json", fixtureREF(core.SourceClaudeCode, "exclude-1")}, staticDB(newUserMessageExclusionDB(t)), cfg, &summaryOut, &errOut)
 	if err != nil || code != 0 {
 		t.Fatalf("show summary = (%d, %v), stderr %q", code, err, errOut.String())
 	}
@@ -137,8 +138,7 @@ func TestUserMessageExclusionsShareOutlineAndSummaryFiltering(t *testing.T) {
 	code, err = outlineCmd([]string{
 		"--format", "json",
 		"--exclude-user-message-pattern", `^ignore this\nsecond line$`,
-		"--exclude-user-message-pattern", `^<local-command-caveat>`,
-		"exclude-1",
+		"--exclude-user-message-pattern", `^<local-command-caveat>`, fixtureREF(core.SourceClaudeCode, "exclude-1"),
 	}, staticDB(newUserMessageExclusionDB(t)), config{ExcludeUserMessagePatterns: []string{`.*`}}, &overriddenOut, &errOut)
 	if err != nil || code != 0 {
 		t.Fatalf("outline override = (%d, %v), stderr %q", code, err, errOut.String())
@@ -158,7 +158,8 @@ func TestShowSummaryMaxIntLimitWithOneUserMessage(t *testing.T) {
 		t.Fatalf("OpenDB: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if err := db.UpsertSession(core.SessionMeta{
+	if err := db.UpsertSession(testInputID(t, db,
+		core.SourceClaudeCode), core.SessionMeta{
 		Source:    core.SourceClaudeCode,
 		SessionID: "one-message",
 		StartedAt: "2026-03-28T10:00:00Z",
@@ -169,7 +170,7 @@ func TestShowSummaryMaxIntLimitWithOneUserMessage(t *testing.T) {
 
 	maxInt := int(^uint(0) >> 1)
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--summary", strconv.Itoa(maxInt), "--format", "json", "one-message"}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--summary", strconv.Itoa(maxInt), "--format", "json", fixtureREF(core.SourceClaudeCode, "one-message")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil || code != 0 {
 		t.Fatalf("showCmd with max-int summary = (%d, %v), stderr %q", code, err, errOut.String())
 	}
@@ -190,9 +191,9 @@ func TestUserMessageExclusionScopeAndLegacyBehavior(t *testing.T) {
 		args       []string
 		wantMarkup string
 	}{
-		{[]string{"--format", "json", "exclude-1"}, "ignore this"},
-		{[]string{"--format", "json", "--turn", "1", "exclude-1"}, "ignore this"},
-		{[]string{"--format", "json", "--tail", "1", "exclude-1"}, "final request"},
+		{[]string{"--format", "json", fixtureREF(core.SourceClaudeCode, "exclude-1")}, "ignore this"},
+		{[]string{"--format", "json", "--turn", "1", fixtureREF(core.SourceClaudeCode, "exclude-1")}, "ignore this"},
+		{[]string{"--format", "json", "--tail", "1", fixtureREF(core.SourceClaudeCode, "exclude-1")}, "final request"},
 	} {
 		var out, errOut bytes.Buffer
 		code, err := showCmd(tt.args, staticDB(newUserMessageExclusionDB(t)), cfg, &out, &errOut)
@@ -217,7 +218,7 @@ func TestUserMessageExclusionScopeAndLegacyBehavior(t *testing.T) {
 	}
 
 	var defaultSummary bytes.Buffer
-	code, err = showCmd([]string{"--summary", "5", "--format", "json", "exclude-1"}, staticDB(newUserMessageExclusionDB(t)), config{}, &defaultSummary, &bytes.Buffer{})
+	code, err = showCmd([]string{"--summary", "5", "--format", "json", fixtureREF(core.SourceClaudeCode, "exclude-1")}, staticDB(newUserMessageExclusionDB(t)), config{}, &defaultSummary, &bytes.Buffer{})
 	if err != nil || code != 0 {
 		t.Fatalf("unconfigured summary = (%d, %v)", code, err)
 	}
@@ -227,7 +228,7 @@ func TestUserMessageExclusionScopeAndLegacyBehavior(t *testing.T) {
 	}
 
 	var disabledSummary bytes.Buffer
-	code, err = showCmd([]string{"--summary", "5", "--no-exclude-user-messages", "--format", "json", "exclude-1"}, staticDB(newUserMessageExclusionDB(t)), config{ExcludeUserMessagePatterns: []string{`.*`}}, &disabledSummary, &bytes.Buffer{})
+	code, err = showCmd([]string{"--summary", "5", "--no-exclude-user-messages", "--format", "json", fixtureREF(core.SourceClaudeCode, "exclude-1")}, staticDB(newUserMessageExclusionDB(t)), config{ExcludeUserMessagePatterns: []string{`.*`}}, &disabledSummary, &bytes.Buffer{})
 	if err != nil || code != 0 {
 		t.Fatalf("disabled summary = (%d, %v)", code, err)
 	}
@@ -237,7 +238,7 @@ func TestUserMessageExclusionScopeAndLegacyBehavior(t *testing.T) {
 	}
 
 	var allExcludedOut bytes.Buffer
-	code, err = showCmd([]string{"--summary", "1", "--exclude-user-message-pattern", "", "--format", "json", "exclude-1"}, staticDB(newUserMessageExclusionDB(t)), config{}, &allExcludedOut, &bytes.Buffer{})
+	code, err = showCmd([]string{"--summary", "1", "--exclude-user-message-pattern", "", "--format", "json", fixtureREF(core.SourceClaudeCode, "exclude-1")}, staticDB(newUserMessageExclusionDB(t)), config{}, &allExcludedOut, &bytes.Buffer{})
 	if err != nil || code != 0 {
 		t.Fatalf("all-excluded summary = (%d, %v)", code, err)
 	}
@@ -247,7 +248,7 @@ func TestUserMessageExclusionScopeAndLegacyBehavior(t *testing.T) {
 	}
 
 	var emptyRegexOut bytes.Buffer
-	code, err = outlineCmd([]string{"--format", "json", "--exclude-user-message-pattern", "", "exclude-1"}, staticDB(newUserMessageExclusionDB(t)), config{}, &emptyRegexOut, &bytes.Buffer{})
+	code, err = outlineCmd([]string{"--format", "json", "--exclude-user-message-pattern", "", fixtureREF(core.SourceClaudeCode, "exclude-1")}, staticDB(newUserMessageExclusionDB(t)), config{}, &emptyRegexOut, &bytes.Buffer{})
 	if err != nil || code != 0 || emptyRegexOut.String() != "[]\n" {
 		t.Errorf("empty regex outline = (%d, %v, %q), want successful empty output", code, err, emptyRegexOut.String())
 	}

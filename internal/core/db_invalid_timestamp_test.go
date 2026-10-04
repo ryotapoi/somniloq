@@ -14,7 +14,7 @@ func TestInvalidSavedTimestampsRemainReadable(t *testing.T) {
 		{Source: SourceClaudeCode, SessionID: "invalid", RepoPath: "/invalid", StartedAt: "bad-start", EndedAt: "bad-end"},
 		{Source: SourceClaudeCode, SessionID: "valid", RepoPath: "/valid", StartedAt: "2026-03-28T09:00:00.5Z", EndedAt: "2026-03-28T09:30:00Z"},
 	} {
-		must(t, db.UpsertSession(s, "2026-03-28T10:00:00Z"))
+		must(t, db.UpsertSession(testInput(t, db, s.Source), s, "2026-03-28T10:00:00Z"))
 	}
 	for _, m := range []NormalizedMessage{
 		{Source: SourceClaudeCode, SessionID: "invalid", UUID: "bad-1", Role: "user", Content: "needle bad one", Timestamp: "bad-message"},
@@ -22,7 +22,7 @@ func TestInvalidSavedTimestampsRemainReadable(t *testing.T) {
 		{Source: SourceClaudeCode, SessionID: "invalid", UUID: "early", Role: "user", Content: "needle early", Timestamp: "2026-03-28T10:00:00+02:00"},
 		{Source: SourceClaudeCode, SessionID: "valid", UUID: "valid", Role: "user", Content: "needle valid", Timestamp: "2026-03-28T09:00:00.5Z"},
 	} {
-		must(t, db.InsertMessage(m))
+		must(t, db.InsertMessage(testInput(t, db, m.Source), m))
 	}
 	must(t, db.Close())
 	// Reopen persisted values without reimporting or repairing them.
@@ -39,7 +39,7 @@ func TestInvalidSavedTimestampsRemainReadable(t *testing.T) {
 	if !reflect.DeepEqual(projects, []ProjectRow{{RepoPath: "/valid", SessionCount: 1}, {RepoPath: "/invalid", SessionCount: 1}}) {
 		t.Fatalf("projects = %+v", projects)
 	}
-	messages, err := db.GetMessages(SourceClaudeCode, "invalid")
+	messages, err := db.GetMessages(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "invalid")
 	must(t, err)
 	want := []MessageRow{
 		{UUID: "bad-1", Role: "user", Content: "needle bad one", Timestamp: "bad-message"},
@@ -100,9 +100,9 @@ func TestSessionUpsertInvalidTimestampsDoNotDisplaceValidRange(t *testing.T) {
 				sequence = []SessionMeta{valid, invalid, valid}
 			}
 			for _, s := range sequence {
-				must(t, db.UpsertSession(s, "2026-03-28T10:00:00Z"))
+				must(t, db.UpsertSession(testInput(t, db, s.Source), s, "2026-03-28T10:00:00Z"))
 			}
-			row, err := db.GetSession(SourceClaudeCode, "mixed")
+			row, err := db.GetSession(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "mixed")
 			must(t, err)
 			if row.StartedAt != valid.StartedAt || row.EndedAt != valid.EndedAt {
 				t.Fatalf("range = %+v", row)

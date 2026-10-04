@@ -10,37 +10,37 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const showUsageLine = "somniloq show [--source <source>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>] <session-id>\n" +
-	"  somniloq show [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>]"
+const showUsageLine = "somniloq show --config default [--source <source>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>] <REF>\n" +
+	"  somniloq show --config default [--since <time>] [--until <time>] [--project <name>] [--turn <N|N..M>] [--tail <N>] [--summary <N>] [--exclude-user-message-pattern <regex>] [--no-exclude-user-messages] [--short] [--format <fmt>]"
 
 const showHelpDetails = `Output (markdown):
   One or more sessions. Each session has a title, Session, Source, Project, Started metadata, then message sections headed by role.
   Multiple sessions in time-range mode are separated by ---.
 
 JSON fields:
-  source, sessionId, project, title, startedAt, endedAt, messages
+  ref, source, sessionId, project, title, startedAt, endedAt, messages
   messages fields: role, content, timestamp
 
 Notes:
-  Flags must come before <session-id>.
+  Flags must come before <REF>.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   Unknown or invalid stored start times do not match time filters.
-  Use either <session-id> or --since/--until. --project only applies in time-range mode.
+  Use either a full <REF> or --since/--until. --project only applies in time-range mode.
   --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
-  --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent with <session-id>; it cannot be used with --since/--until.
-  --summary N shows the first N user messages per session after applying excludeUserMessagePatterns.
-  --exclude-user-message-pattern may be repeated; patterns are ORed and replace config patterns.
-  --no-exclude-user-messages disables config exclusions for this invocation. Either exclusion flag requires --summary >= 1.
+  --source accepts claude_code|claude-code|codex|cursor_agent|cursor-agent with <REF>; it cannot be used with --since/--until.
+  --summary N shows the first N user messages per session after applying command-line exclusion patterns.
+  --exclude-user-message-pattern may be repeated; patterns are ORed.
+  --no-exclude-user-messages disables user-message exclusions for this invocation. Either exclusion flag requires --summary >= 1.
   --turn N or --turn N..M shows inclusive turn ranges; --tail N shows the last N turns.
   --turn and --tail share outline numbering and cannot be combined with --summary.
-  If a session_id exists in multiple sources, use --source with the source shown by search; without it, show prints an ambiguity error with source/session candidates.
+  Only full slq1 references from sessions/search are accepted; --source restricts the reference source.
 
 Examples:
-  somniloq show --summary 1 --since 24h --short
-  somniloq show --summary 1 --exclude-user-message-pattern '^<command-name>/clear</command-name>' --since 24h
-  somniloq show --turn 40..60 <session-id>
-  somniloq show --source codex <session-id>
-  somniloq show --format json --tail 3 <session-id>`
+  somniloq show --config default --summary 1 --since 24h --short
+  somniloq show --config default --summary 1 --exclude-user-message-pattern '^<command-name>/clear</command-name>' --since 24h
+  somniloq show --config default --turn 40..60 <REF>
+  somniloq show --config default --source codex <REF>
+  somniloq show --config default --format json --tail 3 <REF>`
 
 // showCmd runs the show subcommand without calling os.Exit, so it can be
 // tested directly.
@@ -109,10 +109,10 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	}
 
 	if sessionID != "" && (*flags.since != "" || *flags.until != "") {
-		return 1, errors.New("specify either session-id or --since/--until, not both")
+		return 1, errors.New("specify either REF or --since/--until, not both")
 	}
 	if source != nil && sessionID == "" {
-		return 1, errors.New("--source requires session-id and cannot be combined with --since/--until")
+		return 1, errors.New("--source requires REF and cannot be combined with --since/--until")
 	}
 	if sessionID == "" && *flags.since == "" && *flags.until == "" {
 		fmt.Fprintln(errOut, showUsage)
@@ -127,7 +127,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 	var sessions []core.SessionRow
 	if sessionID != "" {
-		session, code, err := resolveSessionByID(db, sessionID, source, errOut)
+		session, code, err := resolveSessionREF(db, sessionID, source)
 		if code != 0 {
 			return code, err
 		}
@@ -156,12 +156,12 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 
 		var messages []core.MessageRow
 		if *flags.summary >= 1 {
-			messages, err = db.GetMessages(session.Source, session.SessionID)
+			messages, err = db.GetMessages(session.InputID, session.Source, session.SessionID)
 			if err == nil {
 				messages = filterSummaryMessages(messages, *flags.summary, matcher)
 			}
 		} else {
-			messages, err = db.GetMessages(session.Source, session.SessionID)
+			messages, err = db.GetMessages(session.InputID, session.Source, session.SessionID)
 			if err == nil && turnFiltered {
 				// Turn filtering must run on the full GetMessages output so the
 				// numbers match outline (see assignTurns).
@@ -205,7 +205,7 @@ type showFlags struct {
 func newShowFlagSet() (*flag.FlagSet, showFlags) {
 	fs := flag.NewFlagSet("show", flag.ContinueOnError)
 	var excludePatterns stringListFlag
-	fs.Var(&excludePatterns, "exclude-user-message-pattern", "exclude matching user messages from --summary (repeatable; replaces config patterns)")
+	fs.Var(&excludePatterns, "exclude-user-message-pattern", "exclude matching user messages from --summary (repeatable; OR)")
 	return fs, showFlags{
 		since:           fs.String("since", "", "filter by start time (relative, local date/datetime, or RFC3339 instant)"),
 		until:           fs.String("until", "", "filter sessions started before a relative, local date/datetime, or RFC3339 instant"),
@@ -216,7 +216,7 @@ func newShowFlagSet() (*flag.FlagSet, showFlags) {
 		turnRange:       fs.String("turn", "", "show only turn N or turns N..M (numbers match outline)"),
 		tail:            fs.Int("tail", 0, "show only the last N turns (0 disables)"),
 		format:          fs.String("format", "markdown", "output format (markdown, json)"),
-		source:          fs.String("source", "", "source for session-id (claude_code, claude-code, codex, cursor_agent, cursor-agent)"),
+		source:          fs.String("source", "", "restrict REF source (claude_code, claude-code, codex, cursor_agent, cursor-agent)"),
 		excludePatterns: &excludePatterns,
 	}
 }

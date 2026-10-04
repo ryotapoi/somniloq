@@ -12,7 +12,7 @@ import (
 func TestShowAndSearchTurnsKeepInsertionOrderAtEqualTimestamps(t *testing.T) {
 	fixture := func() *core.DB {
 		db := newOutlineTestDB(t)
-		if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "ties"}, "2026-03-28T15:00:00Z"); err != nil {
+		if err := db.UpsertSession(testInputID(t, db, core.SourceClaudeCode), core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "ties"}, "2026-03-28T15:00:00Z"); err != nil {
 			t.Fatal(err)
 		}
 		for _, message := range []struct{ uuid, role, content string }{
@@ -27,7 +27,7 @@ func TestShowAndSearchTurnsKeepInsertionOrderAtEqualTimestamps(t *testing.T) {
 	}
 	db := fixture()
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--turn", "2", "ties"}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--turn", "2", fixtureREF(core.SourceClaudeCode, "ties")}, staticDB(db), config{}, &out, &errOut)
 	if code != 0 || err != nil || errOut.Len() != 0 {
 		t.Fatalf("show = %d, %v, stderr %q", code, err, errOut.String())
 	}
@@ -50,7 +50,7 @@ func TestShowCmd_TurnRange(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--turn", "2", "sess-1"}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--turn", "2", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -72,7 +72,7 @@ func TestShowCmd_Tail(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--tail", "1", "sess-1"}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--tail", "1", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -90,7 +90,7 @@ func TestShowCmd_Tail(t *testing.T) {
 func TestShowCmd_ReturnsOutputError(t *testing.T) {
 	db := newOutlineTestDB(t)
 
-	code, err := showCmd([]string{"sess-1"}, staticDB(db), config{}, failWriter{}, &bytes.Buffer{})
+	code, err := showCmd([]string{fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, failWriter{}, &bytes.Buffer{})
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
@@ -103,7 +103,7 @@ func TestShowCmd_TurnRangeKeepsAssistantReplies(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--turn", "1", "sess-1"}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--turn", "1", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -120,7 +120,8 @@ func TestShowCmd_TurnRangeKeepsAssistantReplies(t *testing.T) {
 
 func TestShowCmd_TurnFilterAppliesPerSessionInBulkMode(t *testing.T) {
 	db := newOutlineTestDB(t)
-	if err := db.UpsertSession(core.SessionMeta{
+	if err := db.UpsertSession(testInputID(t, db,
+		core.SourceClaudeCode), core.SessionMeta{
 		Source:    core.SourceClaudeCode,
 		SessionID: "sess-2",
 		CWD:       "/Users/test/other",

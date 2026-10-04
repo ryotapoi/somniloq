@@ -6,16 +6,16 @@ import (
 	"fmt"
 )
 
-func (d *DB) GetImportState(jsonlPath string) (*ImportState, error) {
-	return getImportState(d.execer(), jsonlPath)
+func (d *DB) GetImportState(inputID int64, jsonlPath string) (*ImportState, error) {
+	return getImportState(d.execer(), inputID, jsonlPath)
 }
 
-func getImportState(e execer, jsonlPath string) (*ImportState, error) {
+func getImportState(e execer, inputID int64, jsonlPath string) (*ImportState, error) {
 	var s ImportState
 	var src string
 	err := e.QueryRow(
-		"SELECT jsonl_path, source, file_size, last_offset, imported_at FROM import_state WHERE jsonl_path=?",
-		jsonlPath,
+		"SELECT jsonl_path, source, file_size, last_offset, imported_at FROM import_state WHERE input_id=? AND jsonl_path=?",
+		inputID, jsonlPath,
 	).Scan(&s.JSONLPath, &src, &s.FileSize, &s.LastOffset, &s.ImportedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

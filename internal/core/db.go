@@ -3,6 +3,8 @@ package core
 import (
 	"database/sql"
 	"database/sql/driver"
+	"fmt"
+	"net/url"
 	"os"
 	"time"
 
@@ -40,16 +42,25 @@ type execer interface {
 	QueryRow(query string, args ...any) *sql.Row
 }
 
-func OpenDB(dsn string) (*DB, error) {
-	if dsn != ":memory:" && dsn != "" {
-		// Restrict a new file before SQLite writes any conversation content.
-		// Exclusive creation leaves existing databases and their modes untouched.
-		file, err := os.OpenFile(dsn, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+func OpenDB(dsn string) (*DB, error) { return openDatabase(dsn, false) }
+
+// OpenDBRead requires an existing supported DB and never initializes it.
+func OpenDBRead(path string) (*DB, error) { return openDatabase(path, true) }
+
+func openDatabase(path string, readOnly bool) (*DB, error) {
+	dsn := path
+	if readOnly {
+		if _, err := os.Stat(path); err != nil {
+			return nil, err
+		}
+		dsn = (&url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}).String()
+	} else if path != ":memory:" && path != "" {
+		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err != nil && !os.IsExist(err) {
 			return nil, err
 		}
 		if err == nil {
-			if err := file.Close(); err != nil {
+			if err = file.Close(); err != nil {
 				return nil, err
 			}
 		}
@@ -58,24 +69,36 @@ func OpenDB(dsn string) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
-	// modernc.org/sqlite treats each connection to ":memory:" as a separate DB
-	// instance, so a shared *sql.DB can otherwise see different in-memory DBs
-	// across queries. Pinning to one physical connection avoids that.
 	db.SetMaxOpenConns(1)
-
-	if _, err := db.Exec(schema); err != nil {
-		db.Close()
-		return nil, err
+	fail := func(err error) (*DB, error) { db.Close(); return nil, err }
+	empty, err := inspectSchema(db)
+	if err != nil {
+		return fail(err)
 	}
-	if err := ensureSessionsRepoPathColumn(db); err != nil {
-		db.Close()
-		return nil, err
+	if empty {
+		if readOnly {
+			return fail(&SchemaError{Revision: 0, Reason: "empty database"})
+		}
+		tx, err := db.Begin()
+		if err != nil {
+			return fail(err)
+		}
+		// Recheck inside the same transaction that initializes the schema.
+		empty, err = inspectSchema(tx)
+		if err == nil && empty {
+			_, err = tx.Exec(schema)
+		}
+		if err != nil {
+			tx.Rollback()
+			return fail(err)
+		}
+		if err = tx.Commit(); err != nil {
+			return fail(err)
+		}
 	}
-	if err := ensureSessionsProjectDirColumnDropped(db); err != nil {
-		db.Close()
-		return nil, err
+	if _, err = db.Exec("PRAGMA foreign_keys=ON"); err != nil {
+		return fail(fmt.Errorf("enable foreign keys: %w", err))
 	}
-
 	return &DB{db: db}, nil
 }
 

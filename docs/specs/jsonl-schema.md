@@ -2,17 +2,19 @@
 
 Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造。
 
-この文書の既存取り込み・保存記述は現行実装の契約。v0.14.0 の子孫・複数入力・本人／継承・未知日時の実装予定契約と合成 fixture は [元ログ調査](v0.14.0-log-evidence.md) を参照する。以下の観測追記は現行 parser がすでに対応している意味ではない。
+この文書の既存取り込み・保存記述は現行実装の契約。v0.14.0 の子孫・本人／継承・原文日時の実装予定契約と合成 fixture は [元ログ調査](v0.14.0-log-evidence.md) を参照する。以下の観測追記は現行 parser がすでに対応している意味ではない。
 
 ## source 値
 
-`import` の CLI `--source` はユーザー向け表記として `all|claude-code|codex|cursor-agent` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex|cursor_agent` を保存する。`show` / `outline` の session 選択用 `--source` は、DB 内部値または `claude-code` / `codex` / `cursor-agent` を受け取り、`all` は受け取らない。
+`import` の CLI `--source` はユーザー向け表記として `all|claude-code|codex|cursor-agent` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex|cursor_agent` を保存する。TOML inputs.source も CLI 表記3種を使う。`show` / `outline` は完全 REF で本人を選び、`--source` を付ける場合は REF の source に一致する DB 内部値または CLI 表記を指定する。`all` は受け取らない。
+
+標準 path は config init が生成する既定 root。追加 root も同じ source adapter で走査する。source と canonical root で入力を識別し、同名 session/UUID と差分状態を入力間で混同しない。root 会話 identity と REF は [scope](../rules/scope.md#sqlite-と入力会話の識別) を参照する。
 
 ## 共通の末尾行と差分再開
 
 末尾改行のない正常な JSON レコードは、その import で取り込む。末尾改行がなく unparsed となった行は診断に数えるが、差分再開位置をその行頭に残し、追記でファイルサイズが増えたら同じ物理行を再処理する。改行済みの unparsed 行では再開位置を進める。本文のない prefix は従来どおり保存境界を進めず、本文が現れたときに読み直す。
 
-旧実装で既に行途中の再開位置を保存した DB の過去の欠落は、自動回復しない。元のログが残っていれば既存の `import --full` で再構築できる。ただし、この操作は source 制限にかかわらず DB 全体をクリアしてから指定 source を取り込み直すため、保持したい source とログの有無を確認して実行する。
+保存済みの過去の欠落は自動回復しない。対応 revision の DB は、元ログが残っていれば `import --config NAME_OR_PATH --full` で選択入力だけを再構築できる。他入力は保持する。旧形式 DB は通常経路で無変更拒否し、専用 migrate は後続実装。
 
 ## Claude Code
 
@@ -52,7 +54,7 @@ type, message, sessionId, cwd, timestamp, gitBranch, uuid, parentUuid, version, 
 ```
 
 - `user` / `assistant` の `sessionId` と `uuid` は非空値を必須とする。欠落・空文字列・`null` の行は unparsed とし、path・物理行・欠落フィールドを診断する。その行は本文の有無にかかわらず session / message を保存・更新せず、前後の正常行の取り込みは継続する。ID の推測生成は行わない。
-- 既存 DB に保存済みの空 ID の session / message は自動修復しない。元のログが残っていれば `import --full` で再構築できる。DB 全体の削除と source 選択については「共通の末尾行と差分再開」の注意に従う。
+- 既存 DB に保存済みの空 ID の session / message は自動修復しない。元のログが残っていれば `import --config NAME_OR_PATH --full` で再構築できる。選択入力の再構築については「共通の末尾行と差分再開」の注意に従う。
 
 #### バージョンで増減するフィールド（v2.1.37〜v2.1.86 で確認）
 
@@ -104,7 +106,7 @@ id, timestamp, cwd, originator, cli_version, source, model_provider, git
 - `git.branch` は存在する場合のみ `git_branch` に保存する
 - `cli_version` は `version` に保存する
 - `id` が欠落・空文字列・`null` の `session_meta` は unparsed とし、path・物理行・原因を診断する。有効な metadata がまだない rollout の後続本文は保存しない。差分取り込みの prefix 復元でも同じ検証を適用する。
-- 既存 DB に保存済みの空 ID の session / message は自動修復しない。元のログが残っていれば `import --full` で再構築できる。DB 全体の削除と source 選択については「共通の末尾行と差分再開」の注意に従う。
+- 既存 DB に保存済みの空 ID の session / message は自動修復しない。元のログが残っていれば `import --config NAME_OR_PATH --full` で再構築できる。選択入力の再構築については「共通の末尾行と差分再開」の注意に従う。
 
 #### response_item.payload の保存対象
 
@@ -152,7 +154,7 @@ Cursor projects root からの相対 path が次と一致する JSONL だけを�
 - `<session-id>` は空であってはならず、session directory 名と basename（拡張子を除く）が一致しなければならない。UUID version の制限は設けない。
 - 任意の場所の `.jsonl`、空の session directory、directory と basename が不一致の path は受理しない。
 - `private-tmp` も特別除外しない。観測した事実ではなく、除外根拠がないため上の一般規則を適用する設計判断である。
-- session identity は Cursor source と path 内の `<session-id>` の組である。
+- session identity は入力内の `[sessionId]`（path 内の `<session-id>`）であり、別入力では同名でも別会話となる。
 
 ### レコードの取り込み
 

@@ -46,7 +46,7 @@ func TestImportCmd_ConfirmationIOErrorDoesNotOpenDB(t *testing.T) {
 }
 
 func TestImportCmd_FullConfirmation(t *testing.T) {
-	const prompt = "This will delete all data and re-import. Continue? [y/N] "
+	const prompt = "This will rebuild selected inputs and re-import. Continue? [y/N] "
 	const summary = "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)\n"
 
 	tests := []struct {
@@ -140,7 +140,7 @@ func TestImportCmd_FullConfirmation(t *testing.T) {
 					t.Errorf("Close DB: %v", err)
 				}
 			}()
-			oldSession, err := db.GetSession(core.SourceClaudeCode, "old")
+			oldSession, err := db.GetSession(importedInputID(t, db, core.SourceClaudeCode, projectsDir), core.SourceClaudeCode, "old")
 			if err != nil {
 				t.Fatalf("GetSession(old): %v", err)
 			}
@@ -148,7 +148,7 @@ func TestImportCmd_FullConfirmation(t *testing.T) {
 			if (oldSession != nil) != wantOldPresent {
 				t.Errorf("old session = %v, want present = %t", oldSession, wantOldPresent)
 			}
-			oldMessages, err := db.GetMessages(core.SourceClaudeCode, "old")
+			oldMessages, err := db.GetMessages(importedInputID(t, db, core.SourceClaudeCode, projectsDir), core.SourceClaudeCode, "old")
 			if err != nil {
 				t.Fatalf("GetMessages(old): %v", err)
 			}
@@ -159,7 +159,7 @@ func TestImportCmd_FullConfirmation(t *testing.T) {
 			if len(oldMessages) != wantOld {
 				t.Errorf("old messages = %v, want %d", oldMessages, wantOld)
 			}
-			keptMessages, err := db.GetMessages(core.SourceClaudeCode, "kept")
+			keptMessages, err := db.GetMessages(importedInputID(t, db, core.SourceClaudeCode, projectsDir), core.SourceClaudeCode, "kept")
 			if err != nil {
 				t.Fatalf("GetMessages(kept): %v", err)
 			}
@@ -207,7 +207,7 @@ func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	if len(errLines) != 2 || errLines[1] != "" {
 		t.Fatalf("stderr = %q, want exactly one newline-terminated diagnostic line", gotErr)
 	}
-	wantErrPrefix := "  error: " + filepath.Join(projDir, "s1.jsonl") + ":2: "
+	wantErrPrefix := "  error: " + canonicalTestPath(t, filepath.Join(projDir, "s1.jsonl")) + ":2: "
 	if !strings.HasPrefix(errLines[0], wantErrPrefix) {
 		t.Errorf("stderr diagnostic = %q, want prefix %q", errLines[0], wantErrPrefix)
 	} else if detail := strings.TrimPrefix(errLines[0], wantErrPrefix); detail == "" {
@@ -340,7 +340,7 @@ func TestImportCmd_ScanErrorExitsNonZero(t *testing.T) {
 	if out.String() != want {
 		t.Errorf("stdout = %q, want %q", out.String(), want)
 	}
-	if !strings.Contains(errOut.String(), "error: scan "+badDir) {
+	if !strings.Contains(errOut.String(), "error: scan "+canonicalTestPath(t, badDir)) {
 		t.Errorf("stderr should report the scan error: %q", errOut.String())
 	}
 }
@@ -365,7 +365,7 @@ func TestImportCmd_RejectsUnexpectedArgumentsBeforeSideEffects(t *testing.T) {
 			in := strings.NewReader("y\n")
 			var out, errOut bytes.Buffer
 			code, err := importCmd(tt.args, open, "", "", "", in, &out, &errOut, true)
-			if code != 1 || err != nil {
+			if code != 2 || err != nil {
 				t.Fatalf("importCmd = (%d, %v), want (1, nil)", code, err)
 			}
 			if out.Len() != 0 {
@@ -378,5 +378,29 @@ func TestImportCmd_RejectsUnexpectedArgumentsBeforeSideEffects(t *testing.T) {
 				t.Errorf("confirmation occurred: unread input = %d, stderr = %q", in.Len(), errOut.String())
 			}
 		})
+	}
+}
+
+// importCmd runs the import subcommand without calling os.Exit, so it can be
+// tested directly. openDB is invoked only after argument parsing and
+// confirmation succeed.
+func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, codexSessionsDir, cursorProjectsDir string, in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
+	inputs := []core.Input{}
+	for _, input := range []core.Input{{Source: core.SourceClaudeCode, Root: projectsDir}, {Source: core.SourceCodex, Root: codexSessionsDir}, {Source: core.SourceCursorAgent, Root: cursorProjectsDir}} {
+		if input.Root != "" {
+			inputs = append(inputs, input)
+		}
+	}
+	return importConfiguredCmd(args, openDB, config{Inputs: inputs}, in, out, errOut, isTTY)
+}
+
+func TestImportConfiguredCmdRejectsInvalidSelectorsBeforeOpeningDB(t *testing.T) {
+	for _, args := range [][]string{{"--source", "unknown"}, {"--input", ""}, {"--db", "unused"}} {
+		opened := false
+		open := func() (*core.DB, error) { opened = true; return nil, errors.New("unexpected DB open") }
+		code, _ := importConfiguredCmd(args, open, config{}, strings.NewReader(""), &bytes.Buffer{}, &bytes.Buffer{}, false)
+		if code != 2 || opened {
+			t.Fatalf("args %v: code %d opened %t", args, code, opened)
+		}
 	}
 }

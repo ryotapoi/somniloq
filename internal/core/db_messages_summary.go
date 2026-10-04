@@ -23,14 +23,14 @@ type MessageRow struct {
 // all inherit the session_meta timestamp, and rowid preserves insertion
 // (JSONL line) order because messages are INSERT OR IGNORE, never replaced.
 // Turn numbering is derived from this order, so it must stay deterministic.
-func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) {
+func (d *DB) GetMessages(inputID int64, source Source, sessionID string) ([]MessageRow, error) {
 	rows, err := d.execer().Query(`
 		SELECT uuid, role, content, timestamp
 		FROM messages
-		WHERE source = ? AND session_id = ?
+		WHERE input_id = ? AND source = ? AND session_id = ?
 		  AND is_sidechain = 0
 		ORDER BY rfc3339_utc_nanos(timestamp) ASC, rowid ASC`,
-		string(source), sessionID,
+		inputID, string(source), sessionID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get messages: query: %w", err)
@@ -40,14 +40,14 @@ func (d *DB) GetMessages(source Source, sessionID string) ([]MessageRow, error) 
 
 // GetTurnMessages returns only UUID and role for turn numbering. Content and
 // Timestamp remain empty; ordering and sidechain exclusion match GetMessages.
-func (d *DB) GetTurnMessages(source Source, sessionID string) ([]MessageRow, error) {
+func (d *DB) GetTurnMessages(inputID int64, source Source, sessionID string) ([]MessageRow, error) {
 	rows, err := d.execer().Query(`
 		SELECT uuid, role
 		FROM messages
-		WHERE source = ? AND session_id = ?
+		WHERE input_id = ? AND source = ? AND session_id = ?
 		  AND is_sidechain = 0
 		ORDER BY rfc3339_utc_nanos(timestamp) ASC, rowid ASC`,
-		string(source), sessionID,
+		inputID, string(source), sessionID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("get turn messages: query: %w", err)

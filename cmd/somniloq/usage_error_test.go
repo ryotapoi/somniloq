@@ -44,7 +44,7 @@ func TestUsageErrorsKeepExactStderr(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return projectsCmd([]string{"one"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: "error: unexpected arguments\nusage: somniloq projects [--since <time>] [--until <time>] [--short] [--format <fmt>]\n",
+			want: "error: unexpected arguments\nusage: somniloq projects --config default [--since <time>] [--until <time>] [--short] [--format <fmt>]\n",
 		},
 	}
 

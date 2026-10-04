@@ -26,10 +26,10 @@ func TestSessionsCmd_FormatJSON(t *testing.T) {
 	time.Local = time.UTC
 	defer func() { time.Local = oldLocal }()
 	db := newOutlineTestDB(t)
-	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
+	if err := db.UpsertSession(testInputID(t, db, core.SourceClaudeCode), core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession: %v", err)
 	}
-	if err := db.UpdateSessionTitle(core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
+	if err := db.UpdateSessionTitle(testInputID(t, db, core.SourceClaudeCode), core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionTitle: %v", err)
 	}
 
@@ -51,6 +51,7 @@ func TestSessionsCmd_FormatJSON(t *testing.T) {
 	want := map[string]any{
 		"source":       "claude_code",
 		"sessionId":    "sess-1",
+		"ref":          fixtureREF(core.SourceClaudeCode, "sess-1"),
 		"project":      "/Users/test/proj",
 		"title":        "Title\twith\nline",
 		"startedAt":    "2026-03-28T15:00:00Z",
@@ -97,7 +98,7 @@ func TestOutlineCmd_FormatJSON(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := outlineCmd([]string{"--format", "json", "sess-1"}, staticDB(db), config{}, &out, &errOut)
+	code, err := outlineCmd([]string{"--format", "json", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("outlineCmd: %v", err)
 	}
@@ -127,12 +128,12 @@ func TestOutlineCmd_FormatJSON(t *testing.T) {
 
 func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 	db := newOutlineTestDB(t)
-	if err := db.UpsertSession(core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
+	if err := db.UpsertSession(testInputID(t, db, core.SourceClaudeCode), core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession: %v", err)
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "sess-1"}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--format", "json", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -145,7 +146,7 @@ func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 		t.Fatalf("entries = %d, want 1 (single session still wrapped in an array)", len(got))
 	}
 	wantHeader := map[string]any{
-		"sessionId": "sess-1", "source": "claude_code", "project": "/Users/test/proj",
+		"sessionId": "sess-1", "ref": fixtureREF(core.SourceClaudeCode, "sess-1"), "source": "claude_code", "project": "/Users/test/proj",
 		"title": "", "startedAt": "2026-03-28T15:00:00Z", "endedAt": "2026-03-28T16:00:00Z",
 	}
 	for key, want := range wantHeader {
@@ -188,12 +189,12 @@ func TestShowCmd_FormatJSON_SingleSession(t *testing.T) {
 
 func TestShowCmd_FormatJSON_TurnFilter(t *testing.T) {
 	db := newOutlineTestDB(t)
-	if err := db.UpdateSessionTitle(core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
+	if err := db.UpdateSessionTitle(testInputID(t, db, core.SourceClaudeCode), core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionTitle: %v", err)
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "--turn", "2", "sess-1"}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--format", "json", "--turn", "2", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -248,7 +249,7 @@ func TestSearchCmd_FormatJSON(t *testing.T) {
 	}
 	want := map[string]any{
 		"source":    "claude_code",
-		"sessionId": "sess-1",
+		"sessionId": "sess-1", "ref": fixtureREF(core.SourceClaudeCode, "sess-1"),
 		"turn":      float64(2),
 		"timestamp": "2026-03-28T15:03:00Z",
 		"project":   "/Users/test/proj",
@@ -288,7 +289,7 @@ func TestSearchCmd_FormatJSON_PreservesOrderSourceTurnsAndUnknownTimestamp(t *te
 		{Source: core.SourceClaudeCode, SessionID: "shared", RepoPath: "/Users/test/claude", StartedAt: "2026-03-28T10:00:00Z"},
 		{Source: core.SourceCursorAgent, SessionID: "shared", RepoPath: "/Users/test/cursor"},
 	} {
-		if err := db.UpsertSession(session, "2026-03-28T12:00:00Z"); err != nil {
+		if err := db.UpsertSession(testInputID(t, db, session.Source), session, "2026-03-28T12:00:00Z"); err != nil {
 			t.Fatalf("UpsertSession(%s): %v", session.Source, err)
 		}
 	}
@@ -297,7 +298,7 @@ func TestSearchCmd_FormatJSON_PreservesOrderSourceTurnsAndUnknownTimestamp(t *te
 		{Source: core.SourceClaudeCode, UUID: "claude-2", SessionID: "shared", Role: "user", Content: "needle second", Timestamp: "2026-03-28T11:00:00Z"},
 		{Source: core.SourceCursorAgent, UUID: "cursor-1", SessionID: "shared", Role: "user", Content: "needle unknown time", Timestamp: ""},
 	} {
-		if err := db.InsertMessage(message); err != nil {
+		if err := db.InsertMessage(testInputID(t, db, message.Source), message); err != nil {
 			t.Fatalf("InsertMessage(%s): %v", message.UUID, err)
 		}
 	}
@@ -347,11 +348,11 @@ func TestFormatFlag_Unknown(t *testing.T) {
 		}},
 		{"outline", func() (int, error) {
 			var out, errOut bytes.Buffer
-			return outlineCmd([]string{"--format", "xml", "sess-1"}, openDB, config{}, &out, &errOut)
+			return outlineCmd([]string{"--format", "xml", fixtureREF(core.SourceClaudeCode, "sess-1")}, openDB, config{}, &out, &errOut)
 		}},
 		{"show", func() (int, error) {
 			var out, errOut bytes.Buffer
-			return showCmd([]string{"--format", "xml", "sess-1"}, openDB, config{}, &out, &errOut)
+			return showCmd([]string{"--format", "xml", fixtureREF(core.SourceClaudeCode, "sess-1")}, openDB, config{}, &out, &errOut)
 		}},
 		{"search", func() (int, error) {
 			var out, errOut bytes.Buffer

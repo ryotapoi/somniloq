@@ -26,5 +26,5 @@ func confirmYesNo(in io.Reader, out io.Writer, prompt string) (bool, error) {
 }
 
 func confirmFullImport(in io.Reader, out io.Writer) (bool, error) {
-	return confirmYesNo(in, out, "This will delete all data and re-import. Continue? [y/N] ")
+	return confirmYesNo(in, out, "This will rebuild selected inputs and re-import. Continue? [y/N] ")
 }

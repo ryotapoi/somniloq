@@ -24,15 +24,15 @@ Notes:
   --short only affects projects that do not match projectAliases.
 
 Examples:
-  somniloq projects --since 30d --short
-  somniloq projects --format json
-  somniloq sessions --project somniloq --since 7d`
+  somniloq projects --config default --since 30d --short
+  somniloq projects --config default --format json
+  somniloq sessions --config default --project somniloq --since 7d`
 
 // projectsCmd runs the projects subcommand without calling os.Exit, so it can
 // be tested directly.
 func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs, flags := newProjectsFlagSet()
-	setUsage(fs, "List projects", "somniloq projects [flags]", projectsHelpDetails)
+	setUsage(fs, "List projects", "somniloq projects --config default [flags]", projectsHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
@@ -43,7 +43,7 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 
 	if fs.NArg() != 0 {
 		writeUsageError(errOut, "unexpected arguments")
-		fmt.Fprintln(errOut, "usage: somniloq projects [--since <time>] [--until <time>] [--short] [--format <fmt>]")
+		fmt.Fprintln(errOut, "usage: somniloq projects --config default [--since <time>] [--until <time>] [--short] [--format <fmt>]")
 		return 1, nil
 	}
 

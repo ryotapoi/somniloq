@@ -14,35 +14,37 @@ somniloq は Claude Code / Codex / Cursor Agent のセッションログを SQLi
 新しいセッションがあり得る場合は、検索や一覧の前に必ず取り込みます。
 
 ```bash
-somniloq import
+somniloq import --config default
 ```
 
-DB は import 時点のスナップショットです。自動更新ではありません。
+全 DB コマンドで明示 `--config NAME_OR_PATH` が必要です。設定がなければ `somniloq config init` で default TOML を生成します（DB は作成しません）。既存の設定名・path を確認して選び、旧 JSON や旧 DB を自動移行するものと考えないでください。DB は import 時点のスナップショットです。自動更新ではありません。
 
 ## 代表的な探索導線
 
 ```bash
 # セッションを眺める
-somniloq sessions --short
+somniloq sessions --config default --short
 
 # キーワードで見つける
-somniloq search --format json "keyword"
+somniloq search --config default --format json "keyword"
 
-# search または sessions が出した source は --source に、session ID は位置引数に渡す
+# search または sessions が出した完全 REF を位置引数に渡す（裸 ID・短縮は不可）
 # 長いセッションは、先に地図を見て必要な turn だけ読む
-somniloq outline --source <source> <session-id>
-somniloq show --source <source> --turn 12..18 <session-id>
+somniloq outline --config default <REF>
+somniloq show --config default --turn 12..18 <REF>
 
 # 検索結果を 50 件ずつページ単位で読む（最初、次）
-somniloq search --limit 50 --offset 0 "keyword"
-somniloq search --limit 50 --offset 50 "keyword"
+somniloq search --config default --limit 50 --offset 0 "keyword"
+somniloq search --config default --limit 50 --offset 50 "keyword"
 
 # 機械処理するときは JSON を優先する
-somniloq sessions --format json
-somniloq show --source <source> --format json <session-id>
+somniloq sessions --config default --format json
+somniloq show --config default --format json <REF>
 ```
 
-Cursor Agent の履歴には時刻がないことがあり、`--since` / `--until` を付けると対象外になります。時刻不明でも直近に取り込んだ履歴は、`somniloq sessions --imported-since 24h` で探せます。日時で絞り込む必要がある場合は CLI help を確認してください。`search` の query、および `sessions`、`show`、`search` の `--project` では、`%`、`_`、`\` はワイルドカードではなく文字そのものとして扱う。`--since`、`--until`、`sessions --imported-since` は、相対時刻とローカルの日付・分単位日時に加え、`Z` または数値オフセット付きの RFC3339 instant を受け付ける。
+Cursor Agent の履歴には時刻がないことがあり、`--since` / `--until` を付けると対象外になります。時刻不明でも直近に取り込んだ履歴は、`somniloq sessions --config default --imported-since 24h` で探せます。日時で絞り込む必要がある場合は CLI help を確認してください。`search` の query、および `sessions`、`show`、`search` の `--project` では、`%`、`_`、`\` はワイルドカードではなく文字そのものとして扱う。`--since`、`--until`、`sessions --imported-since` は、相対時刻とローカルの日付・分単位日時に加え、`Z` または数値オフセット付きの RFC3339 instant を受け付ける。
+
+追加 root は TOML の inputs に設定します。`import --config default --input PATH` を繰り返して入力を選べ、`--source` とは交差条件です。`--full` は選択入力だけを再構築し、他入力を保持します。親子取り込み・まとまり検索・新しい原文 show は後続実装です。
 
 ## 詳細は CLI help を見る
 
@@ -50,6 +52,7 @@ Cursor Agent の履歴には時刻がないことがあり、`--since` / `--unti
 
 ```bash
 somniloq --help
+somniloq config init --help
 somniloq import --help
 somniloq sessions --help
 somniloq search --help

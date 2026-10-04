@@ -10,7 +10,7 @@ import (
 )
 
 const sessionsHelpDetails = `Columns (TSV, in order):
-  session_id: source-local session identifier.
+  ref: full slq1 reference for this input and session.
   time_range: local started_at ~ ended_at; ended_at may be empty; tabs/newlines flattened.
   logical_day: local YYYY-MM-DD using the calendar day's boundary and ended_at, or started_at when ended_at is empty.
   project: canonical alias name when configured, otherwise repo_path or basename with --short; tabs/newlines flattened.
@@ -20,7 +20,7 @@ const sessionsHelpDetails = `Columns (TSV, in order):
   source: internal source identifier: claude_code, codex, or cursor_agent.
 
 JSON fields:
-  source, sessionId, project, title, startedAt, endedAt, logicalDay, messageCount, bodySize
+  ref, source, sessionId, project, title, startedAt, endedAt, logicalDay, messageCount, bodySize
 
 Notes:
   --since/--until and --imported-since accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
@@ -28,13 +28,13 @@ Notes:
   Date-only boundaries follow local calendar days across daylight saving time changes.
   --imported-since filters sessions imported at or after a time; date-only values start at local midnight and ignore --day-boundary.
   Unknown or invalid stored start times do not match time filters.
-  Use the resulting source and session_id with somniloq show --source <source> <session-id> to read the session.
+  Use the resulting REF with somniloq show --config default <REF> to read the session.
   --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
 
 Examples:
-  somniloq sessions --since 7d --short
-  somniloq sessions --since 2026-03-28 --day-boundary 04:00 --format json
-  somniloq sessions --project somniloq --since 30d`
+  somniloq sessions --config default --since 7d --short
+  somniloq sessions --config default --since 2026-03-28 --day-boundary 04:00 --format json
+  somniloq sessions --config default --project somniloq --since 30d`
 
 // sessionsCmd runs the sessions subcommand without calling os.Exit, so it can
 // be tested directly.
@@ -45,13 +45,13 @@ func sessionsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 // sessionsCmdAt runs the sessions subcommand using the supplied current time.
 func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs, flags := newSessionsFlagSet()
-	setUsage(fs, "List sessions", "somniloq sessions [flags]", sessionsHelpDetails)
+	setUsage(fs, "List sessions", "somniloq sessions --config default [flags]", sessionsHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
 	if fs.NArg() != 0 {
 		writeUsageError(errOut, "unexpected arguments")
-		fmt.Fprintln(errOut, "usage: somniloq sessions [flags]")
+		fmt.Fprintln(errOut, "usage: somniloq sessions --config default [flags]")
 		return 1, nil
 	}
 	if err := validateFormat(*flags.format, "tsv", "json"); err != nil {
@@ -99,7 +99,7 @@ func sessionsCmdAt(now time.Time, args []string, openDB func() (*core.DB, error)
 		title := sanitizeTSV(r.CustomTitle)
 		proj := sanitizeTSV(resolveProjectDisplayName(r.RepoPath, *flags.short, cfg))
 		if _, err := fmt.Fprintf(out, "%s\t%s\t%s\t%s\t%s\t%d\t%d\t%s\n",
-			r.SessionID, sanitizeTSV(formatTimeRange(r.StartedAt, r.EndedAt, time.Local)), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
+			r.REF, sanitizeTSV(formatTimeRange(r.StartedAt, r.EndedAt, time.Local)), sessionLogicalDay(r, boundary, time.Local), proj, title, r.MessageCount, r.BodySize,
 			r.Source); err != nil {
 			return 1, err
 		}

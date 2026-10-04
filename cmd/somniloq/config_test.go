@@ -3,8 +3,6 @@ package main
 import (
 	"bytes"
 	"fmt"
-	"os"
-	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -12,137 +10,6 @@ import (
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
-
-func TestLoadConfig_MissingFileIsEmptyConfig(t *testing.T) {
-	cfg, err := loadConfig(filepath.Join(t.TempDir(), "no-such-config.json"))
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	if cfg.ProjectAliases != nil {
-		t.Errorf("ProjectAliases = %v, want nil", cfg.ProjectAliases)
-	}
-	if cfg.DayBoundary != "" {
-		t.Errorf("DayBoundary = %q, want empty", cfg.DayBoundary)
-	}
-	if cfg.ExcludeUserMessagePatterns != nil {
-		t.Errorf("ExcludeUserMessagePatterns = %v, want nil", cfg.ExcludeUserMessagePatterns)
-	}
-}
-
-func TestLoadConfig_ParsesExcludeUserMessagePatterns(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"excludeUserMessagePatterns": ["^/", "^skip\\nthis$"]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(path)
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	want := []string{`^/`, `^skip\nthis$`}
-	if !reflect.DeepEqual(cfg.ExcludeUserMessagePatterns, want) {
-		t.Errorf("ExcludeUserMessagePatterns = %q, want %q", cfg.ExcludeUserMessagePatterns, want)
-	}
-}
-
-func TestLoadConfig_DoesNotMigrateCommandPatterns(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"commandPatterns": ["^/"]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(path)
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	if len(cfg.ExcludeUserMessagePatterns) != 0 {
-		t.Errorf("ExcludeUserMessagePatterns = %v, want old commandPatterns to be ignored", cfg.ExcludeUserMessagePatterns)
-	}
-}
-
-func TestLoadConfig_InvalidJSONIsError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte("{not json"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := loadConfig(path)
-	if err == nil {
-		t.Fatal("expected error for invalid JSON, got nil")
-	}
-	if !strings.Contains(err.Error(), path) {
-		t.Errorf("err = %v, want the config path in the message", err)
-	}
-}
-
-func TestLoadConfig_InvalidCommandPatternIsError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"excludeUserMessagePatterns": ["["]}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := loadConfig(path)
-	if err == nil {
-		t.Fatal("expected error for invalid excludeUserMessagePatterns, got nil")
-	}
-	if !strings.Contains(err.Error(), "invalid excludeUserMessagePatterns pattern") {
-		t.Errorf("err = %v, want invalid excludeUserMessagePatterns pattern", err)
-	}
-	if !strings.Contains(err.Error(), path) {
-		t.Errorf("err = %v, want the config path in the message", err)
-	}
-}
-
-func TestLoadConfig_InvalidDayBoundaryIsError(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	if err := os.WriteFile(path, []byte(`{"dayBoundary": "24:00"}`), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	_, err := loadConfig(path)
-	if err == nil {
-		t.Fatal("expected error for invalid dayBoundary, got nil")
-	}
-	if !strings.Contains(err.Error(), "invalid dayBoundary") {
-		t.Errorf("err = %v, want invalid dayBoundary", err)
-	}
-	if !strings.Contains(err.Error(), path) {
-		t.Errorf("err = %v, want the config path in the message", err)
-	}
-}
-
-func TestLoadConfig_ParsesProjectAliases(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	body := `{"projectAliases": {"somniloq": ["Brimday", "old-somniloq"]}}`
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(path)
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	want := map[string][]string{"somniloq": {"Brimday", "old-somniloq"}}
-	if !reflect.DeepEqual(cfg.ProjectAliases, want) {
-		t.Errorf("ProjectAliases = %v, want %v", cfg.ProjectAliases, want)
-	}
-}
-
-func TestLoadConfig_ParsesDayBoundary(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
-	body := `{"dayBoundary": "04:00"}`
-	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	cfg, err := loadConfig(path)
-	if err != nil {
-		t.Fatalf("loadConfig: %v", err)
-	}
-	if cfg.DayBoundary != "04:00" {
-		t.Errorf("DayBoundary = %q, want 04:00", cfg.DayBoundary)
-	}
-}
 
 func TestResolveDayBoundary_FlagOverridesConfig(t *testing.T) {
 	got, err := resolveDayBoundary("05:30", config{DayBoundary: "04:00"})
@@ -217,10 +84,11 @@ func newProjectAliasDisplayDB(t *testing.T) *core.DB {
 		{Source: core.SourceClaudeCode, SessionID: "other-1", RepoPath: "/Users/test/other", StartedAt: "2026-03-27T10:00:00Z"},
 	}
 	for _, meta := range sessions {
-		if err := db.UpsertSession(meta, "2026-03-29T15:00:00Z"); err != nil {
+		if err := db.UpsertSession(testInputID(t, db, meta.Source), meta, "2026-03-29T15:00:00Z"); err != nil {
 			t.Fatalf("UpsertSession(%s): %v", meta.SessionID, err)
 		}
-		if err := db.InsertMessage(core.NormalizedMessage{
+		if err := db.InsertMessage(testInputID(t, db,
+			meta.Source), core.NormalizedMessage{
 			Source:    meta.Source,
 			UUID:      meta.SessionID + "-m1",
 			SessionID: meta.SessionID,
@@ -250,7 +118,7 @@ func TestSessionsCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "new-1") || !strings.Contains(got, "old-1") {
+	if !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "new-1")) || !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "old-1")) {
 		t.Fatalf("output missing alias sessions:\n%s", got)
 	}
 	if strings.Contains(got, "Brimday") || strings.Contains(got, "/Users/test/somniloq") {
@@ -268,7 +136,7 @@ func TestShowCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
 	}}
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"old-1"}, staticDB(db), cfg, &out, &errOut)
+	code, err := showCmd([]string{fixtureREF(core.SourceClaudeCode, "old-1")}, staticDB(db), cfg, &out, &errOut)
 	if err != nil {
 		t.Fatalf("showCmd: %v", err)
 	}
@@ -316,7 +184,7 @@ func TestProjectsCmd_ShortDoesNotAggregateUnaliasedBasenameCollisions(t *testing
 		{Source: core.SourceClaudeCode, SessionID: "app-a", RepoPath: "/Users/a/app", StartedAt: "2026-03-29T10:00:00Z"},
 		{Source: core.SourceClaudeCode, SessionID: "app-b", RepoPath: "/Users/b/app", StartedAt: "2026-03-28T10:00:00Z"},
 	} {
-		if err := db.UpsertSession(meta, "2026-03-29T15:00:00Z"); err != nil {
+		if err := db.UpsertSession(testInputID(t, db, meta.Source), meta, "2026-03-29T15:00:00Z"); err != nil {
 			t.Fatalf("UpsertSession(%s): %v", meta.SessionID, err)
 		}
 	}
@@ -354,7 +222,7 @@ func TestSearchCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
 	}
 
 	got := out.String()
-	if !strings.Contains(got, "new-1") || !strings.Contains(got, "old-1") {
+	if !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "new-1")) || !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "old-1")) {
 		t.Fatalf("search output missing alias sessions:\n%s", got)
 	}
 	if strings.Contains(got, "Brimday") || strings.Contains(got, "/Users/test/somniloq") {
@@ -379,7 +247,7 @@ func TestSessionsCmd_ProjectAliasExpansion(t *testing.T) {
 		{Source: core.SourceClaudeCode, SessionID: "other-1", RepoPath: "/Users/test/other", StartedAt: "2026-03-26T10:00:00Z"},
 	}
 	for _, meta := range sessions {
-		if err := db.UpsertSession(meta, "2026-03-28T15:00:00Z"); err != nil {
+		if err := db.UpsertSession(testInputID(t, db, meta.Source), meta, "2026-03-28T15:00:00Z"); err != nil {
 			t.Fatalf("UpsertSession(%s): %v", meta.SessionID, err)
 		}
 	}
@@ -399,11 +267,11 @@ func TestSessionsCmd_ProjectAliasExpansion(t *testing.T) {
 
 	got := out.String()
 	for _, want := range []string{"new-1", "old-1"} {
-		if !strings.Contains(got, want) {
+		if !strings.Contains(got, fixtureREF(core.SourceClaudeCode, want)) {
 			t.Errorf("output missing session %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "other-1") {
+	if strings.Contains(got, fixtureREF(core.SourceClaudeCode, "other-1")) {
 		t.Errorf("output should not contain other-1:\n%s", got)
 	}
 }
@@ -439,11 +307,15 @@ func TestProjectAliasLiteralConditionsAcrossCommands(t *testing.T) {
 						t.Fatalf("%s = %d, %v (stderr: %q)", command.name, code, err, errOut.String())
 					}
 					for i := range aliases {
-						if !strings.Contains(out.String(), fmt.Sprintf("alias-%d", i)) {
+						expected := fmt.Sprintf("alias-%d", i)
+						if command.name != "show" {
+							expected = fixtureREF(core.SourceClaudeCode, expected)
+						}
+						if !strings.Contains(out.String(), expected) {
 							t.Errorf("%s output missing alias-%d:\n%s", command.name, i, out.String())
 						}
 					}
-					if strings.Contains(out.String(), "false-positive") {
+					if strings.Contains(out.String(), "false-positive") || strings.Contains(out.String(), fixtureREF(core.SourceClaudeCode, "false-positive")) {
 						t.Errorf("%s output included wildcard false positive:\n%s", command.name, out.String())
 					}
 				})
@@ -460,20 +332,23 @@ func newLiteralAliasTestDB(t *testing.T, aliases []string) *core.DB {
 	}
 	for i, name := range aliases {
 		id := fmt.Sprintf("alias-%d", i)
-		if err := db.UpsertSession(core.SessionMeta{
+		if err := db.UpsertSession(testInputID(t, db,
+			core.SourceClaudeCode), core.SessionMeta{
 			Source: core.SourceClaudeCode, SessionID: id,
 			RepoPath: "/Users/test/" + name, StartedAt: "2026-03-28T10:00:00Z",
 		}, "2026-03-28T15:00:00Z"); err != nil {
 			t.Fatalf("UpsertSession(%s): %v", id, err)
 		}
-		if err := db.InsertMessage(core.NormalizedMessage{
+		if err := db.InsertMessage(testInputID(t, db,
+			core.SourceClaudeCode), core.NormalizedMessage{
 			Source: core.SourceClaudeCode, UUID: "message-" + id, SessionID: id,
 			Role: "user", Content: "literal alias hit", Timestamp: "2026-03-28T10:00:00Z",
 		}); err != nil {
 			t.Fatalf("InsertMessage(%s): %v", id, err)
 		}
 	}
-	if err := db.UpsertSession(core.SessionMeta{
+	if err := db.UpsertSession(testInputID(t, db,
+		core.SourceClaudeCode), core.SessionMeta{
 		Source: core.SourceClaudeCode, SessionID: "false-positive",
 		RepoPath: "/Users/test/newXrateX100anything", StartedAt: "2026-03-28T10:00:00Z",
 	}, "2026-03-28T15:00:00Z"); err != nil {

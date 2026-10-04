@@ -1,6 +1,6 @@
 # somniloq
 
-somniloq is a local CLI for importing Claude Code, Codex, and Cursor Agent session logs into SQLite, then searching and reading conversations across sessions. It reads JSONL under `~/.claude/projects/`, `~/.codex/sessions/`, and `~/.cursor/projects/`.
+somniloq is a local CLI for importing Claude Code, Codex, and Cursor Agent JSONL session logs into SQLite, then searching and reading conversations across sessions. A TOML config selects the database and one or more log roots per source.
 
 [日本語版 README](README.ja.md)
 
@@ -15,52 +15,65 @@ go install github.com/ryotapoi/somniloq/cmd/somniloq@latest
 ## Quick start
 
 ```bash
-somniloq import                         # Import new log content from all three sources
-somniloq sessions --since 7d           # Find recent sessions
-somniloq search "auth bug"              # Search message bodies across sessions
-somniloq search --since 7d --project somniloq "auth" # Search recent messages in a project
-somniloq outline <session-id>           # Skim a long session by turn
-somniloq show --turn 12..18 <session-id> # Read selected turns
+somniloq config init                              # Create default TOML; no DB is created
+somniloq import --config default                  # Import all configured inputs
+somniloq sessions --config default --since 7d      # Find recent sessions
+somniloq search --config default "auth bug"        # Search message bodies
+somniloq outline --config default <REF>            # Use the full REF from sessions/search
+somniloq show --config default --turn 12..18 <REF> # Read selected turns
 ```
 
-Put search flags before the query, as in the period-filtered example above.
-
-`sessions` and `search` results include a `source` value. If the same session ID exists in multiple sources, pass that value when reading it, for example `somniloq show --source codex <session-id>`. Without `--source`, `show` and `outline` report the matching sources instead of choosing one.
+Every database command requires `--config NAME_OR_PATH`, before or after the command name. Put search flags before the query. `sessions` and `search` return full `slq1:...` references that distinguish conversations with the same session ID in different inputs. Copy the complete REF into `show` or `outline`; bare IDs and shortened references are rejected.
 
 ## Commands
 
 | Command | Use |
 |---------|-----|
-| `import` | Import new log content; use `--source claude-code`, `codex`, or `cursor-agent` to select one source. |
+| `config init` | Create a TOML config without opening a database. |
+| `import` | Import new log content; repeat `--input PATH` to select roots, and use `--source claude-code`, `codex`, or `cursor-agent` to restrict sources. |
 | `sessions` | List sessions; `--since 24h` filters by session time, while `--imported-since 24h` finds sessions saved or updated recently. |
 | `projects` | List projects and session counts. |
 | `search` | Search message bodies; use `--project` or `--since` to narrow results. |
-| `outline` | List user turns in a session before reading a long conversation. |
-| `show` | Read a session in Markdown; use `--turn` or `--tail` to read part of it. |
+| `outline` | List user turns in a conversation selected by full REF. |
+| `show` | Read a conversation in Markdown; use `--turn` or `--tail` to read part of it. |
 
-No dedicated upgrade or data repair path is provided for legacy databases. General schema management remains, but migration from v0.3 databases to the current schema is not guaranteed.
+`import` is incremental. Input selections are ORed, then intersected with `--source`. **`--full` rebuilds only the selected inputs' conversations and import state**, retaining other inputs. Check that the selected inputs' original logs are available. It asks for confirmation; `--yes` skips the prompt and is required in noninteractive environments.
 
-`import` is incremental by default. **`somniloq import --full` deletes the entire somniloq database before re-importing.** This also applies when `--source` selects one source: rows from other sources are deleted, and only the selected source is re-imported. Check that the original logs for everything you want to keep are available before using it. `--full` asks for confirmation; `--yes` skips the prompt.
+New databases use schema revision 1. Normal commands reject legacy or unsupported databases without modifying them. A dedicated `migrate` command is planned. Read commands reject missing databases without creating them.
 
-Use `somniloq <command> --help` for flags, output formats, and examples. `sessions`, `projects`, `search`, and `outline` support `--format json`; `show` supports Markdown or JSON.
-
-`sessions` TSV flattens tabs and newlines in time ranges to preserve eight columns and one line per session. JSON retains the stored timestamp strings.
+Use `somniloq <command> --help` for flags and formats. `sessions`, `projects`, `search`, and `outline` support `--format json`; `show` supports Markdown or JSON. JSON still returns arrays, and search still uses literal substring matching. Parent/child ingestion, grouped search, and the redesigned original-text `show` interface are planned separately.
 
 ## Configuration
 
-The optional JSON config is `~/.somniloq/config.json`; the database defaults to `~/.somniloq/somniloq.db`. Set another path with the global `--config` or `--db` flag, before the command name.
+`somniloq config init [NAME] [--output PATH] [--db PATH]` defaults to name `default`, output `~/.somniloq/config/NAME.toml`, and database `~/.somniloq/NAME.db`. It creates parent directories, refuses existing destinations including symlinks, and prints the config's absolute path. `--db` is available only for init.
 
-```json
-{
-  "projectAliases": {"new-name": ["old-name"]},
-  "excludeUserMessagePatterns": ["^<command-name>/clear</command-name>"],
-  "dayBoundary": "04:00"
-}
+The generated config includes these three inputs:
+
+```toml
+db = "~/.somniloq/default.db"
+dayBoundary = "00:00"
+
+[[inputs]]
+name = "Claude"
+source = "claude-code"
+root = "~/.claude/projects"
+
+[[inputs]]
+name = "Codex"
+source = "codex"
+root = "~/.codex/sessions"
+
+[[inputs]]
+name = "Cursor"
+source = "cursor-agent"
+root = "~/.cursor/projects"
 ```
 
-`projectAliases` groups renamed projects, `excludeUserMessagePatterns` filters user messages from `outline` and `show --summary`, and `dayBoundary` sets the start of a logical day in local time. Patterns use Go regular expressions against the trimmed full message. Omit any keys you do not need.
+Add more `[[inputs]]` entries for additional roots. The same source and resolved root are scanned once; input names are optional display labels and do not affect identity. Missing roots import zero files. Relative database and root paths resolve against the config's real parent directory, including when the config is a symlink. Only a leading `~` or `~/` expands to home; environment variables do not expand.
 
-For v0.13.0, `commandPatterns` is not migrated automatically. Moving its patterns to `excludeUserMessagePatterns` changes their effect from session-list hints to displayed messages; add `^/` explicitly if slash-prefixed messages should be excluded. `show --summary` no longer skips `/clear` or command caveats by default; configure patterns to exclude them. Use `--no-exclude-user-messages` to disable configured exclusions for one summary call. The sessions TSV drops two user-turn fields and moves `source` to column 8; JSON drops `nonCommandUserTurnCount` and `firstNonCommandUserLine`.
+`projectAliases` optionally groups renamed projects (`[projectAliases]` followed by `new-name = ["old-name"]`). Overlapping groups are rejected. `dayBoundary` optionally sets the logical day boundary in local time. Unknown keys and invalid values are errors. Legacy JSON is not discovered or converted; `excludeUserMessagePatterns` is no longer a config key. Current outline/summary exclusions can be specified with `--exclude-user-message-pattern`.
+
+`--config default` selects the named config; `--config ./archive.toml` selects a path. Missing or omitted configs exit 2 with setup instructions and create neither a database nor a config.
 
 ## More information
 

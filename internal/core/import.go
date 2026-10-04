@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
@@ -27,11 +28,10 @@ type ImportResult struct {
 }
 
 type ImportOptions struct {
-	Full              bool
-	ProjectsDir       string
-	CodexSessionsDir  string
-	CursorProjectsDir string
-	Source            ImportSource
+	Full       bool
+	Inputs     []Input
+	InputPaths []string
+	Source     ImportSource
 }
 
 type ImportSource string
@@ -44,32 +44,26 @@ const (
 )
 
 // importSourceSpec ties a concrete ImportSource to its adapter constructor
-// and to the ImportOptions field that carries its scan root. Adding a new
-// source means adding a constant, a table entry, an ImportOptions field, and
-// the CLI side in cmd/somniloq (default directory wiring).
+// used to scan each configured input root.
 // ImportSourceAll is intentionally not listed: it means "every entry in this
 // table".
 type importSourceSpec struct {
 	source     ImportSource
 	newAdapter func() ingest.Adapter
-	rootDir    func(opts ImportOptions) string
 }
 
 var importSourceSpecs = []importSourceSpec{
 	{
 		source:     ImportSourceClaudeCode,
 		newAdapter: func() ingest.Adapter { return claudecode.NewAdapter(ResolveRepoPath) },
-		rootDir:    func(opts ImportOptions) string { return opts.ProjectsDir },
 	},
 	{
 		source:     ImportSourceCodex,
 		newAdapter: func() ingest.Adapter { return codex.NewAdapter(ResolveRepoPath) },
-		rootDir:    func(opts ImportOptions) string { return opts.CodexSessionsDir },
 	},
 	{
 		source:     ImportSourceCursorAgent,
 		newAdapter: func() ingest.Adapter { return cursoragent.NewAdapter() },
-		rootDir:    func(opts ImportOptions) string { return opts.CursorProjectsDir },
 	},
 }
 
@@ -81,18 +75,69 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 	if !source.Valid() {
 		return nil, fmt.Errorf("unknown import source: %s", source)
 	}
-	if opts.Full {
-		if err := db.DeleteAll(); err != nil {
-			return nil, fmt.Errorf("delete all: %w", err)
+	importedAt := timeNow()
+	selected := []struct {
+		input   Input
+		id      int64
+		adapter ingest.Adapter
+	}{}
+	seen := map[string]bool{}
+	paths := map[string]bool{}
+	for _, path := range opts.InputPaths {
+		canonical, err := CanonicalPath(path, "")
+		if err != nil {
+			return nil, err
 		}
+		paths[canonical] = true
 	}
-
-	result := &ImportResult{}
-	for _, spec := range importSourceSpecs {
-		if source != ImportSourceAll && source != spec.source {
+	for _, input := range opts.Inputs {
+		if !validSource(input.Source) || input.Root == "" {
+			return nil, fmt.Errorf("invalid input source/root")
+		}
+		root, err := CanonicalPath(input.Root, "")
+		if err != nil {
+			return nil, err
+		}
+		input.Root = root
+		if len(paths) > 0 && !paths[root] {
 			continue
 		}
-		r, err := importWithAdapter(db, spec.rootDir(opts), spec.newAdapter())
+		cliSource := ImportSource(strings.ReplaceAll(string(input.Source), "_", "-"))
+		if source != ImportSourceAll && source != cliSource {
+			continue
+		}
+		key := InputKey(input.Source, root)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		id, err := db.EnsureInput(input)
+		if err != nil {
+			return nil, err
+		}
+		for _, spec := range importSourceSpecs {
+			if spec.source == cliSource {
+				selected = append(selected, struct {
+					input   Input
+					id      int64
+					adapter ingest.Adapter
+				}{input, id, spec.newAdapter()})
+				break
+			}
+		}
+	}
+	if opts.Full {
+		ids := make([]int64, 0, len(selected))
+		for _, item := range selected {
+			ids = append(ids, item.id)
+		}
+		if err := db.DeleteInputs(ids); err != nil {
+			return nil, fmt.Errorf("delete selected inputs: %w", err)
+		}
+	}
+	result := &ImportResult{}
+	for _, item := range selected {
+		r, err := importWithAdapter(db, item.id, item.input.Root, item.adapter, importedAt)
 		if err != nil {
 			return nil, err
 		}
@@ -146,14 +191,14 @@ func (r *ImportResult) addUnparsedDiagnostics(diagnostics []error) {
 	r.UnparsedDiagnostics = append(r.UnparsedDiagnostics, diagnostics...)
 }
 
-func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportResult, error) {
+func importWithAdapter(db *DB, inputID int64, rootDir string, adapter ingest.Adapter, importedAt string) (*ImportResult, error) {
 	files, scanErrs := adapter.ScanFiles(rootDir)
 
 	// Scan errors already carry their "scan <path>:" context from the adapter.
 	result := &ImportResult{FilesScanned: len(files)}
 	result.Errors = append(result.Errors, scanErrs...)
 	for _, path := range files {
-		state, err := db.GetImportState(path)
+		state, err := db.GetImportState(inputID, path)
 		if err != nil {
 			result.FilesFailed++
 			result.Errors = append(result.Errors, fmt.Errorf("%s: get state: %w", path, err))
@@ -181,7 +226,6 @@ func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportR
 			}
 		}
 
-		importedAt := timeNow()
 		newTransaction := func() (ingest.ImportTransaction, error) {
 			tx, err := db.Begin()
 			if err != nil {
@@ -191,7 +235,7 @@ func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportR
 			// A full import may have deleted its supporting body since the
 			// initial read. Later writes to that snapshot must also fail if
 			// another process commits a deletion after this validation.
-			current, err := getImportState(tx, path)
+			current, err := getImportState(tx, inputID, path)
 			if err != nil {
 				tx.Rollback()
 				return nil, err
@@ -200,7 +244,7 @@ func importWithAdapter(db *DB, rootDir string, adapter ingest.Adapter) (*ImportR
 				tx.Rollback()
 				return nil, fmt.Errorf("import state changed during import")
 			}
-			return importTx{tx: tx}, nil
+			return importTx{tx: tx, inputID: inputID}, nil
 		}
 		pr, perr := adapter.ProcessFile(newTransaction, path, offset, fi.Size(), importedAt)
 		if perr != nil {

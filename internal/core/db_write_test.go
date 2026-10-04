@@ -18,7 +18,7 @@ func TestUpsertSession(t *testing.T) {
 		StartedAt: "2026-03-28T14:00:00Z",
 		EndedAt:   "2026-03-28T14:10:00Z",
 	}
-	if err := db.UpsertSession(meta, "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpsertSession(testInput(t, db, meta.Source), meta, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
 
@@ -43,7 +43,7 @@ func TestUpsertSession(t *testing.T) {
 		StartedAt: "2026-03-28T14:05:00Z",
 		EndedAt:   "2026-03-28T14:20:00Z",
 	}
-	if err := db.UpsertSession(meta2, "2026-03-28T15:01:00Z"); err != nil {
+	if err := db.UpsertSession(testInput(t, db, meta2.Source), meta2, "2026-03-28T15:01:00Z"); err != nil {
 		t.Fatalf("UpsertSession (2nd) failed: %v", err)
 	}
 
@@ -65,7 +65,7 @@ func TestUpsertSession_ChoosesInstantsAndPreservesUnknowns(t *testing.T) {
 	db := testDB(t)
 	upsert := func(startedAt, endedAt string) {
 		t.Helper()
-		if err := db.UpsertSession(SessionMeta{
+		if err := db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{
 			Source: SourceClaudeCode, SessionID: "instant-upsert", StartedAt: startedAt, EndedAt: endedAt,
 		}, "2026-03-28T15:00:00Z"); err != nil {
 			t.Fatalf("UpsertSession(%q, %q): %v", startedAt, endedAt, err)
@@ -95,7 +95,7 @@ func TestUpsertSession_ChoosesInstantsAndPreservesUnknowns(t *testing.T) {
 	}
 
 	for _, sessionID := range []string{"empty-endpoints", "null-endpoints"} {
-		if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: sessionID}, "2026-03-28T15:00:00Z"); err != nil {
+		if err := db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: sessionID}, "2026-03-28T15:00:00Z"); err != nil {
 			t.Fatalf("insert %s: %v", sessionID, err)
 		}
 	}
@@ -113,7 +113,7 @@ func TestUpsertSession_ChoosesInstantsAndPreservesUnknowns(t *testing.T) {
 		if sessionID == "null-endpoints" && (startedAt.Valid || endedAt.Valid) {
 			t.Fatalf("NULL endpoints changed before update: %+v, %+v", startedAt, endedAt)
 		}
-		if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: sessionID}, "2026-03-28T15:01:00Z"); err != nil {
+		if err := db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: sessionID}, "2026-03-28T15:01:00Z"); err != nil {
 			t.Fatalf("empty update for %s: %v", sessionID, err)
 		}
 	}
@@ -126,7 +126,7 @@ func TestUpsertSession_ChoosesInstantsAndPreservesUnknowns(t *testing.T) {
 	}
 
 	for _, sessionID := range []string{"empty-endpoints", "null-endpoints"} {
-		if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: sessionID, StartedAt: "2026-03-28T08:00:00.1Z", EndedAt: "2026-03-28T09:00:00.100+01:00"}, "2026-03-28T15:02:00Z"); err != nil {
+		if err := db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: sessionID, StartedAt: "2026-03-28T08:00:00.1Z", EndedAt: "2026-03-28T09:00:00.100+01:00"}, "2026-03-28T15:02:00Z"); err != nil {
 			t.Fatalf("fill endpoints for %s: %v", sessionID, err)
 		}
 		var startedAt, endedAt string
@@ -154,7 +154,7 @@ func TestUpsertSession_RepoPath(t *testing.T) {
 		StartedAt: "started-val",
 		EndedAt:   "ended-val",
 	}
-	if err := db.UpsertSession(meta, "imported-val"); err != nil {
+	if err := db.UpsertSession(testInput(t, db, meta.Source), meta, "imported-val"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
 
@@ -189,7 +189,7 @@ func TestUpsertSession_RepoPath_EmptyInsertsNull(t *testing.T) {
 		SessionID: "s1",
 		RepoPath:  "",
 	}
-	if err := db.UpsertSession(meta, "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpsertSession(testInput(t, db, meta.Source), meta, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
 
@@ -205,10 +205,10 @@ func TestUpsertSession_RepoPath_EmptyInsertsNull(t *testing.T) {
 func TestUpsertSession_RepoPath_EmptyDoesNotOverwrite(t *testing.T) {
 	db := testDB(t)
 
-	if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: "/Users/test/proj"}, "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: "/Users/test/proj"}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("first UpsertSession failed: %v", err)
 	}
-	if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: ""}, "2026-03-28T15:01:00Z"); err != nil {
+	if err := db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1", RepoPath: ""}, "2026-03-28T15:01:00Z"); err != nil {
 		t.Fatalf("second UpsertSession failed: %v", err)
 	}
 
@@ -224,7 +224,7 @@ func TestUpsertSession_RepoPath_EmptyDoesNotOverwrite(t *testing.T) {
 func TestInsertMessage(t *testing.T) {
 	db := testDB(t)
 
-	if err := db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1"}, "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1"}, "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpsertSession failed: %v", err)
 	}
 
@@ -239,7 +239,7 @@ func TestInsertMessage(t *testing.T) {
 		Timestamp:   "2026-03-28T14:00:00Z",
 		IsSidechain: false,
 	}
-	if err := db.InsertMessage(msg); err != nil {
+	if err := db.InsertMessage(testInput(t, db, msg.Source), msg); err != nil {
 		t.Fatalf("InsertMessage failed: %v", err)
 	}
 
@@ -253,7 +253,7 @@ func TestInsertMessage(t *testing.T) {
 		t.Errorf("unexpected: role=%s content=%s", role, content)
 	}
 
-	if err := db.InsertMessage(msg); err != nil {
+	if err := db.InsertMessage(testInput(t, db, msg.Source), msg); err != nil {
 		t.Fatalf("duplicate InsertMessage should not error: %v", err)
 	}
 }
@@ -261,7 +261,7 @@ func TestInsertMessage(t *testing.T) {
 func TestUpdateSessionTitle_NoRow_IsNoop(t *testing.T) {
 	db := testDB(t)
 
-	if err := db.UpdateSessionTitle(SourceClaudeCode, "ghost", "title", "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpdateSessionTitle(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "ghost", "title", "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionTitle should not error on missing row: %v", err)
 	}
 
@@ -284,11 +284,11 @@ func TestUpsertImportState(t *testing.T) {
 		LastOffset: 500,
 		ImportedAt: "2026-03-28T15:00:00Z",
 	}
-	if err := db.UpsertImportState(state); err != nil {
+	if err := db.UpsertImportState(testOnlyInput(t, db), state); err != nil {
 		t.Fatalf("UpsertImportState failed: %v", err)
 	}
 
-	got, err := db.GetImportState("/path/to/file.jsonl")
+	got, err := db.GetImportState(testOnlyInput(t, db), "/path/to/file.jsonl")
 	if err != nil {
 		t.Fatalf("GetImportState failed: %v", err)
 	}
@@ -301,10 +301,10 @@ func TestUpsertImportState(t *testing.T) {
 
 	state.FileSize = 2000
 	state.LastOffset = 1500
-	if err := db.UpsertImportState(state); err != nil {
+	if err := db.UpsertImportState(testOnlyInput(t, db), state); err != nil {
 		t.Fatalf("UpsertImportState (update) failed: %v", err)
 	}
-	got, _ = db.GetImportState("/path/to/file.jsonl")
+	got, _ = db.GetImportState(testOnlyInput(t, db), "/path/to/file.jsonl")
 	if got.FileSize != 2000 || got.LastOffset != 1500 {
 		t.Errorf("update failed: %+v", got)
 	}
@@ -313,7 +313,7 @@ func TestUpsertImportState(t *testing.T) {
 func TestGetImportState_NotFound(t *testing.T) {
 	db := testDB(t)
 
-	got, err := db.GetImportState("/nonexistent")
+	got, err := db.GetImportState(testOnlyInput(t, db), "/nonexistent")
 	if err != nil {
 		t.Fatalf("GetImportState failed: %v", err)
 	}
@@ -327,9 +327,9 @@ func TestDeleteAll_RollsBackOnDeleteFailure(t *testing.T) {
 	if err := db.DeleteAll(); err != nil {
 		t.Fatalf("DeleteAll on empty database: %v", err)
 	}
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "session-before"}, "imported-before"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "message-before", SessionID: "session-before", Role: "user", Content: "content-before", Timestamp: "timestamp-before"}))
-	must(t, db.UpsertImportState(ImportState{JSONLPath: "path-before", Source: SourceClaudeCode, FileSize: 42, LastOffset: 21, ImportedAt: "state-before"}))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "session-before"}, "imported-before"))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "message-before", SessionID: "session-before", Role: "user", Content: "content-before", Timestamp: "timestamp-before"}))
+	must(t, db.UpsertImportState(testOnlyInput(t, db), ImportState{JSONLPath: "path-before", Source: SourceClaudeCode, FileSize: 42, LastOffset: 21, ImportedAt: "state-before"}))
 	if _, err := db.db.Exec(`CREATE TRIGGER fail_import_state_delete BEFORE DELETE ON import_state BEGIN SELECT RAISE(ABORT, 'delete failed'); END`); err != nil {
 		t.Fatalf("create trigger: %v", err)
 	}
@@ -383,8 +383,8 @@ func TestDeleteAll_RollsBackOnDeleteFailure(t *testing.T) {
 func TestUpdateSessionAgentName(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1"}, "2026-03-28T15:00:00Z"))
-	if err := db.UpdateSessionAgentName(SourceClaudeCode, "s1", "agent1", "2026-03-28T15:00:00Z"); err != nil {
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1"}, "2026-03-28T15:00:00Z"))
+	if err := db.UpdateSessionAgentName(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "s1", "agent1", "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionAgentName failed: %v", err)
 	}
 
@@ -401,7 +401,7 @@ func TestUpdateSessionAgentName(t *testing.T) {
 func TestUpdateSessionAgentName_NoRow_IsNoop(t *testing.T) {
 	db := testDB(t)
 
-	if err := db.UpdateSessionAgentName(SourceClaudeCode, "ghost", "agent", "2026-03-28T15:00:00Z"); err != nil {
+	if err := db.UpdateSessionAgentName(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "ghost", "agent", "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("UpdateSessionAgentName should not error on missing row: %v", err)
 	}
 

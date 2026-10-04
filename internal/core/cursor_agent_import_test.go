@@ -15,7 +15,7 @@ import (
 
 func TestImport_CursorAgentAppendUpdatesImportedSinceCandidates(t *testing.T) {
 	db := testDB(t)
-	root := t.TempDir()
+	root := testTempDir(t)
 	path := filepath.Join(root, "project", "agent-transcripts", "session", "session.jsonl")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -27,16 +27,16 @@ func TestImport_CursorAgentAppendUpdatesImportedSinceCandidates(t *testing.T) {
 
 	originalTimeNow := timeNow
 	t.Cleanup(func() { timeNow = originalTimeNow })
-	importTimes := []string{"2026-03-28T15:00:00Z", "2026-03-28T15:01:00Z", "2026-03-28T15:02:00Z"}
+	importTimes := []string{"2026-03-28T15:00:00Z", "2026-03-28T15:00:30Z", "2026-03-28T15:01:00Z", "2026-03-28T15:02:00Z"}
 	timeNow = func() string {
 		next := importTimes[0]
 		importTimes = importTimes[1:]
 		return next
 	}
-	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}, Source: ImportSourceCursorAgent}); err != nil {
 		t.Fatalf("initial Import: %v", err)
 	}
-	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}, Source: ImportSourceCursorAgent}); err != nil {
 		t.Fatalf("unchanged Import: %v", err)
 	}
 	rows, err := db.ListSessions(SessionFilter{ImportedSince: "2026-03-28T15:00:01.000Z"})
@@ -46,7 +46,7 @@ func TestImport_CursorAgentAppendUpdatesImportedSinceCandidates(t *testing.T) {
 	if err := os.WriteFile(path, append(initial, []byte(`{"role":"assistant","message":{"content":[{"type":"text","text":"second"}]}}`+"\n")...), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}, Source: ImportSourceCursorAgent}); err != nil {
 		t.Fatalf("append Import: %v", err)
 	}
 
@@ -57,7 +57,7 @@ func TestImport_CursorAgentAppendUpdatesImportedSinceCandidates(t *testing.T) {
 	if err := os.WriteFile(path, initial, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}, Source: ImportSourceCursorAgent}); err != nil {
 		t.Fatalf("same-body reprocess Import: %v", err)
 	}
 	rows, err = db.ListSessions(SessionFilter{ImportedSince: "2026-03-28T15:02:00.000Z"})
@@ -72,7 +72,7 @@ func TestImport_CursorAgentAppendUpdatesImportedSinceCandidates(t *testing.T) {
 
 func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 	db := testDB(t)
-	root := t.TempDir()
+	root := testTempDir(t)
 	path := filepath.Join(root, "synthetic-project", "agent-transcripts", "session-sample", "session-sample.jsonl")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -139,7 +139,7 @@ func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 		}
 	}
 
-	result, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent})
+	result, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}, Source: ImportSourceCursorAgent})
 	if err != nil {
 		t.Fatalf("Import failed: %v", err)
 	}
@@ -153,7 +153,7 @@ func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 	}
 	assertSaved("initial", want)
 
-	again, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent})
+	again, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}, Source: ImportSourceCursorAgent})
 	if err != nil || again.FilesSkipped != 1 {
 		t.Fatalf("unchanged re-import = %+v, %v; want one skipped file", again, err)
 	}
@@ -162,7 +162,7 @@ func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 	if err := os.WriteFile(path, append(fixture, []byte(appendLine)...), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	appended, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent})
+	appended, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}, Source: ImportSourceCursorAgent})
 	if err != nil {
 		t.Fatalf("incremental Import failed: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 	if err := os.WriteFile(path, fixture[:bytes.IndexByte(fixture, '\n')+1], 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Import(db, ImportOptions{CursorProjectsDir: root, Source: ImportSourceCursorAgent}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}, Source: ImportSourceCursorAgent}); err != nil {
 		t.Fatalf("shrunken Import failed: %v", err)
 	}
 	assertSaved("shrink/reprocess", want)
@@ -182,7 +182,7 @@ func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 
 func TestImport_AllIncludesCursorAgent(t *testing.T) {
 	db := testDB(t)
-	root := t.TempDir()
+	root := testTempDir(t)
 	path := filepath.Join(root, "project", "agent-transcripts", "session", "session.jsonl")
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		t.Fatal(err)
@@ -190,7 +190,7 @@ func TestImport_AllIncludesCursorAgent(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"hello"}]}}`+"\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	result, err := Import(db, ImportOptions{CursorProjectsDir: root})
+	result, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}})
 	if err != nil {
 		t.Fatal(err)
 	}

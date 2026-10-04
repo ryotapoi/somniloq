@@ -76,7 +76,7 @@ func TestSessionSourceSelectsOnlyRequestedSource(t *testing.T) {
 	db := newSourceSelectionTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--source", "codex", "--turn", "1", "--format", "json", "same-id"}, staticDB(db), config{}, &out, &errOut)
+	code, err := showCmd([]string{"--source", "codex", "--turn", "1", "--format", "json", fixtureREF(core.SourceCodex, "same-id")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil || code != 0 {
 		t.Fatalf("show = %d, %v (stderr %q)", code, err, errOut.String())
 	}
@@ -87,7 +87,7 @@ func TestSessionSourceSelectsOnlyRequestedSource(t *testing.T) {
 	db = newSourceSelectionTestDB(t)
 	out.Reset()
 	errOut.Reset()
-	code, err = outlineCmd([]string{"--source", "claude-code", "same-id"}, staticDB(db), config{}, &out, &errOut)
+	code, err = outlineCmd([]string{"--source", "claude-code", fixtureREF(core.SourceClaudeCode, "same-id")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil || code != 0 || !strings.Contains(out.String(), "claude question") || strings.Contains(out.String(), "codex question") {
 		t.Fatalf("outline = %d, %v, %q (stderr %q)", code, err, out.String(), errOut.String())
 	}
@@ -101,7 +101,7 @@ func newSourceSelectionTestDB(t *testing.T) *core.DB {
 		{Source: core.SourceCodex, UUID: "codex-user", SessionID: "same-id", Role: "user", Content: "codex question", Timestamp: "2026-03-28T15:00:00Z"},
 		{Source: core.SourceCodex, UUID: "codex-answer", SessionID: "same-id", Role: "assistant", Content: "codex answer", Timestamp: "2026-03-28T15:01:00Z"},
 	} {
-		if err := db.InsertMessage(message); err != nil {
+		if err := db.InsertMessage(testInputID(t, db, message.Source), message); err != nil {
 			t.Fatalf("InsertMessage(%s): %v", message.UUID, err)
 		}
 	}
@@ -112,8 +112,8 @@ func TestSessionSourceDoesNotFallBackToAnotherSource(t *testing.T) {
 	db := newCrossSourceSessionTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--source", "cursor_agent", "same-id"}, staticDB(db), config{}, &out, &errOut)
-	if code != 1 || err == nil || err.Error() != "session not found: same-id" || out.Len() != 0 {
+	code, err := showCmd([]string{"--source", "cursor_agent", fixtureREF(core.SourceCodex, "same-id")}, staticDB(db), config{}, &out, &errOut)
+	if code != 2 || err == nil || !strings.Contains(err.Error(), "session not found:") || out.Len() != 0 {
 		t.Fatalf("show = %d, %v, stdout %q", code, err, out.String())
 	}
 }

@@ -12,7 +12,9 @@ import (
 
 func insertOutlineMessage(t *testing.T, db *core.DB, sessionID, uuid, role, content, timestamp string, sidechain bool) {
 	t.Helper()
-	if err := db.InsertMessage(core.NormalizedMessage{
+	if err := db.InsertMessage(testInputID(t, db,
+
+		core.SourceClaudeCode), core.NormalizedMessage{
 		UUID:        uuid,
 		Source:      core.SourceClaudeCode,
 		SessionID:   sessionID,
@@ -33,7 +35,8 @@ func newOutlineTestDB(t *testing.T) *core.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 
-	if err := db.UpsertSession(core.SessionMeta{
+	if err := db.UpsertSession(testInputID(t, db,
+		core.SourceClaudeCode), core.SessionMeta{
 		Source:    core.SourceClaudeCode,
 		SessionID: "sess-1",
 		CWD:       "/Users/test/proj",
@@ -54,7 +57,7 @@ func TestOutlineCmd_ListsUserTurns(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := outlineCmd([]string{"sess-1"}, staticDB(db), config{}, &out, &errOut)
+	code, err := outlineCmd([]string{fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(db), config{}, &out, &errOut)
 	if err != nil {
 		t.Fatalf("outlineCmd: %v", err)
 	}
@@ -74,11 +77,11 @@ func TestOutlineCmd_SessionNotFound(t *testing.T) {
 	db := newOutlineTestDB(t)
 
 	var out, errOut bytes.Buffer
-	code, err := outlineCmd([]string{"no-such"}, staticDB(db), config{}, &out, &errOut)
-	if code != 1 {
-		t.Errorf("exit code = %d, want 1", code)
+	code, err := outlineCmd([]string{fixtureREF(core.SourceClaudeCode, "no-such")}, staticDB(db), config{}, &out, &errOut)
+	if code != 2 {
+		t.Errorf("exit code = %d, want 2", code)
 	}
-	if err == nil || err.Error() != "session not found: no-such" {
+	if err == nil || err.Error() != "session not found: "+fixtureREF(core.SourceClaudeCode, "no-such") {
 		t.Errorf("err = %v, want session not found: no-such", err)
 	}
 }

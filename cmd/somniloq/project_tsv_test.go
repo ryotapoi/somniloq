@@ -36,7 +36,8 @@ func TestProjectOutput_ControlCharacters(t *testing.T) {
 					t.Cleanup(func() { db.Close() })
 					paths := []string{"/repos/old-one", "/repos/old-two", rawPath, collisionPath, "/repos/normal"}
 					for i, path := range paths {
-						if err := db.UpsertSession(core.SessionMeta{
+						if err := db.UpsertSession(testInputID(t, db,
+							core.SourceClaudeCode), core.SessionMeta{
 							Source: core.SourceClaudeCode, SessionID: fmt.Sprintf("session-%d", i),
 							RepoPath: path, StartedAt: "2026-03-29T10:00:00Z",
 						}, "2026-03-29T15:00:00Z"); err != nil {

@@ -12,8 +12,8 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
 
-func processCodexFile(db *DB, path, jsonl string) error {
-	_, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db),
+func processCodexFile(t *testing.T, db *DB, path, jsonl string) error {
+	_, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(t, db, SourceCodex),
 		path,
 		0,
 		int64(len(jsonl)),
@@ -23,7 +23,7 @@ func processCodexFile(db *DB, path, jsonl string) error {
 }
 
 func TestCodexScanFiles_Recursive(t *testing.T) {
-	root := t.TempDir()
+	root := testTempDir(t)
 	nested := filepath.Join(root, "2026", "05", "01")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
 		t.Fatalf("MkdirAll failed: %v", err)
@@ -51,7 +51,7 @@ func TestCodexScanFiles_UnreadableRootIsReported(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("permission checks do not apply to root")
 	}
-	root := t.TempDir()
+	root := testTempDir(t)
 	if err := os.Chmod(root, 0o000); err != nil {
 		t.Fatalf("Chmod failed: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestCodexScanFiles_UnreadableRootIsReported(t *testing.T) {
 
 func TestCodexProcessFile_CountsUnparsedLines(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	// One broken JSON line and one message with a malformed content payload;
 	// the non-message event_msg record is deliberately ignored.
@@ -86,7 +86,7 @@ func TestCodexProcessFile_CountsUnparsedLines(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(db),
+	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(t, db, SourceCodex),
 		path,
 		0,
 		int64(len(jsonl)),
@@ -118,7 +118,7 @@ func TestCodexProcessFile_CountsUnparsedLines(t *testing.T) {
 
 func TestCodexImport_ReportsDiagnosticOnUnterminatedPrefixLine(t *testing.T) {
 	db := testDB(t)
-	root := t.TempDir()
+	root := testTempDir(t)
 	nested := filepath.Join(root, "2026", "05", "01")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
 		t.Fatal(err)
@@ -129,14 +129,14 @@ func TestCodexImport_ReportsDiagnosticOnUnterminatedPrefixLine(t *testing.T) {
 	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Import(db, ImportOptions{CodexSessionsDir: root, Source: ImportSourceCodex}); err != nil {
+	if _, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCodex, Root: root}}, Source: ImportSourceCodex}); err != nil {
 		t.Fatalf("initial Import failed: %v", err)
 	}
 	if err := os.WriteFile(path, []byte(first+"{broken json\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	res, err := Import(db, ImportOptions{CodexSessionsDir: root, Source: ImportSourceCodex})
+	res, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCodex, Root: root}}, Source: ImportSourceCodex})
 	if err != nil {
 		t.Fatalf("incremental Import failed: %v", err)
 	}
@@ -150,7 +150,7 @@ func TestCodexImport_ReportsDiagnosticOnUnterminatedPrefixLine(t *testing.T) {
 
 func TestCodexProcessFile_ImportsConversationMessages(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	jsonl := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"before metadata"}]}}
 {"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-session","timestamp":"2026-05-01T00:00:00.000Z","cwd":"/nonexistent/codex-project","cli_version":"0.128.0","git":{"branch":"main"}}}
@@ -165,7 +165,7 @@ func TestCodexProcessFile_ImportsConversationMessages(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	err := processCodexFile(db, path, jsonl)
+	err := processCodexFile(t, db, path, jsonl)
 	if err != nil {
 		t.Fatalf("processCodexFile failed: %v", err)
 	}
@@ -204,7 +204,7 @@ func TestCodexProcessFile_ImportsConversationMessages(t *testing.T) {
 		t.Errorf("messages:\ngot  %q\nwant %q", got, want)
 	}
 
-	state, err := db.GetImportState(path)
+	state, err := db.GetImportState(testOnlyInput(t, db), path)
 	if err != nil {
 		t.Fatalf("GetImportState failed: %v", err)
 	}
@@ -215,7 +215,7 @@ func TestCodexProcessFile_ImportsConversationMessages(t *testing.T) {
 
 func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	db := testDB(t)
-	root := t.TempDir()
+	root := testTempDir(t)
 	nested := filepath.Join(root, "2026", "05", "01")
 	if err := os.MkdirAll(nested, 0o755); err != nil {
 		t.Fatalf("MkdirAll failed: %v", err)
@@ -230,7 +230,7 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
-	if _, err := importWithAdapter(db, root, codex.NewAdapter(ResolveRepoPath)); err != nil {
+	if _, err := importWithAdapter(db, testInput(t, db, SourceCodex), root, codex.NewAdapter(ResolveRepoPath), "2026-03-28T15:00:00Z"); err != nil {
 		t.Fatalf("first import failed: %v", err)
 	}
 
@@ -239,7 +239,7 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	if err := os.WriteFile(path, []byte(second), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
-	result, err := importWithAdapter(db, root, codex.NewAdapter(ResolveRepoPath))
+	result, err := importWithAdapter(db, testInput(t, db, SourceCodex), root, codex.NewAdapter(ResolveRepoPath), "2026-03-28T15:00:00Z")
 	if err != nil {
 		t.Fatalf("second import failed: %v", err)
 	}
@@ -281,7 +281,7 @@ func codexMessageUUID(path string, lineNumber int) string {
 
 func TestCodexProcessFile_MetaOnlyDoesNotAdvanceImportState(t *testing.T) {
 	db := testDB(t)
-	dir := t.TempDir()
+	dir := testTempDir(t)
 
 	jsonl := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"meta-only","timestamp":"2026-05-01T00:00:00.000Z","cwd":"/nonexistent/meta-only","cli_version":"0.128.0"}}
 `
@@ -290,7 +290,7 @@ func TestCodexProcessFile_MetaOnlyDoesNotAdvanceImportState(t *testing.T) {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
 
-	err := processCodexFile(db, path, jsonl)
+	err := processCodexFile(t, db, path, jsonl)
 	if err != nil {
 		t.Fatalf("processCodexFile failed: %v", err)
 	}
@@ -301,7 +301,7 @@ func TestCodexProcessFile_MetaOnlyDoesNotAdvanceImportState(t *testing.T) {
 	if count != 0 {
 		t.Errorf("sessions: got %d, want 0", count)
 	}
-	state, err := db.GetImportState(path)
+	state, err := db.GetImportState(testOnlyInput(t, db), path)
 	if err != nil {
 		t.Fatalf("GetImportState failed: %v", err)
 	}

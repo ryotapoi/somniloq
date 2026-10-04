@@ -59,42 +59,42 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return importCmd([]string{"--help"}, openDB, "/claude", "/codex", "/cursor", strings.NewReader(""), &bytes.Buffer{}, errOut, false)
 			},
-			want: []string{"Examples:", "Output:", "Imported <imported> files", "Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.", "somniloq import --source cursor-agent", "somniloq import [--source all|claude-code|codex|cursor-agent] [flags]", "source to import: all, claude-code, codex, cursor-agent"},
+			want: []string{"Examples:", "Output:", "Imported <imported> files", "Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.", "somniloq import --config default --source cursor-agent", "somniloq import --config default [--source all|claude-code|codex|cursor-agent] [flags]", "source to import: all, claude-code, codex, cursor-agent"},
 		},
 		{
 			name: "sessions",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return sessionsCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "logical_day", "body_size", "source: internal source identifier", "-imported-since", "show --source <source> <session-id>"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "logical_day", "body_size", "source: internal source identifier", "-imported-since", "show --config default <REF>"},
 		},
 		{
 			name: "show",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return showCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Output (markdown):", "messages fields: role, content, timestamp", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --turn 40..60 <session-id>"},
+			want: []string{"Examples:", "Output (markdown):", "messages fields: role, content, timestamp", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --config default --turn 40..60 <REF>"},
 		},
 		{
 			name: "outline",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return outlineCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "body_size", "Recommended long-session flow", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --turn 12..18 <session-id>"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "body_size", "Recommended long-session flow", "--source accepts", "exclude-user-message-pattern", "no-exclude-user-messages", "somniloq show --config default --turn 12..18 <REF>"},
 		},
 		{
 			name: "search",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return searchCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "JSON fields:", "source, sessionId, turn, timestamp, project, snippet", "turn: outline/show turn number", "-limit", "-offset", "Continue a fixed search", "somniloq search --since 7d"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "JSON fields:", "source, sessionId, turn, timestamp, project, snippet", "turn: outline/show turn number", "-limit", "-offset", "Continue a fixed search", "somniloq search --config default --since 7d"},
 		},
 		{
 			name: "projects",
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return projectsCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "session_count", "project, sessionCount", "somniloq projects --format json"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "session_count", "project, sessionCount", "somniloq projects --config default --format json"},
 		},
 	}
 

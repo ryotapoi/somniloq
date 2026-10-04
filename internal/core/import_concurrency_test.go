@@ -66,8 +66,7 @@ func TestConcurrentImportProcess(t *testing.T) {
 	must(t, err)
 	defer db.Close()
 	importSourceSpecs = []importSourceSpec{{
-		source:  ImportSourceClaudeCode,
-		rootDir: func(opts ImportOptions) string { return opts.ProjectsDir },
+		source: ImportSourceClaudeCode,
 		newAdapter: func() ingest.Adapter {
 			return pausedImportAdapter{Adapter: claudecode.NewAdapter(ResolveRepoPath), phase: phase, wait: func() {
 				fmt.Println("ready")
@@ -77,7 +76,7 @@ func TestConcurrentImportProcess(t *testing.T) {
 			}}
 		},
 	}}
-	r, err := Import(db, ImportOptions{Full: phase == "full", ProjectsDir: os.Getenv("SOMNILOQ_IMPORT_TEST_ROOT"), Source: ImportSourceClaudeCode})
+	r, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: os.Getenv("SOMNILOQ_IMPORT_TEST_ROOT")}}, Full: phase == "full", Source: ImportSourceClaudeCode})
 	must(t, err)
 	outcome := concurrentImportOutcome{Imported: r.FilesImported, Skipped: r.FilesSkipped, Failed: r.FilesFailed}
 	for _, err := range r.Errors {
@@ -141,7 +140,7 @@ func (p *concurrentImportProcess) finish(t *testing.T) concurrentImportOutcome {
 func TestImportConcurrentFull(t *testing.T) {
 	for _, phase := range []string{"before", "after"} {
 		t.Run(phase, func(t *testing.T) {
-			dir := t.TempDir()
+			dir := testTempDir(t)
 			dbPath := filepath.Join(dir, "import.db")
 			root := filepath.Join(dir, "projects")
 			project := filepath.Join(root, "project")
@@ -159,7 +158,7 @@ func TestImportConcurrentFull(t *testing.T) {
 				_, err = db.db.Exec("PRAGMA journal_mode=WAL")
 				must(t, err)
 			}
-			opts := ImportOptions{ProjectsDir: root, Source: ImportSourceClaudeCode}
+			opts := ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: root}}, Source: ImportSourceClaudeCode}
 			r, err := Import(db, opts)
 			must(t, err)
 			if r.FilesImported != 1 || len(r.Errors) != 0 {
@@ -169,7 +168,7 @@ func TestImportConcurrentFull(t *testing.T) {
 			delta := startConcurrentImport(t, dbPath, root, phase)
 			full := startConcurrentImport(t, dbPath, root, "full")
 			deltaResult := delta.finish(t)
-			state, err := db.GetImportState(path)
+			state, err := db.GetImportState(testOnlyInput(t, db), path)
 			must(t, err)
 			if state != nil {
 				t.Errorf("stale delta committed state after deletion: %+v", state)

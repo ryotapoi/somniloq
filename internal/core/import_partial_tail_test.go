@@ -14,7 +14,7 @@ func TestImport_RetriesUnfinishedFinalLine(t *testing.T) {
 		for _, existingState := range []bool{false, true} {
 			t.Run(fmt.Sprintf("%s/existing-state=%t", source, existingState), func(t *testing.T) {
 				db := testDB(t)
-				root := t.TempDir()
+				root := testTempDir(t)
 				path := filepath.Join(root, "project", "agent-transcripts", "session", "session.jsonl")
 				if source == ImportSourceClaudeCode {
 					path = filepath.Join(root, "project", "session.jsonl")
@@ -22,7 +22,7 @@ func TestImport_RetriesUnfinishedFinalLine(t *testing.T) {
 				if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 					t.Fatal(err)
 				}
-				opts := ImportOptions{Source: source, ProjectsDir: root, CodexSessionsDir: root, CursorProjectsDir: root}
+				opts := ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: root}, {Source: SourceCodex, Root: root}, {Source: SourceCursorAgent, Root: root}}, Source: source}
 				record := func(text string) string {
 					switch source {
 					case ImportSourceClaudeCode:

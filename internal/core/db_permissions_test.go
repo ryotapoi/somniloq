@@ -26,12 +26,13 @@ func TestOpenDB_FilePermissions(t *testing.T) {
 	db, err := OpenDB(path)
 	must(t, err)
 	assertDBFileMode(t, path, 0o600)
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "private", SessionID: "session", Role: "user", Content: "private conversation"}))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "session"}, "before"))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "private", SessionID: "session", Role: "user", Content: "private conversation"}))
 	must(t, db.Close())
 
 	db, err = OpenDB(path)
 	must(t, err)
-	messages, err := db.GetMessages(SourceClaudeCode, "session")
+	messages, err := db.GetMessages(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "session")
 	must(t, err)
 	if len(messages) != 1 || messages[0].Content != "private conversation" {
 		t.Fatalf("new DB content after reopen = %+v", messages)
@@ -44,13 +45,13 @@ func TestOpenDB_FilePermissions(t *testing.T) {
 	db, err = OpenDB(path)
 	must(t, err)
 	t.Cleanup(func() { db.Close() })
-	messages, err = db.GetMessages(SourceClaudeCode, "session")
+	messages, err = db.GetMessages(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "session")
 	must(t, err)
 	if len(messages) != 1 || messages[0].Content != "private conversation" {
 		t.Fatalf("existing DB content after reopen = %+v", messages)
 	}
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "second", SessionID: "session", Role: "assistant", Content: "still writable"}))
-	messages, err = db.GetMessages(SourceClaudeCode, "session")
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "second", SessionID: "session", Role: "assistant", Content: "still writable"}))
+	messages, err = db.GetMessages(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "session")
 	must(t, err)
 	if len(messages) != 2 {
 		t.Fatalf("existing DB message count after write = %d, want 2", len(messages))

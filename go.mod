@@ -4,6 +4,7 @@ go 1.27.1
 
 require (
 	github.com/mattn/go-isatty v0.0.16
+	github.com/pelletier/go-toml/v2 v2.2.4
 	modernc.org/sqlite v1.29.0
 )
 

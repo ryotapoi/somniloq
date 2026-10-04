@@ -8,6 +8,8 @@ import (
 )
 
 type SessionRow struct {
+	InputID      int64
+	REF          string
 	Source       Source
 	SessionID    string
 	CWD          string
@@ -37,11 +39,12 @@ type SessionFilter struct {
 // characters) and skips sidechain rows so the value predicts what `show`
 // prints. MessageCount keeps counting every row.
 const sessionRowSelect = `
-	SELECT s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''),
+	SELECT s.input_id, i.input_key, s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''),
 	       COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''),
 	       COUNT(m.uuid), COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.is_sidechain = 0), 0)
 	FROM sessions s
-	LEFT JOIN messages m ON s.source = m.source AND s.session_id = m.session_id`
+ JOIN inputs i ON s.input_id=i.id
+	LEFT JOIN messages m ON s.input_id=m.input_id AND s.source = m.source AND s.session_id = m.session_id`
 
 // rowScanner abstracts *sql.Row and *sql.Rows so scanSessionRow serves both
 // single-row and multi-row queries.
@@ -51,7 +54,10 @@ type rowScanner interface {
 
 func scanSessionRow(row rowScanner) (SessionRow, error) {
 	var r SessionRow
+	var inputKey string
 	if err := row.Scan(
+		&r.InputID,
+		&inputKey,
 		&r.Source,
 		&r.SessionID,
 		&r.CWD,
@@ -64,6 +70,7 @@ func scanSessionRow(row rowScanner) (SessionRow, error) {
 	); err != nil {
 		return SessionRow{}, err
 	}
+	r.REF = RootREF(inputKey, r.Source, r.SessionID)
 	return r, nil
 }
 
@@ -159,7 +166,7 @@ func (d *DB) ListSessions(filter SessionFilter) ([]SessionRow, error) {
 		query += " WHERE " + strings.Join(conditions, " AND ")
 	}
 
-	query += " GROUP BY s.source, s.session_id ORDER BY rfc3339_utc_nanos(s.started_at) DESC"
+	query += " GROUP BY s.input_id, s.source, s.session_id ORDER BY rfc3339_utc_nanos(s.started_at) DESC"
 
 	rows, err := d.execer().Query(query, args...)
 	if err != nil {
@@ -207,11 +214,11 @@ func (d *DB) ListProjects(filter SessionFilter) ([]ProjectRow, error) {
 	return result, nil
 }
 
-func (d *DB) GetSession(source Source, sessionID string) (*SessionRow, error) {
+func (d *DB) GetSession(inputID int64, source Source, sessionID string) (*SessionRow, error) {
 	row := d.execer().QueryRow(sessionRowSelect+`
-		WHERE s.source = ? AND s.session_id = ?
-		GROUP BY s.source, s.session_id`,
-		string(source), sessionID,
+		WHERE s.input_id = ? AND s.source = ? AND s.session_id = ?
+		GROUP BY s.input_id, s.source, s.session_id`,
+		inputID, string(source), sessionID,
 	)
 	r, err := scanSessionRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -226,7 +233,7 @@ func (d *DB) GetSession(source Source, sessionID string) (*SessionRow, error) {
 func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
 	rows, err := d.execer().Query(sessionRowSelect+`
 		WHERE s.session_id = ?
-		GROUP BY s.source, s.session_id
+		GROUP BY s.input_id, s.source, s.session_id
 		ORDER BY s.source ASC`,
 		sessionID,
 	)
@@ -234,4 +241,20 @@ func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
 		return nil, fmt.Errorf("lookup sessions by ID: query: %w", err)
 	}
 	return scanSessionRows(rows, "lookup sessions by ID")
+}
+
+func (d *DB) LookupSessionREF(ref string) (*SessionRow, error) {
+	key, source, id, err := parseRootREF(ref)
+	if err != nil {
+		return nil, err
+	}
+	row := d.db.QueryRow(sessionRowSelect+` WHERE i.input_key=? AND s.source=? AND s.session_id=? GROUP BY s.input_id,s.source,s.session_id`, key, source, id)
+	r, err := scanSessionRow(row)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return &r, nil
 }

@@ -1,6 +1,6 @@
 # somniloq
 
-somniloq は Claude Code / Codex / Cursor Agent のセッションログを SQLite に取り込み、セッションを横断して会話を検索・閲覧するローカル CLI。`~/.claude/projects/`、`~/.codex/sessions/`、`~/.cursor/projects/` の JSONL を読み取る。
+somniloq は Claude Code / Codex / Cursor Agent の JSONL セッションログを SQLite に取り込み、セッションを横断して会話を検索・閲覧するローカル CLI。TOML 設定で DB と source ごとの複数ログ root を指定する。
 
 [English README](README.md)
 
@@ -15,52 +15,65 @@ go install github.com/ryotapoi/somniloq/cmd/somniloq@latest
 ## クイックスタート
 
 ```bash
-somniloq import                         # 3 source の新しいログを取り込む
-somniloq sessions --since 7d           # 最近のセッションを探す
-somniloq search "auth bug"              # セッション横断で本文を検索する
-somniloq search --since 7d --project somniloq "auth" # プロジェクトの直近メッセージを検索する
-somniloq outline <session-id>           # 長いセッションのターンを一覧する
-somniloq show --turn 12..18 <session-id> # 必要なターンを読む
+somniloq config init                              # default TOML を生成（DB は未作成）
+somniloq import --config default                  # 全設定入力を取り込む
+somniloq sessions --config default --since 7d      # 最近のセッションを探す
+somniloq search --config default "auth bug"        # 本文を検索する
+somniloq outline --config default <REF>            # sessions/search の完全 REF を使う
+somniloq show --config default --turn 12..18 <REF> # 必要なターンを読む
 ```
 
-期間などの search フラグは検索語より前に置きます。
-
-`sessions` と `search` の結果には `source` が含まれる。同じセッション ID が複数の source にある場合は、`somniloq show --source codex <session-id>` のように指定する。省略すると `show` と `outline` は一方を選ばず候補を表示する。
+全 DB コマンドで `--config NAME_OR_PATH` が必須。コマンド名の前でも後でも指定できる。search のフラグは検索語より前に置く。`sessions` と `search` の完全 `slq1:...` REF は、別入力にある同名セッション ID も区別する。そのまま `show` / `outline` に渡す。裸 ID・短縮 REF は受理しない。
 
 ## コマンド
 
 | コマンド | 用途 |
 |----------|------|
-| `import` | 新しいログを取り込む。`--source claude-code`、`codex`、`cursor-agent` で対象を1つに絞れる。 |
+| `config init` | DB を開かず TOML 設定を作成する。 |
+| `import` | 新しいログを取り込む。`--input PATH` の繰り返しで root を選び、`--source claude-code`、`codex`、`cursor-agent` で source を絞る。 |
 | `sessions` | セッション一覧。`--since 24h` はセッション時刻、`--imported-since 24h` は最近保存・更新されたセッションで絞る。 |
 | `projects` | プロジェクトとセッション件数を一覧する。 |
 | `search` | メッセージ本文を検索する。`--project` や `--since` で絞れる。 |
-| `outline` | 長い会話を読む前に、user ターンを一覧する。 |
-| `show` | セッションを Markdown で読む。`--turn` や `--tail` で一部だけ読める。 |
+| `outline` | 完全 REF で選んだ会話の user ターンを一覧する。 |
+| `show` | 会話を Markdown で読む。`--turn` や `--tail` で一部だけ読める。 |
 
-旧形式 DB 向けの専用アップグレード・データ補正手段は提供しない。一般的な schema 管理は維持するが、v0.3 形式から現在の schema への移行成功は保証しない。
+`import` は差分取り込み。複数 input 条件は OR、source 条件とは交差する。**`--full` は選択入力の会話・差分状態だけを再構築し、他入力を保持する。** 対象入力の元ログが残っていることを確認して使う。確認プロンプトは `--yes` で省略でき、非対話環境では `--yes` が必須。
 
-`import` はデフォルトで差分を取り込む。**`somniloq import --full` は再取り込み前に somniloq の DB 全体を削除する。** `--source` で1つの source を選んでも他の source の行を削除し、指定した source だけを再取り込みする。保持したいログの原本が揃っていることを確認してから使う。`--full` は確認を求め、`--yes` で確認を省略できる。
+新 DB は schema revision 1。通常コマンドは旧形式・非対応 DB を変更せず拒否する。専用 `migrate` は後続実装。read コマンドは未存在 DB を作成せず拒否する。
 
-フラグ・出力形式・使用例は `somniloq <command> --help` を参照。`sessions`、`projects`、`search`、`outline` は `--format json` に対応し、`show` は Markdown または JSON で出力する。
-
-`sessions` TSV は時刻範囲のタブ・改行を空白化し、8 列・1 セッション 1 行を保つ。JSON は保存済み timestamp の文字列をそのまま出す。
+フラグ・出力形式は `somniloq <command> --help` を参照。`sessions`、`projects`、`search`、`outline` は `--format json` に対応し、`show` は Markdown または JSON で出力する。JSON は引き続き配列、search は literal substring 検索。親子取り込み・まとまり検索・新しい原文取得の show は後続実装。
 
 ## 設定
 
-任意の JSON 設定ファイルは `~/.somniloq/config.json`、DB のデフォルトは `~/.somniloq/somniloq.db`。別のパスはコマンド名の前にグローバルフラグ `--config` または `--db` で指定する。
+`somniloq config init [NAME] [--output PATH] [--db PATH]` の既定名は `default`、出力は `~/.somniloq/config/NAME.toml`、DB は `~/.somniloq/NAME.db`。parent directory を作成し、symlink を含む既存宛先への上書きを拒否する。stdout は設定の絶対 path 一行。`--db` は init だけで利用できる。
 
-```json
-{
-  "projectAliases": {"new-name": ["old-name"]},
-  "excludeUserMessagePatterns": ["^<command-name>/clear</command-name>"],
-  "dayBoundary": "04:00"
-}
+生成する設定には次の3入力がある。
+
+```toml
+db = "~/.somniloq/default.db"
+dayBoundary = "00:00"
+
+[[inputs]]
+name = "Claude"
+source = "claude-code"
+root = "~/.claude/projects"
+
+[[inputs]]
+name = "Codex"
+source = "codex"
+root = "~/.codex/sessions"
+
+[[inputs]]
+name = "Cursor"
+source = "cursor-agent"
+root = "~/.cursor/projects"
 ```
 
-`projectAliases` は改名したプロジェクトをまとめ、`excludeUserMessagePatterns` は `outline` と `show --summary` の user message を表示から除外し、`dayBoundary` はローカル時刻で論理日の開始を指定する。pattern は trim 済みの本文全文に Go 正規表現で照合する。不要なキーは省略できる。
+追加 root は `[[inputs]]` を増やす。同じ source と実体 root は一回だけ走査する。name は任意の表示名で identity を変えない。未存在 root は0件。相対 db/root は設定の実体親 directory 基準で、設定 symlink も実体解決する。先頭 `~` または `~/` だけを home へ展開し、環境変数は展開しない。
 
-v0.13.0 では `commandPatterns` を自動移行しない。pattern を `excludeUserMessagePatterns` へ移すと、適用先がセッション一覧のヒントから表示メッセージへ変わる。slash で始まる本文も除外する場合は `^/` を明示する。`show --summary` は `/clear` や command caveat を既定では除外しないため、必要なら pattern を設定する。一度の summary だけ設定済みの除外を無効にするには `--no-exclude-user-messages` を使う。sessions TSV は 2 列を削除して `source` が 8 列目へ移り、JSON は `nonCommandUserTurnCount` と `firstNonCommandUserLine` を削除する。
+任意の `projectAliases` は改名したプロジェクトをまとめる（`[projectAliases]` の下に `new-name = ["old-name"]`）。グループの重複は拒否する。任意の `dayBoundary` はローカル時刻で論理日の開始を指定する。未知キー・不正値はエラー。旧 JSON は探索・変換せず、`excludeUserMessagePatterns` は設定キーとして受理しない。現行 outline / summary の表示除外は CLI の `--exclude-user-message-pattern` で指定できる。
+
+`--config default` は設定名、`--config ./archive.toml` は path 指定。設定の未指定・欠落は exit 2 と作成案内を返し、DB・設定を自動生成しない。
 
 ## 詳細
 

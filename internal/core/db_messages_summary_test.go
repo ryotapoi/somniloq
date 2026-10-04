@@ -8,17 +8,17 @@ import (
 
 func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
 	db := testDB(t)
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "instant-order"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "instant-order"}, "2026-03-28T15:00:00Z"))
 	for _, message := range []NormalizedMessage{
 		{Source: SourceClaudeCode, UUID: "latest", SessionID: "instant-order", Role: "assistant", Content: "latest", Timestamp: "2026-03-28T08:00:00.2Z"},
 		{Source: SourceClaudeCode, UUID: "tie-first", SessionID: "instant-order", Role: "user", Content: "tie first", Timestamp: "2026-03-28T09:00:00.100+01:00"},
 		{Source: SourceClaudeCode, UUID: "tie-second", SessionID: "instant-order", Role: "user", Content: "tie second", Timestamp: "2026-03-28T08:00:00.1Z"},
 		{Source: SourceClaudeCode, UUID: "earliest", SessionID: "instant-order", Role: "user", Content: "earliest", Timestamp: "2026-03-28T10:00:00+02:00"},
 	} {
-		must(t, db.InsertMessage(message))
+		must(t, db.InsertMessage(testInput(t, db, message.Source), message))
 	}
 
-	messages, err := db.GetMessages(SourceClaudeCode, "instant-order")
+	messages, err := db.GetMessages(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "instant-order")
 	if err != nil {
 		t.Fatalf("GetMessages: %v", err)
 	}
@@ -43,12 +43,12 @@ func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
 func TestGetMessages_ExcludesSidechain(t *testing.T) {
 	db := testDB(t)
 
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "sidechain thought", Timestamp: "2026-03-28T10:00:30Z", IsSidechain: true}))
-	must(t, db.InsertMessage(NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s1", Role: "assistant", Content: "visible reply", Timestamp: "2026-03-28T10:01:00Z"}))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s1", Role: "assistant", Content: "sidechain thought", Timestamp: "2026-03-28T10:00:30Z", IsSidechain: true}))
+	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s1", Role: "assistant", Content: "visible reply", Timestamp: "2026-03-28T10:01:00Z"}))
 
-	msgs, err := db.GetMessages(SourceClaudeCode, "s1")
+	msgs, err := db.GetMessages(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "s1")
 	if err != nil {
 		t.Fatalf("GetMessages failed: %v", err)
 	}
@@ -63,9 +63,9 @@ func TestGetMessages_ExcludesSidechain(t *testing.T) {
 func TestGetTurnMessages_NumberingPopulationWithoutBodies(t *testing.T) {
 	db := testDB(t)
 	for _, source := range []Source{SourceClaudeCode, SourceCodex, SourceCursorAgent} {
-		must(t, db.UpsertSession(SessionMeta{Source: source, SessionID: "shared"}, "2026-03-28T15:00:00Z"))
+		must(t, db.UpsertSession(testInput(t, db, source), SessionMeta{Source: source, SessionID: "shared"}, "2026-03-28T15:00:00Z"))
 	}
-	must(t, db.UpsertSession(SessionMeta{Source: SourceClaudeCode, SessionID: "other"}, "2026-03-28T15:00:00Z"))
+	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "other"}, "2026-03-28T15:00:00Z"))
 	for _, message := range []NormalizedMessage{
 		{Source: SourceClaudeCode, SessionID: "shared", UUID: "latest", Role: "assistant", Timestamp: "2026-03-28T08:00:00.100000001Z"},
 		{Source: SourceClaudeCode, SessionID: "shared", UUID: "tie-user", Role: "user", Timestamp: "2026-03-28T09:00:00.100+01:00"},
@@ -79,7 +79,7 @@ func TestGetTurnMessages_NumberingPopulationWithoutBodies(t *testing.T) {
 		{Source: SourceCursorAgent, SessionID: "shared", UUID: "cursor", Role: "assistant"},
 	} {
 		message.Content = strings.Repeat("large body", 1000)
-		must(t, db.InsertMessage(message))
+		must(t, db.InsertMessage(testInput(t, db, message.Source), message))
 	}
 	for _, tt := range []struct {
 		source Source
@@ -89,7 +89,7 @@ func TestGetTurnMessages_NumberingPopulationWithoutBodies(t *testing.T) {
 		{SourceCodex, []MessageRow{{UUID: "codex", Role: "user"}}},
 		{SourceCursorAgent, []MessageRow{{UUID: "cursor", Role: "assistant"}}},
 	} {
-		got, err := db.GetTurnMessages(tt.source, "shared")
+		got, err := db.GetTurnMessages(testInput(t, db, tt.source), tt.source, "shared")
 		must(t, err)
 		if !reflect.DeepEqual(got, tt.want) {
 			t.Errorf("GetTurnMessages(%s) = %+v, want %+v", tt.source, got, tt.want)

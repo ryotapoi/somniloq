@@ -21,7 +21,8 @@ func newRFC3339FilterDB(t *testing.T, timestamp string) *core.DB {
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
 	}
-	if err := db.UpsertSession(core.SessionMeta{
+	if err := db.UpsertSession(testInputID(t, db,
+		core.SourceClaudeCode), core.SessionMeta{
 		Source:    core.SourceClaudeCode,
 		SessionID: "rfc3339-session",
 		RepoPath:  "/Users/test/rfc3339",
@@ -29,7 +30,8 @@ func newRFC3339FilterDB(t *testing.T, timestamp string) *core.DB {
 	}, timestamp); err != nil {
 		t.Fatalf("UpsertSession: %v", err)
 	}
-	if err := db.InsertMessage(core.NormalizedMessage{
+	if err := db.InsertMessage(testInputID(t, db,
+		core.SourceClaudeCode), core.NormalizedMessage{
 		Source:    core.SourceClaudeCode,
 		UUID:      "rfc3339-message",
 		SessionID: "rfc3339-session",

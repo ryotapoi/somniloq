@@ -3,131 +3,130 @@ package core
 import (
 	"database/sql"
 	"fmt"
+	"reflect"
 )
 
-// Schema changes that add or drop one column belong in the ensure helpers in
-// this file. Changes to table structure require a migrate/table-rebuild path.
+const schema = `
+CREATE TABLE inputs (
+ id INTEGER PRIMARY KEY,
+ input_key TEXT NOT NULL UNIQUE,
+ source TEXT NOT NULL CHECK(source IN ('claude_code','codex','cursor_agent')),
+ root TEXT NOT NULL,
+ UNIQUE(source,root),
+ UNIQUE(id,source)
+);
+CREATE TABLE sessions (
+ input_id INTEGER NOT NULL,
+ source TEXT NOT NULL CHECK(source <> ''),
+ session_id TEXT NOT NULL,
+ identity TEXT NOT NULL,
+ cwd TEXT,
+ repo_path TEXT,
+ git_branch TEXT,
+ custom_title TEXT,
+ agent_name TEXT,
+ version TEXT,
+ started_at TEXT,
+ ended_at TEXT,
+ imported_at TEXT NOT NULL,
+ PRIMARY KEY(input_id,source,session_id),
+ UNIQUE(input_id,identity),
+ FOREIGN KEY(input_id,source) REFERENCES inputs(id,source)
+);
+CREATE TABLE messages (
+ input_id INTEGER NOT NULL,
+ uuid TEXT NOT NULL,
+ source TEXT NOT NULL CHECK(source <> ''),
+ session_id TEXT NOT NULL,
+ parent_uuid TEXT,
+ role TEXT NOT NULL,
+ content TEXT NOT NULL,
+ timestamp TEXT NOT NULL,
+ is_sidechain BOOLEAN DEFAULT FALSE,
+ PRIMARY KEY(input_id,uuid),
+ FOREIGN KEY(input_id,source,session_id) REFERENCES sessions(input_id,source,session_id)
+);
+CREATE INDEX messages_session_idx ON messages(input_id,source,session_id);
+CREATE TABLE import_state (
+ input_id INTEGER NOT NULL,
+ jsonl_path TEXT NOT NULL,
+ source TEXT NOT NULL CHECK(source <> ''),
+ file_size INTEGER,
+ last_offset INTEGER,
+ imported_at TEXT NOT NULL,
+ PRIMARY KEY(input_id,jsonl_path),
+ FOREIGN KEY(input_id,source) REFERENCES inputs(id,source)
+);
+CREATE TABLE migration_origin (
+ id INTEGER PRIMARY KEY CHECK(id=1),
+ snapshot_sha256 TEXT NOT NULL,
+ legacy_shape TEXT NOT NULL,
+ copy_complete INTEGER NOT NULL CHECK(copy_complete=1),
+ snapshot_path TEXT NOT NULL
+);
+PRAGMA user_version=1;
+`
 
-// ensureSessionsProjectDirColumnDropped removes the legacy project_dir column
-// if it is still present. Required when upgrading from v0.2.x DBs.
-// Precondition: the sessions table exists. SQLite 3.35+ required for
-// DROP COLUMN.
-func ensureSessionsProjectDirColumnDropped(db execer) error {
-	present, err := tableColumnPresent(db, "sessions", "project_dir")
-	if err != nil {
-		return fmt.Errorf("inspect sessions table: %w", err)
-	}
-	if !present {
-		return nil
-	}
-	if _, err := db.Exec("ALTER TABLE sessions DROP COLUMN project_dir"); err != nil {
-		// Race re-check: if the column is now absent, another instance dropped
-		// it between our inspect and ALTER — treat as success. Any other state
-		// (re-check failed, or column still present) returns the original
-		// ALTER error.
-		if present2, pErr := tableColumnPresent(db, "sessions", "project_dir"); pErr == nil && !present2 {
-			return nil
-		}
-		return fmt.Errorf("migrate drop project_dir column: %w", err)
-	}
-	return nil
+type SchemaError struct {
+	Revision int
+	Reason   string
 }
 
-// ensureSessionsRepoPathColumn adds sessions.repo_path if it is missing.
-// Precondition: the sessions table exists.
-func ensureSessionsRepoPathColumn(db execer) error {
-	present, err := tableColumnPresent(db, "sessions", "repo_path")
-	if err != nil {
-		return fmt.Errorf("inspect sessions table: %w", err)
+func (e *SchemaError) Error() string {
+	if e.Revision == 0 {
+		return "unsupported database schema (revision 0); dedicated migration is not implemented yet; use a new database"
 	}
-	if present {
-		return nil
-	}
-	if _, err := db.Exec("ALTER TABLE sessions ADD COLUMN repo_path TEXT"); err != nil {
-		// Belt-and-suspenders: re-check state rather than match driver-specific
-		// error strings. Covers the narrow cross-process race where another
-		// instance added the column between our inspect and ALTER. Only treat
-		// it as success when the column is actually present now — otherwise
-		// surface the original ALTER error.
-		if present2, pErr := tableColumnPresent(db, "sessions", "repo_path"); pErr == nil && present2 {
-			return nil
-		}
-		return fmt.Errorf("migrate repo_path column: %w", err)
-	}
-	return nil
+	return fmt.Sprintf("unsupported database schema (revision %d): %s", e.Revision, e.Reason)
 }
 
-// tableColumnPresent reports whether the given column exists on the table.
-// Precondition: the table exists. PRAGMA table_info returns no rows when the
-// table is missing, so the caller must guarantee existence (e.g. by running
-// the schema constant first).
-//
-// SECURITY: `table` is interpolated into the SQL because PRAGMA does not
-// accept `?` placeholders. Pass only trusted internal constants
-// ("sessions", "messages", "import_state"); never propagate user input here.
-func tableColumnPresent(db execer, table, column string) (bool, error) {
-	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))
+func schemaObjects(e execer) ([][3]string, error) {
+	rows, err := e.Query(`SELECT type,name,COALESCE(sql,'') FROM sqlite_master WHERE substr(name,1,7) <> 'sqlite_' ORDER BY type,name`)
 	if err != nil {
-		return false, err
+		return nil, err
 	}
 	defer rows.Close()
+	objects := [][3]string{}
 	for rows.Next() {
-		var (
-			cid       int
-			name      string
-			colType   string
-			notnull   int
-			dfltValue sql.NullString
-			pk        int
-		)
-		if err := rows.Scan(&cid, &name, &colType, &notnull, &dfltValue, &pk); err != nil {
-			return false, err
+		var item [3]string
+		if err := rows.Scan(&item[0], &item[1], &item[2]); err != nil {
+			return nil, err
 		}
-		if name == column {
-			return true, nil
-		}
+		objects = append(objects, item)
 	}
-	if err := rows.Err(); err != nil {
+	return objects, rows.Err()
+}
+
+// Compare the complete declared schema, including indexes and constraints.
+func inspectSchema(e execer) (empty bool, err error) {
+	var revision int
+	if err = e.QueryRow(`PRAGMA user_version`).Scan(&revision); err != nil {
 		return false, err
+	}
+	objects, err := schemaObjects(e)
+	if err != nil {
+		return false, err
+	}
+	if revision == 0 && len(objects) == 0 {
+		return true, nil
+	}
+	if revision != 1 {
+		return false, &SchemaError{Revision: revision, Reason: "unsupported revision"}
+	}
+	expected, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		return false, err
+	}
+	defer expected.Close()
+	expected.SetMaxOpenConns(1)
+	if _, err = expected.Exec(schema); err != nil {
+		return false, err
+	}
+	want, err := schemaObjects(expected)
+	if err != nil {
+		return false, err
+	}
+	if !reflect.DeepEqual(objects, want) {
+		return false, &SchemaError{Revision: revision, Reason: "unknown shape"}
 	}
 	return false, nil
 }
-
-const schema = `
-CREATE TABLE IF NOT EXISTS sessions (
-    source TEXT NOT NULL CHECK(source <> ''),
-    session_id TEXT NOT NULL,
-    cwd TEXT,
-    repo_path TEXT,
-    git_branch TEXT,
-    custom_title TEXT,
-    agent_name TEXT,
-    version TEXT,
-    started_at TEXT,
-    ended_at TEXT,
-    imported_at TEXT NOT NULL,
-    PRIMARY KEY (source, session_id)
-);
-
-CREATE TABLE IF NOT EXISTS messages (
-    uuid TEXT PRIMARY KEY,
-    source TEXT NOT NULL CHECK(source <> ''),
-    session_id TEXT NOT NULL,
-    parent_uuid TEXT,
-    role TEXT NOT NULL,
-    content TEXT NOT NULL,
-    timestamp TEXT NOT NULL,
-    is_sidechain BOOLEAN DEFAULT FALSE,
-    FOREIGN KEY (source, session_id) REFERENCES sessions(source, session_id)
-);
-
-CREATE INDEX IF NOT EXISTS messages_session_idx ON messages(source, session_id);
-
-CREATE TABLE IF NOT EXISTS import_state (
-    jsonl_path TEXT PRIMARY KEY,
-    source TEXT NOT NULL CHECK(source <> ''),
-    file_size INTEGER,
-    last_offset INTEGER,
-    imported_at TEXT NOT NULL
-);
-`
