@@ -1,0 +1,397 @@
+{
+  "applicability": "v0.14.0 planned contract; not assertions about the current parser",
+  "cases": [
+    {
+      "kind": "observed_structure",
+      "identity": [
+        "root"
+      ],
+      "parent": null,
+      "utterances": [
+        {
+          "line": 2,
+          "number": 1,
+          "role": "user",
+          "text": "Inherited question",
+          "timestamp": "2026-10-01T00:01:00Z"
+        },
+        {
+          "line": 3,
+          "number": 2,
+          "role": "assistant",
+          "text": "Inherited answer",
+          "timestamp": "2026-10-01T00:01:00Z"
+        }
+      ],
+      "path": "codex/input-a/root.jsonl"
+    },
+    {
+      "kind": "observed_structure",
+      "identity": [
+        "child"
+      ],
+      "parent": [
+        "root"
+      ],
+      "context_lines": [
+        3,
+        4
+      ],
+      "utterances": [
+        {
+          "line": 5,
+          "number": 1,
+          "role": "assistant",
+          "text": "Child answer",
+          "timestamp": "2026-10-01T00:01:00Z"
+        },
+        {
+          "line": 6,
+          "number": 2,
+          "role": "user",
+          "text": "Child follow-up",
+          "timestamp": "2026-10-01T00:01:00Z"
+        }
+      ],
+      "owner_metadata_line": 1,
+      "embedded_metadata_line": 2,
+      "path": "codex/input-a/child.jsonl"
+    },
+    {
+      "kind": "observed_structure",
+      "identity": [
+        "grandchild"
+      ],
+      "parent": [
+        "child"
+      ],
+      "context_lines": [
+        3
+      ],
+      "utterances": [
+        {
+          "line": 4,
+          "number": 1,
+          "role": "assistant",
+          "text": "Grandchild answer",
+          "timestamp": "2026-10-01T00:01:00Z"
+        }
+      ],
+      "path": "codex/input-a/grandchild.jsonl"
+    },
+    {
+      "kind": "observed_structure",
+      "identity": [
+        "old-child"
+      ],
+      "parent": [
+        "root"
+      ],
+      "context_lines": [],
+      "utterances": [
+        {
+          "line": 2,
+          "number": 1,
+          "role": "assistant",
+          "text": "Old assistant",
+          "timestamp": null
+        },
+        {
+          "line": 3,
+          "number": 2,
+          "role": "user",
+          "text": "Old user",
+          "timestamp": null
+        }
+      ],
+      "timestamp_origin": "unknown; metadata start is not per-record time",
+      "path": "codex/input-a/no-boundary.jsonl"
+    },
+    {
+      "kind": "observed_structure",
+      "identity": [
+        "ordinal-child"
+      ],
+      "parent": [
+        "root"
+      ],
+      "context_lines": [],
+      "utterances": [
+        {
+          "line": 2,
+          "number": 1,
+          "role": "assistant",
+          "text": "Ordinal alone",
+          "timestamp": "2026-10-01T00:01:00Z"
+        }
+      ],
+      "path": "codex/input-a/ordinal-no-boundary.jsonl"
+    },
+    {
+      "kind": "designed_boundary",
+      "identity": [
+        "unknown-owner"
+      ],
+      "parent": [
+        "root"
+      ],
+      "utterances": [],
+      "unresolved_lines": [
+        2
+      ],
+      "replacement_allowed": false,
+      "reason": "explicit boundary with missing ordinal cannot prove own/context membership",
+      "path": "codex/input-a/missing-ordinal.jsonl"
+    },
+    {
+      "kind": "designed_boundary",
+      "identity": [
+        "root"
+      ],
+      "input": "input-b",
+      "parent": null,
+      "utterances": [
+        {
+          "line": 2,
+          "number": 1,
+          "role": "user",
+          "text": "Other input question",
+          "timestamp": "2026-10-01T00:01:00Z"
+        }
+      ],
+      "distinct_from": "codex/input-a/root.jsonl",
+      "path": "codex/input-b/root.jsonl"
+    },
+    {
+      "kind": "designed_boundary",
+      "identity": [
+        "child"
+      ],
+      "parent": [
+        "root"
+      ],
+      "deduplicate_against": "codex/input-a/child.jsonl",
+      "duplicate_line": 2,
+      "new_utterance_line": 3,
+      "merged_order": [
+        "child-extra.jsonl:2",
+        "child-extra.jsonl:3",
+        "child.jsonl:6"
+      ],
+      "merged_numbers": [
+        1,
+        2,
+        3
+      ],
+      "path": "codex/input-a/child-extra.jsonl"
+    },
+    {
+      "kind": "observed_structure_and_designed_mismatch",
+      "identity": [
+        "cc-root"
+      ],
+      "parent": null,
+      "utterances": [
+        {
+          "line": 1,
+          "number": 1,
+          "role": "user",
+          "text": "Root question",
+          "timestamp": "2026-10-01T01:00:00Z"
+        }
+      ],
+      "strict_links": [
+        {
+          "call_line": 2,
+          "result_line": 3,
+          "child_agent_id": "child"
+        }
+      ],
+      "mismatch_result_line": 5,
+      "path": "claude-code/input-a/project/cc-root.jsonl"
+    },
+    {
+      "kind": "observed_structure",
+      "identity": [
+        "cc-root",
+        "child"
+      ],
+      "root": [
+        "cc-root"
+      ],
+      "parent": [
+        "cc-root"
+      ],
+      "utterances": [
+        {
+          "line": 1,
+          "number": 1,
+          "role": "user",
+          "text": "Child prompt",
+          "timestamp": "2026-10-01T01:00:00Z"
+        },
+        {
+          "line": 4,
+          "number": 2,
+          "role": "assistant",
+          "text": "Child result",
+          "timestamp": "2026-10-01T01:00:00Z"
+        }
+      ],
+      "strict_links": [
+        {
+          "call_line": 2,
+          "result_line": 3,
+          "child_agent_id": "grandchild"
+        }
+      ],
+      "path": "claude-code/input-a/project/cc-root/subagents/agent-child.jsonl"
+    },
+    {
+      "kind": "observed_structure",
+      "identity": [
+        "cc-root",
+        "grandchild"
+      ],
+      "root": [
+        "cc-root"
+      ],
+      "parent": [
+        "cc-root",
+        "child"
+      ],
+      "utterances": [
+        {
+          "line": 1,
+          "number": 1,
+          "role": "user",
+          "text": "Grandchild prompt",
+          "timestamp": "2026-10-01T01:00:00Z"
+        },
+        {
+          "line": 2,
+          "number": 2,
+          "role": "assistant",
+          "text": "Grandchild result",
+          "timestamp": "2026-10-01T01:00:00Z"
+        }
+      ],
+      "path": "claude-code/input-a/project/cc-root/subagents/agent-grandchild.jsonl"
+    },
+    {
+      "kind": "observed_unresolved_and_designed_mismatch",
+      "identity": [
+        "cc-root",
+        "unresolved"
+      ],
+      "root": [
+        "cc-root"
+      ],
+      "parent": null,
+      "parent_status": "unknown",
+      "unfetched_context_reference": "missing-context",
+      "utterances": [
+        {
+          "line": 2,
+          "number": 1,
+          "role": "user",
+          "text": "Unresolved prompt",
+          "timestamp": "2026-10-01T01:00:00Z"
+        }
+      ],
+      "reason": "root membership is path evidence; mismatched call/result cannot establish direct parent",
+      "path": "claude-code/input-a/project/cc-root/subagents/agent-unresolved.jsonl"
+    },
+    {
+      "kind": "observed_structure",
+      "identity": [
+        "cursor-root"
+      ],
+      "parent": null,
+      "parent_status": "unknown",
+      "project": null,
+      "timestamp": null,
+      "utterances": [
+        {
+          "line": 1,
+          "number": 1,
+          "role": "user",
+          "text": "First block\n\nSecond block",
+          "timestamp": null
+        },
+        {
+          "line": 4,
+          "number": 2,
+          "role": "assistant",
+          "text": "Answer\nDetail",
+          "timestamp": null
+        }
+      ],
+      "path": "cursor-agent/input-a/project-slug/agent-transcripts/cursor-root/cursor-root.jsonl"
+    },
+    {
+      "path": "claude-code/input-a/project/cc-root/subagents/agent-agent-mismatch.jsonl",
+      "kind": "designed_boundary",
+      "identity": [
+        "cc-root",
+        "agent-mismatch"
+      ],
+      "root": [
+        "cc-root"
+      ],
+      "parent": null,
+      "parent_status": "unknown",
+      "reason": "call/result IDs match but structured result agentId differs from child agentId",
+      "utterances": [
+        {
+          "line": 1,
+          "number": 1,
+          "role": "user",
+          "text": "Agent mismatch prompt",
+          "timestamp": "2026-10-01T01:00:00Z"
+        }
+      ]
+    }
+  ],
+  "forward_rollout_append": {
+    "kind": "designed_boundary",
+    "append_file": "resume/forward-rollout-append.txt",
+    "append_to": "codex/input-a/child-extra.jsonl",
+    "identity": [
+      "child"
+    ],
+    "before_order": [
+      "child-extra.jsonl:2",
+      "child-extra.jsonl:3",
+      "child.jsonl:6"
+    ],
+    "before_numbers": [
+      1,
+      2,
+      3
+    ],
+    "after_order": [
+      "child-extra.jsonl:2",
+      "child-extra.jsonl:3",
+      "child-extra.jsonl:4",
+      "child.jsonl:6"
+    ],
+    "after_numbers": [
+      1,
+      2,
+      3,
+      4
+    ],
+    "existing_message_number_change": {
+      "origin": "child.jsonl:6",
+      "before": 3,
+      "after": 4
+    },
+    "equal_results_for": [
+      "incremental_import",
+      "full_reprocess",
+      "migrate_replacement"
+    ],
+    "same_final_files_required": true
+  }
+}

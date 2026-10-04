@@ -1,0 +1,46 @@
+{
+  "kind": "designed_boundary_based_on_observed_old_parser",
+  "rows": [
+    {
+      "path": "/fixtures/input-a/child.jsonl",
+      "line": 3,
+      "legacy_uuid": "codex:f4085e7abce3bb030a73d3b23df871b74e81d9a16c73c441a2097d53d14c2a05",
+      "legacy_session_id": "root",
+      "classification": "context",
+      "rollout_owner": "child",
+      "own_conversation_id": null,
+      "inherited_from": "root"
+    },
+    {
+      "path": "/fixtures/input-a/child.jsonl",
+      "line": 4,
+      "legacy_uuid": "codex:080cbd6476dc34acf8d99773315ed207be969bacd208b6612b4b2b9b833bef81",
+      "legacy_session_id": "root",
+      "classification": "context",
+      "rollout_owner": "child",
+      "own_conversation_id": null,
+      "inherited_from": "root"
+    },
+    {
+      "path": "/fixtures/input-a/child.jsonl",
+      "line": 5,
+      "legacy_uuid": "codex:fc4779abab035af54ce7acc54f55dafd2c1f121e194beefe75459f42c7267043",
+      "legacy_session_id": "root",
+      "classification": "own",
+      "rollout_owner": "child",
+      "own_conversation_id": "child",
+      "inherited_from": null
+    },
+    {
+      "path": "/fixtures/input-a/child.jsonl",
+      "line": 6,
+      "legacy_uuid": "codex:e9af1312735aeb43c4b53eb0060ad8e13e86a67bee7aecc4d280615c0d74ef6d",
+      "legacy_session_id": "root",
+      "classification": "own",
+      "rollout_owner": "child",
+      "own_conversation_id": "child",
+      "inherited_from": null
+    }
+  ],
+  "expected": "physical UUID proves line origin only; legacy root attribution does not prove logical owner"
+}

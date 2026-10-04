@@ -1,0 +1,256 @@
+{
+  "applicability": "planned v0.14.0; conceptual canonical roots, not host paths",
+  "refs": {
+    "R": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJyb290Il0",
+    "C": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJjaGlsZCJd",
+    "otherInputRoot": "slq1:bb1420ee541eedbcef79beae35e0b96cd94738b021b8c0584627bf0611002869:codex:WyJyb290Il0"
+  },
+  "cases": [
+    {
+      "name": "root AND across child",
+      "patterns": [
+        "Inherited question",
+        "Child answer"
+      ],
+      "all": true,
+      "session": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJyb290Il0",
+      "expectedTotal": 2,
+      "expectedMatches": [
+        {
+          "ref": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJjaGlsZCJd",
+          "messageNumber": 1,
+          "occurrenceNumber": 1,
+          "role": "assistant",
+          "timestamp": "2026-10-01T00:01:00Z",
+          "startByte": 0,
+          "endByte": 12,
+          "patternIndexes": [
+            2
+          ],
+          "matchText": "Child answer",
+          "lineText": "Child answer"
+        },
+        {
+          "ref": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJyb290Il0",
+          "messageNumber": 1,
+          "occurrenceNumber": 1,
+          "role": "user",
+          "timestamp": "2026-10-01T00:01:00Z",
+          "startByte": 0,
+          "endByte": 18,
+          "patternIndexes": [
+            1
+          ],
+          "matchText": "Inherited question",
+          "lineText": "Inherited question"
+        }
+      ]
+    },
+    {
+      "name": "child AND excludes ancestor",
+      "patterns": [
+        "Inherited question",
+        "Child answer"
+      ],
+      "all": true,
+      "session": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJjaGlsZCJd",
+      "expectedTotal": 0
+    },
+    {
+      "name": "same ID different input",
+      "refs": [
+        "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJyb290Il0",
+        "slq1:bb1420ee541eedbcef79beae35e0b96cd94738b021b8c0584627bf0611002869:codex:WyJyb290Il0"
+      ],
+      "expectedDistinct": true
+    },
+    {
+      "name": "daily actual utterances",
+      "since": "2026-10-01",
+      "until": "2026-10-01",
+      "mode": "active",
+      "expectedCursorSelected": false,
+      "expectedUnknownCodexSelected": false
+    },
+    {
+      "name": "last page exceeded",
+      "total": 1,
+      "limit": 20,
+      "offset": 20,
+      "expected": {
+        "items": [],
+        "total": 1,
+        "count": 0,
+        "limit": 20,
+        "offset": 20,
+        "hasMore": false,
+        "nextOffset": null
+      }
+    },
+    {
+      "name": "show first line after filter",
+      "text": "Answer\nDetail",
+      "role": "assistant",
+      "number": 2,
+      "oneLine": true,
+      "expectedText": "Answer",
+      "expectedNumber": 2
+    },
+    {
+      "name": "regexp duplicate intervals",
+      "text": "foo foo",
+      "patterns": [
+        "foo",
+        "foo"
+      ],
+      "expectedSpans": [
+        [
+          0,
+          3
+        ],
+        [
+          4,
+          7
+        ]
+      ],
+      "expectedPatternIndexes": [
+        [
+          1,
+          2
+        ],
+        [
+          1,
+          2
+        ]
+      ]
+    },
+    {
+      "name": "regexp cross-pattern overlap",
+      "text": "foo",
+      "patterns": [
+        "foo",
+        "oo"
+      ],
+      "expectedSpans": [
+        [
+          0,
+          3
+        ],
+        [
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "name": "regexp unicode byte offsets",
+      "text": "あfoo",
+      "patterns": [
+        "foo"
+      ],
+      "expectedSpans": [
+        [
+          3,
+          6
+        ]
+      ]
+    },
+    {
+      "name": "regexp zero width",
+      "text": "foo",
+      "patterns": [
+        "^|$"
+      ],
+      "expectedSpans": [
+        [
+          0,
+          0
+        ],
+        [
+          3,
+          3
+        ]
+      ]
+    },
+    {
+      "name": "regexp adjacent empty suppressed",
+      "text": "foo",
+      "patterns": [
+        "o*"
+      ],
+      "expectedSpans": [
+        [
+          0,
+          0
+        ],
+        [
+          1,
+          3
+        ]
+      ]
+    },
+    {
+      "name": "empty pattern rejected",
+      "patterns": [
+        ""
+      ],
+      "exit": 2
+    },
+    {
+      "name": "unsupported lookahead rejected",
+      "patterns": [
+        "(?=foo)"
+      ],
+      "exit": 2
+    },
+    {
+      "name": "date bounds and AND",
+      "knownStart": "2026-10-01T00:01:00Z",
+      "knownLast": "2026-10-03T00:01:00Z",
+      "since": "2026-10-02",
+      "until": "2026-10-02",
+      "expectedModes": {
+        "active": false,
+        "started": false,
+        "last": false,
+        "overlap": true
+      },
+      "explanation": "No actual message on the selected day; overlap selects interval and tests full candidate text"
+    },
+    {
+      "name": "only child matches project or imported-since",
+      "candidateMembers": [
+        "child"
+      ],
+      "displayMembers": [
+        "root",
+        "child",
+        "grandchild",
+        "old-child",
+        "ordinal-child"
+      ],
+      "patterns": [
+        "Inherited question",
+        "Child answer"
+      ],
+      "all": true,
+      "expectedTotal": 0
+    },
+    {
+      "name": "duplicate show selectors",
+      "selectedRefs": [
+        "R",
+        "C"
+      ],
+      "descendants": true,
+      "expectedRefOrder": [
+        "R",
+        "C",
+        "grandchild",
+        "old-child",
+        "ordinal-child"
+      ],
+      "deduplicate": true
+    }
+  ]
+}

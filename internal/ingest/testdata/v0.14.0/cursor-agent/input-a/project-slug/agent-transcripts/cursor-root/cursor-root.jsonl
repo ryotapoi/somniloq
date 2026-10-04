@@ -1,0 +1,4 @@
+{"role":"user","message":{"content":[{"type":"text","text":"First block"},{"type":"text","text":"Second block"}]}}
+{"role":"assistant","message":{"content":[{"type":"tool_use","id":"tool1","name":"Read","input":{}}]}}
+{"type":"turn_ended"}
+{"role":"assistant","message":{"content":[{"type":"text","text":"Answer\nDetail"}]}}

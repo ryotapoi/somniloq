@@ -2,6 +2,8 @@
 
 Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造。
 
+この文書の既存取り込み・保存記述は現行実装の契約。v0.14.0 の子孫・複数入力・本人／継承・未知日時の実装予定契約と合成 fixture は [元ログ調査](v0.14.0-log-evidence.md) を参照する。以下の観測追記は現行 parser がすでに対応している意味ではない。
+
 ## source 値
 
 `import` の CLI `--source` はユーザー向け表記として `all|claude-code|codex|cursor-agent` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex|cursor_agent` を保存する。`show` / `outline` の session 選択用 `--source` は、DB 内部値または `claude-code` / `codex` / `cursor-agent` を受け取り、`all` は受け取らない。
@@ -20,6 +22,10 @@ Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造
 
 - project-dir: プロジェクトパスを `-` 区切りでエンコードしたもの（例: `-Users-ryota-Sources-ryotapoi-Brimday`）
 - session-id: UUID v4（例: `a8171355-f84f-48e5-b27c-9e15c00da934`）
+
+### 子孫ファイルの観測（v0.14.0 調査）
+
+root JSONL と同じ project 配下の `<root-session-id>/subagents/agent-<agent-id>.jsonl` に子と孫が保存される。子本人は path の root session ID と agent ID の組で識別する。root 所属は直接親を意味しない。同一物理親ファイルの Agent/Task `tool_use.id` と `tool_result.tool_use_id`、同 record の `toolUseResult.agentId` と子の agent ID の厳密な一致を直接親の根拠にする。prompt の一致だけでは解決しない。`fork-context-ref` は未取得 context の参照であり、参照先本文を仮造しない。観測件数と未確定例は [調査根拠](v0.14.0-log-evidence.md#観測根拠) を参照する。
 
 ### レコード構造
 
@@ -107,6 +113,10 @@ id, timestamp, cwd, originator, cli_version, source, model_provider, git
 - `payload.content` は配列。`type` が `input_text`, `output_text`, `text` の要素の `text` を抽出し、複数あれば空行区切りで結合する
 - `function_call`, `function_call_output`, `reasoning`, `event_msg` 等は保存しない
 - レコード自身が `timestamp` を持たない場合は `session_meta` の `timestamp` を使う。per-record timestamp を持たない旧形式の rollout では、結果として同一セッションの全メッセージが同じ timestamp になる
+
+### 本人と継承の観測（v0.14.0 調査）
+
+子 rollout の最初の metadata が本人 ID、その後に埋め込まれた metadata が親 ID の例がある。最初の metadata の `source.subagent.thread_spawn.parent_thread_id` は直接親を示す。`session_meta.payload.subagent_history_start_ordinal` がある場合、本文 record の top-level `ordinal` が境界未満なら継承 context、境界以上なら本人。本人最初の本文が assistant の例を確認しており、最初の user を境界にしない。境界がない旧形式は ordinal の有無にかかわらず除外を推測しない。旧 UUID の物理行出自は本人帰属の証明とは別。具体的な入力と非推測の境界は [代表 fixture](../../internal/ingest/testdata/v0.14.0/README.md) を参照する。
 
 ### 一意性と差分取り込み
 

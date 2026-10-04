@@ -1,0 +1,2 @@
+{"role":"user","message":{"content":[{"type":"text","text":"Before"}]}}
+{"role":"assistant","message":{"content":[

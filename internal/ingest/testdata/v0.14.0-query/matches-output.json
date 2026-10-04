@@ -1,0 +1,38 @@
+{
+  "items": [
+    {
+      "ref": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJjaGlsZCJd",
+      "messageNumber": 1,
+      "occurrenceNumber": 1,
+      "role": "assistant",
+      "timestamp": "2026-10-01T00:01:00Z",
+      "startByte": 0,
+      "endByte": 12,
+      "patternIndexes": [
+        2
+      ],
+      "matchText": "Child answer",
+      "lineText": "Child answer"
+    },
+    {
+      "ref": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJyb290Il0",
+      "messageNumber": 1,
+      "occurrenceNumber": 1,
+      "role": "user",
+      "timestamp": "2026-10-01T00:01:00Z",
+      "startByte": 0,
+      "endByte": 18,
+      "patternIndexes": [
+        1
+      ],
+      "matchText": "Inherited question",
+      "lineText": "Inherited question"
+    }
+  ],
+  "total": 2,
+  "count": 2,
+  "limit": null,
+  "offset": 0,
+  "hasMore": false,
+  "nextOffset": null
+}

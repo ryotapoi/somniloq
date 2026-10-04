@@ -1,0 +1,2 @@
+{"type":"fork-context-ref","sessionId":"cc-root","agentId":"unresolved","parentUuid":"missing-context"}
+{"type":"user","uuid":"u1","sessionId":"cc-root","timestamp":"2026-10-01T01:00:00Z","cwd":"/fixtures/project","message":{"role":"user","content":"Unresolved prompt"},"agentId":"unresolved","isSidechain":true}

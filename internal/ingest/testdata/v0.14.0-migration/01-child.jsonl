@@ -1,0 +1,4 @@
+{"type":"session_meta","timestamp":"2026-01-02T00:00:00Z","payload":{"id":"child","subagent_history_start_ordinal":8,"source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent","depth":1}}}}}
+{"type":"session_meta","timestamp":"2026-01-02T00:00:00Z","payload":{"id":"parent"}}
+{"type":"response_item","payload":{"type":"message","role":"assistant","id":"inherited","content":[{"type":"output_text","text":"inherited context"}]},"ordinal":7}
+{"type":"response_item","payload":{"type":"message","role":"assistant","id":"own","content":[{"type":"output_text","text":"child own"}]},"ordinal":8}

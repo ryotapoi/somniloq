@@ -1,0 +1,3 @@
+{"type":"session_meta","timestamp":"2026-10-01T00:00:00Z","payload":{"id":"old-child","timestamp":"2026-10-01T00:00:00Z","cwd":"/fixtures/project","source":{"subagent":{"thread_spawn":{"parent_thread_id":"root","depth":1}}}}}
+{"type":"response_item","payload":{"type":"message","id":"o1","role":"assistant","content":[{"type":"output_text","text":"Old assistant"}]}}
+{"type":"response_item","payload":{"type":"message","id":"o2","role":"user","content":[{"type":"input_text","text":"Old user"}]}}

@@ -1,0 +1,282 @@
+{
+  "schema_fixture": "legacy.sql",
+  "fixture_kind": "synthetic",
+  "source_snapshot_digest": "sha256 of finalized standalone SQLite bytes, computed once by fixture harness",
+  "physical_paths": {
+    "child": "/fixture/input-a/01-child.jsonl",
+    "multi1": "/fixture/input-a/02-multi.jsonl",
+    "multi2": "/fixture/input-a/03-multi.jsonl",
+    "unknown": "/fixture/old/missing.jsonl",
+    "conflict": "/fixture/shared/04-conflict.jsonl"
+  },
+  "message_uuids": {
+    "1": "codex:9f86d598cf04a7c765e37f2b6388d9204f252981400b395d65d1f68974bb5761",
+    "2": "codex:594944de5576a900f35d1fa066335d5b9e7f52afb53c83f621e0a148e46ce5fd",
+    "3": "codex:6cff90dc527dfbb4f2e0f2e91821c8239b5325d404c6ddcf9448c95f2159049b",
+    "4": "codex:aef2466c2b168af769896c82312ea6949428237864be366230b29636a6d8df5f",
+    "5": "codex:636fc24904bee52378b09e70e653d73cd7691fed099d8802ba3a8f67be5f1a1a",
+    "6": "codex:efb59ba9ab065c86d57e73b6b371cbcf1207a50192e8be45aa75b98aa2df7c8d",
+    "7": "claude-u1",
+    "8": "cursor-u1"
+  },
+  "inputs": [
+    {
+      "name": "a",
+      "source": "codex",
+      "canonical_root": "/fixture/input-a"
+    },
+    {
+      "name": "b",
+      "source": "codex",
+      "canonical_root": "/fixture/shared"
+    }
+  ],
+  "cases": [
+    {
+      "name": "child_physical_not_owner",
+      "files": [
+        "01-child.jsonl"
+      ],
+      "mapping": {
+        "01-child.jsonl": "/fixture/input-a/01-child.jsonl"
+      },
+      "expected": {
+        "new_identity": [
+          "child"
+        ],
+        "new_text": [
+          "child own"
+        ],
+        "removed_legacy_rowids": [
+          1,
+          2
+        ],
+        "retained_legacy_rowids": [
+          3
+        ],
+        "legacy_parent_input": null,
+        "inherited_context": [
+          "inherited context"
+        ]
+      }
+    },
+    {
+      "name": "multiple_rollouts",
+      "files": [
+        "02-multi.jsonl",
+        "03-multi.jsonl"
+      ],
+      "expected": {
+        "new_identity": [
+          "multi"
+        ],
+        "new_text": [
+          "first",
+          "second"
+        ],
+        "removed_legacy_rowids": [
+          4,
+          5
+        ],
+        "deduplicated_payload_ids": [
+          "m1"
+        ]
+      }
+    },
+    {
+      "name": "missing_log",
+      "files": [],
+      "legacy_session_id": "missing",
+      "expected": {
+        "legacy_preserved": true,
+        "input": null,
+        "parent": null
+      }
+    },
+    {
+      "name": "conflicting_input_evidence",
+      "files": [
+        "04-conflict.jsonl"
+      ],
+      "candidate_input_ids": [
+        "a",
+        "b"
+      ],
+      "expected": {
+        "removed_legacy_rowids": [],
+        "retained_legacy_rowids": [
+          6
+        ],
+        "replacement_status": "failed",
+        "reason": "input_membership_conflict"
+      },
+      "override_inputs": [
+        {
+          "name": "a",
+          "source": "codex",
+          "canonical_root": "/fixture"
+        },
+        {
+          "name": "b",
+          "source": "codex",
+          "canonical_root": "/fixture/shared"
+        }
+      ],
+      "mapping": {
+        "04-conflict.jsonl": "/fixture/shared/04-conflict.jsonl"
+      }
+    },
+    {
+      "name": "other_sources",
+      "expected": {
+        "retained_legacy_rowids": [
+          7,
+          8
+        ],
+        "cursor_timestamp": null,
+        "codex_replacement_does_not_parse_other_sources": true
+      }
+    },
+    {
+      "name": "unattributed_old_same_id",
+      "old_legacy_session_id": "child",
+      "old_row_evidence": [],
+      "files": [
+        "01-child.jsonl"
+      ],
+      "expected": {
+        "legacy_preserved": true,
+        "new_conversation_saved": true,
+        "replacement_status": "failed",
+        "reason": "old_input_membership_unknown"
+      },
+      "mutation": {
+        "sql": "INSERT INTO sessions(source,session_id,imported_at) VALUES ('codex','child','2026-01-01T00:00:00Z'); INSERT INTO messages(uuid,source,session_id,role,content,timestamp) VALUES ('unknown-child-row','codex','child','user','unknown saved value','');"
+      }
+    },
+    {
+      "name": "rollout_payload_conflict",
+      "mutation": {
+        "file": "03-multi.jsonl",
+        "line": 2,
+        "text": "different"
+      },
+      "expected": {
+        "replacement_status": "failed",
+        "retained_legacy_rowids": [
+          4,
+          5
+        ],
+        "state_unchanged": true
+      }
+    },
+    {
+      "name": "unattributed_before_metadata",
+      "mutation": {
+        "file": "01-child.jsonl",
+        "prepend": {
+          "type": "response_item",
+          "payload": {
+            "type": "message",
+            "role": "assistant",
+            "id": "pre",
+            "content": [
+              {
+                "type": "output_text",
+                "text": "unknown owner"
+              }
+            ]
+          }
+        }
+      },
+      "expected": {
+        "replacement_status": "failed",
+        "reason": "message_owner_unknown",
+        "retained_legacy_rowids": [
+          1,
+          2,
+          3
+        ]
+      }
+    },
+    {
+      "name": "invalid_json",
+      "mutation": {
+        "file": "02-multi.jsonl",
+        "append": "{broken\n"
+      },
+      "expected": {
+        "replacement_status": "failed",
+        "retained_legacy_rowids": [
+          4,
+          5
+        ],
+        "state_unchanged": true
+      }
+    },
+    {
+      "name": "initial_copy_interrupt",
+      "expected": {
+        "committed_sessions": 0,
+        "copy_complete": false,
+        "retry_mode": "initial_copy"
+      }
+    },
+    {
+      "name": "same_snapshot_retry",
+      "expected": {
+        "copy_skipped": true,
+        "all_current_codex_groups_reprocessed": true
+      }
+    },
+    {
+      "name": "different_snapshot_retry",
+      "mutation": {
+        "legacy_session_id": "new-after-snapshot"
+      },
+      "expected": {
+        "exit_code": 1,
+        "destination_unchanged": true,
+        "reason": "snapshot_digest_mismatch"
+      }
+    },
+    {
+      "name": "ordinary_new_destination",
+      "expected": {
+        "exit_code": 1,
+        "destination_unchanged": true,
+        "reason": "missing_copy_receipt"
+      }
+    },
+    {
+      "name": "unknown_schema",
+      "mutation": {
+        "sql": "ALTER TABLE sessions ADD COLUMN unknown TEXT;"
+      },
+      "expected": {
+        "exit_code": 2,
+        "destination_created": false
+      }
+    },
+    {
+      "name": "all_normal_records_ignored",
+      "files": [
+        "02-multi.jsonl"
+      ],
+      "mutation": {
+        "file": "02-multi.jsonl",
+        "remove_lines": [
+          2
+        ]
+      },
+      "expected": {
+        "replacement_status": "failed",
+        "retained_legacy_rowids": [
+          4,
+          5
+        ],
+        "reason": "no_own_messages"
+      }
+    }
+  ]
+}

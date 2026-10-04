@@ -1,0 +1,2 @@
+{"type":"user","uuid":"g1","sessionId":"cc-root","timestamp":"2026-10-01T01:00:00Z","cwd":"/fixtures/project","message":{"role":"user","content":"Grandchild prompt"},"agentId":"grandchild","isSidechain":true}
+{"type":"assistant","uuid":"g2","sessionId":"cc-root","timestamp":"2026-10-01T01:00:00Z","cwd":"/fixtures/project","message":{"role":"assistant","content":[{"type":"text","text":"Grandchild result"}]},"agentId":"grandchild","isSidechain":true}

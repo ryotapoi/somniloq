@@ -1,0 +1,16 @@
+db = "./result.db"
+dayBoundary = "00:00"
+[projectAliases]
+example = ["old-example"]
+[[inputs]]
+name = "A"
+source = "codex"
+root = "../v0.14.0/codex/input-a"
+[[inputs]]
+name = "B"
+source = "codex"
+root = "../v0.14.0/codex/input-b"
+[[inputs]]
+name = "Cursor"
+source = "cursor-agent"
+root = "../v0.14.0/cursor-agent/input-a"

@@ -1,0 +1,4 @@
+{"type":"session_meta","timestamp":"2026-10-01T00:00:00Z","payload":{"id":"grandchild","timestamp":"2026-10-01T00:00:00Z","cwd":"/fixtures/project","source":{"subagent":{"thread_spawn":{"parent_thread_id":"child","depth":2}}},"subagent_history_start_ordinal":2}}
+{"type":"session_meta","timestamp":"2026-10-01T00:00:00Z","payload":{"id":"child","timestamp":"2026-10-01T00:00:00Z","cwd":"/fixtures/project"}}
+{"type":"response_item","payload":{"type":"message","id":"c1","role":"assistant","content":[{"type":"output_text","text":"Child answer"}]},"ordinal":1,"timestamp":"2026-10-01T00:01:00Z"}
+{"type":"response_item","payload":{"type":"message","id":"g1","role":"assistant","content":[{"type":"output_text","text":"Grandchild answer"}]},"ordinal":2,"timestamp":"2026-10-01T00:01:00Z"}

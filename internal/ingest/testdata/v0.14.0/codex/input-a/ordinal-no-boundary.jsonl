@@ -1,0 +1,2 @@
+{"type":"session_meta","timestamp":"2026-10-01T00:00:00Z","payload":{"id":"ordinal-child","timestamp":"2026-10-01T00:00:00Z","cwd":"/fixtures/project","source":{"subagent":{"thread_spawn":{"parent_thread_id":"root","depth":1}}}}}
+{"type":"response_item","payload":{"type":"message","id":"o3","role":"assistant","content":[{"type":"output_text","text":"Ordinal alone"}]},"ordinal":7,"timestamp":"2026-10-01T00:01:00Z"}

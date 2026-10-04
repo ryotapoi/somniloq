@@ -1,0 +1,6 @@
+{"type":"session_meta","timestamp":"2026-10-01T00:00:00Z","payload":{"id":"child","timestamp":"2026-10-01T00:00:00Z","cwd":"/fixtures/project","source":{"subagent":{"thread_spawn":{"parent_thread_id":"root","depth":1}}},"subagent_history_start_ordinal":3}}
+{"type":"session_meta","timestamp":"2026-10-01T00:00:00Z","payload":{"id":"root","timestamp":"2026-10-01T00:00:00Z","cwd":"/fixtures/project"}}
+{"type":"response_item","payload":{"type":"message","id":"r1","role":"user","content":[{"type":"input_text","text":"Inherited question"}]},"ordinal":1,"timestamp":"2026-10-01T00:01:00Z"}
+{"type":"response_item","payload":{"type":"message","id":"r2","role":"assistant","content":[{"type":"output_text","text":"Inherited answer"}]},"ordinal":2,"timestamp":"2026-10-01T00:01:00Z"}
+{"type":"response_item","payload":{"type":"message","id":"c1","role":"assistant","content":[{"type":"output_text","text":"Child answer"}]},"ordinal":3,"timestamp":"2026-10-01T00:01:00Z"}
+{"type":"response_item","payload":{"type":"message","id":"c2","role":"user","content":[{"type":"input_text","text":"Child follow-up"}]},"ordinal":4,"timestamp":"2026-10-01T00:01:00Z"}

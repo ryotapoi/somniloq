@@ -1,0 +1,1 @@
+{"sessionId":"cc-root","timestamp":"2026-10-01T01:00:00Z","cwd":"/fixtures/project","type":"user","uuid":"am1","agentId":"agent-mismatch","isSidechain":true,"message":{"role":"user","content":"Agent mismatch prompt"}}
