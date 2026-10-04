@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -70,6 +71,7 @@ type fileHandler struct {
 	importedAt      string
 	path            string
 	lineNumber      int
+	bodyNumbers     map[string]int
 	repoCache       map[string]string
 	titles          map[string]string
 	agentNames      map[string]string
@@ -85,6 +87,7 @@ func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, path st
 		resolveRepoPath: a.resolveRepoPath,
 		importedAt:      importedAt,
 		repoCache:       map[string]string{},
+		bodyNumbers:     map[string]int{},
 		titles:          map[string]string{},
 		agentNames:      map[string]string{},
 	}
@@ -103,11 +106,23 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 	}
 	defer f.Close()
 
-	lineNumber, err := ingest.CountLineFeeds(f, offset)
+	_, err = ingest.ForEachLine(io.LimitReader(f, offset), -1, func(line []byte) error {
+		if len(line) > 0 && line[len(line)-1] == '\n' {
+			h.lineNumber++
+		}
+		rec, err := ParseRecord(bytes.TrimSpace(line))
+		if err != nil || (rec.Type != "user" && rec.Type != "assistant") || rec.IsSidechain {
+			return nil
+		}
+		normalized, err := NormalizeRecord(rec, "")
+		if err == nil && strings.TrimSpace(normalized.Message.Content) != "" {
+			h.bodyNumbers[rec.SessionID]++
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	h.lineNumber = lineNumber
 	return nil
 }
 
@@ -133,6 +148,13 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 		normalized, perr := NormalizeRecord(rec, repo)
 		if perr != nil {
 			return h.unparsed(perr), nil
+		}
+		normalized.Message.OriginPath = h.path
+		normalized.Message.OriginLine = h.lineNumber
+		normalized.Message.Membership = "body"
+		if !rec.IsSidechain && strings.TrimSpace(normalized.Message.Content) != "" {
+			h.bodyNumbers[rec.SessionID]++
+			normalized.Message.Number = h.bodyNumbers[rec.SessionID]
 		}
 		if err := ingest.PersistMessage(tx, normalized, h.importedAt); err != nil {
 			return ingest.LineResult{}, err

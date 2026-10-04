@@ -23,6 +23,7 @@ JSON fields:
 
 Notes:
   Flags must come before <REF>.
+  Codex messages follow canonical owner order; inheritance context and unresolved records are excluded.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   Unknown or invalid stored start times do not match time filters.
   Use either a full <REF> or --since/--until. --project only applies in time-range mode.

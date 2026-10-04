@@ -6,7 +6,7 @@ import (
 	"testing"
 )
 
-func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
+func TestMessagesWithoutNumberUseRowidAndPreserveRawTimestamp(t *testing.T) {
 	db := testDB(t)
 	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "instant-order"}, "2026-03-28T15:00:00Z"))
 	for _, message := range []NormalizedMessage{
@@ -22,7 +22,7 @@ func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMessages: %v", err)
 	}
-	want := []string{"earliest", "tie-first", "tie-second", "latest"}
+	want := []string{"latest", "tie-first", "tie-second", "earliest"}
 	if len(messages) != len(want) {
 		t.Fatalf("GetMessages rows = %d, want %d", len(messages), len(want))
 	}
@@ -31,7 +31,7 @@ func TestMessagesAndSummaryOrderByInstantAndKeepRowidTies(t *testing.T) {
 			t.Errorf("GetMessages[%d].UUID = %q, want %q", i, messages[i].UUID, uuid)
 		}
 	}
-	if messages[0].Role != "user" || messages[0].Content != "earliest" || messages[0].Timestamp != "2026-03-28T10:00:00+02:00" || messages[3].Role != "assistant" {
+	if messages[0].Role != "assistant" || messages[0].Content != "latest" || messages[0].Timestamp != "2026-03-28T08:00:00.2Z" || messages[3].Role != "user" {
 		t.Errorf("message fields = %+v, want raw role/content/timestamp", messages)
 	}
 	if messages[1].Timestamp != "2026-03-28T09:00:00.100+01:00" || messages[2].Timestamp != "2026-03-28T08:00:00.1Z" {
@@ -85,7 +85,7 @@ func TestGetTurnMessages_NumberingPopulationWithoutBodies(t *testing.T) {
 		source Source
 		want   []MessageRow
 	}{
-		{SourceClaudeCode, []MessageRow{{UUID: "unknown", Role: "assistant"}, {UUID: "invalid", Role: "user"}, {UUID: "earliest", Role: "user"}, {UUID: "tie-user", Role: "user"}, {UUID: "tie-reply", Role: "assistant"}, {UUID: "latest", Role: "assistant"}}},
+		{SourceClaudeCode, []MessageRow{{UUID: "latest", Role: "assistant"}, {UUID: "tie-user", Role: "user"}, {UUID: "tie-reply", Role: "assistant"}, {UUID: "unknown", Role: "assistant"}, {UUID: "invalid", Role: "user"}, {UUID: "earliest", Role: "user"}}},
 		{SourceCodex, []MessageRow{{UUID: "codex", Role: "user"}}},
 		{SourceCursorAgent, []MessageRow{{UUID: "cursor", Role: "assistant"}}},
 	} {

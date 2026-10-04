@@ -14,9 +14,9 @@ func getImportState(e execer, inputID int64, jsonlPath string) (*ImportState, er
 	var s ImportState
 	var src string
 	err := e.QueryRow(
-		"SELECT jsonl_path, source, file_size, last_offset, imported_at FROM import_state WHERE input_id=? AND jsonl_path=?",
+		"SELECT jsonl_path, source, file_size, last_offset, imported_at, content_hash FROM import_state WHERE input_id=? AND jsonl_path=?",
 		inputID, jsonlPath,
-	).Scan(&s.JSONLPath, &src, &s.FileSize, &s.LastOffset, &s.ImportedAt)
+	).Scan(&s.JSONLPath, &src, &s.FileSize, &s.LastOffset, &s.ImportedAt, &s.ContentHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}

@@ -25,7 +25,8 @@ JSON fields:
   ref, source, sessionId, turn, timestamp, project, snippet
 
 Notes:
-  Search scans non-sidechain message bodies using SQLite LIKE.
+  Search scans own message bodies using SQLite LIKE; Codex inheritance context and unresolved records are excluded.
+  Codex body sidechain records are included; other sources keep their existing sidechain filter.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
   LIKE is ASCII-case-insensitive; query text, including %, _, and \, is literal.
   --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).

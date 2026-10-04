@@ -130,7 +130,7 @@ func TestImport_RetriesUnfinishedFinalLine(t *testing.T) {
 				}
 				for _, message := range incremental {
 					wantTimestamp := "2026-10-01T00:00:00Z"
-					if source == ImportSourceCursorAgent {
+					if source == ImportSourceCursorAgent || source == ImportSourceCodex {
 						wantTimestamp = ""
 					}
 					if message.timestamp != wantTimestamp {

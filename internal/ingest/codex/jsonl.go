@@ -1,6 +1,7 @@
 package codex
 
 import (
+	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -14,19 +15,23 @@ import (
 type RawRecord struct {
 	Type      string          `json:"type"`
 	Timestamp string          `json:"timestamp"`
+	Ordinal   *int            `json:"ordinal"`
 	Payload   json.RawMessage `json:"payload"`
 }
 
 type SessionMetaPayload struct {
-	ID         string `json:"id"`
-	CWD        string `json:"cwd"`
-	CLIVersion string `json:"cli_version"`
-	Git        struct {
+	ID           string          `json:"id"`
+	HistoryStart *int            `json:"subagent_history_start_ordinal"`
+	Source       json.RawMessage `json:"source"`
+	CWD          string          `json:"cwd"`
+	CLIVersion   string          `json:"cli_version"`
+	Git          struct {
 		Branch string `json:"branch"`
 	} `json:"git"`
 }
 
 type ResponseItemPayload struct {
+	ID      string          `json:"id"`
 	Type    string          `json:"type"`
 	Role    string          `json:"role"`
 	Content json.RawMessage `json:"content"`
@@ -56,15 +61,18 @@ func parseSessionMeta(rec *RawRecord, resolveRepoPath ingest.RepoResolver) (*ing
 	if payload.ID == "" {
 		return nil, errors.New("session_meta payload.id is missing or empty")
 	}
+	parent, err := explicitParentThreadID(payload.Source)
+	if err != nil {
+		return nil, err
+	}
 	return &ingest.SessionMeta{
-		Source:    ingest.SourceCodex,
-		SessionID: payload.ID,
-		CWD:       payload.CWD,
-		RepoPath:  resolveRepoPath(payload.CWD),
-		GitBranch: payload.Git.Branch,
-		Version:   payload.CLIVersion,
-		StartedAt: rec.Timestamp,
-		EndedAt:   rec.Timestamp,
+		Source:          ingest.SourceCodex,
+		SessionID:       payload.ID,
+		CWD:             payload.CWD,
+		RepoPath:        resolveRepoPath(payload.CWD),
+		GitBranch:       payload.Git.Branch,
+		Version:         payload.CLIVersion,
+		ParentSessionID: parent,
 	}, nil
 }
 
@@ -75,21 +83,23 @@ func normalizeMessage(rec *RawRecord, payload *ResponseItemPayload, meta ingest.
 	}
 
 	timestamp := rec.Timestamp
-	if timestamp == "" {
-		timestamp = meta.StartedAt
-	}
 	meta.StartedAt = timestamp
 	meta.EndedAt = timestamp
 
 	return &ingest.NormalizedRecord{
 		Session: meta,
 		Message: ingest.NormalizedMessage{
-			UUID:      messageUUID(rolloutPath, lineNumber),
-			Source:    ingest.SourceCodex,
-			SessionID: meta.SessionID,
-			Role:      payload.Role,
-			Content:   content,
-			Timestamp: timestamp,
+			UUID:       messageUUID(rolloutPath, lineNumber),
+			Blocks:     textBlocks(payload.Content),
+			PayloadID:  payload.ID,
+			OriginPath: rolloutPath,
+			OriginLine: lineNumber,
+			Membership: "body",
+			Source:     ingest.SourceCodex,
+			SessionID:  meta.SessionID,
+			Role:       payload.Role,
+			Content:    content,
+			Timestamp:  timestamp,
 		},
 	}, nil
 }
@@ -116,9 +126,7 @@ func ExtractText(raw json.RawMessage) (string, error) {
 	for _, b := range blocks {
 		switch b.Type {
 		case "input_text", "output_text", "text":
-			if b.Text != "" {
-				texts = append(texts, b.Text)
-			}
+			texts = append(texts, b.Text)
 		}
 	}
 	return strings.Join(texts, "\n\n"), nil
@@ -127,4 +135,45 @@ func ExtractText(raw json.RawMessage) (string, error) {
 func messageUUID(rolloutPath string, lineNumber int) string {
 	sum := sha256.Sum256([]byte(rolloutPath + "\x00" + strconv.Itoa(lineNumber)))
 	return "codex:" + hex.EncodeToString(sum[:])
+}
+
+func textBlocks(raw json.RawMessage) []string {
+	var blocks []ContentBlock
+	_ = json.Unmarshal(raw, &blocks)
+	var texts []string
+	for _, b := range blocks {
+		switch b.Type {
+		case "input_text", "output_text", "text":
+			texts = append(texts, b.Text)
+		}
+	}
+	return texts
+}
+
+// source is a union: ordinary roots use strings, while thread_spawn parent
+// evidence lives only in the explicitly nested object variant.
+func explicitParentThreadID(source json.RawMessage) (string, error) {
+	var fields map[string]json.RawMessage
+	for _, key := range []string{"subagent", "thread_spawn"} {
+		raw := bytes.TrimSpace(source)
+		if len(raw) == 0 || raw[0] != '{' {
+			return "", nil
+		}
+		if err := json.Unmarshal(raw, &fields); err != nil {
+			return "", err
+		}
+		source = fields[key]
+		fields = nil
+	}
+	raw := bytes.TrimSpace(source)
+	if len(raw) == 0 || raw[0] != '{' {
+		return "", nil
+	}
+	var spawn struct {
+		ParentThreadID string `json:"parent_thread_id"`
+	}
+	if err := json.Unmarshal(raw, &spawn); err != nil {
+		return "", err
+	}
+	return spawn.ParentThreadID, nil
 }

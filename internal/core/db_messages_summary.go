@@ -2,34 +2,33 @@ package core
 
 import (
 	"database/sql"
+	"encoding/json"
 	"fmt"
 )
 
-// MessageRow deliberately has no IsSidechain field: every query that
-// produces it excludes sidechain rows in SQL, so the value would always be
-// false.
+// MessageRow carries the original block and physical provenance of a body row.
 type MessageRow struct {
-	UUID      string
-	Role      string
-	Content   string
-	Timestamp string
+	UUID       string
+	Role       string
+	Content    string
+	Timestamp  string
+	Blocks     []string
+	Number     int
+	OriginPath string
+	OriginLine int
+	PayloadID  string
 }
 
-// GetMessages returns the session's messages in chronological order.
-// Sidechain rows are excluded: they are subagent transcripts, not part of the
-// user-facing conversation.
-//
-// rowid breaks timestamp ties: Codex records without per-record timestamps
-// all inherit the session_meta timestamp, and rowid preserves insertion
-// (JSONL line) order because messages are INSERT OR IGNORE, never replaced.
-// Turn numbering is derived from this order, so it must stay deterministic.
+// GetMessages returns body messages by canonical number, with rowid as the
+// order for sources that have no numbered stream.
 func (d *DB) GetMessages(inputID int64, source Source, sessionID string) ([]MessageRow, error) {
 	rows, err := d.execer().Query(`
-		SELECT uuid, role, content, timestamp
+		SELECT uuid, role, content, timestamp, blocks_json, number, origin_path, origin_line, payload_id
 		FROM messages
 		WHERE input_id = ? AND source = ? AND session_id = ?
-		  AND is_sidechain = 0
-		ORDER BY rfc3339_utc_nanos(timestamp) ASC, rowid ASC`,
+		  AND membership = 'body'
+		  AND (source = 'codex' OR is_sidechain = 0)
+		ORDER BY CASE WHEN number > 0 THEN 0 ELSE 1 END, number, rowid`,
 		inputID, string(source), sessionID,
 	)
 	if err != nil {
@@ -38,15 +37,15 @@ func (d *DB) GetMessages(inputID int64, source Source, sessionID string) ([]Mess
 	return scanMessages(rows, "get messages")
 }
 
-// GetTurnMessages returns only UUID and role for turn numbering. Content and
-// Timestamp remain empty; ordering and sidechain exclusion match GetMessages.
+// GetTurnMessages returns only UUID and role in the same order as GetMessages.
 func (d *DB) GetTurnMessages(inputID int64, source Source, sessionID string) ([]MessageRow, error) {
 	rows, err := d.execer().Query(`
 		SELECT uuid, role
 		FROM messages
 		WHERE input_id = ? AND source = ? AND session_id = ?
-		  AND is_sidechain = 0
-		ORDER BY rfc3339_utc_nanos(timestamp) ASC, rowid ASC`,
+		  AND membership = 'body'
+		  AND (source = 'codex' OR is_sidechain = 0)
+		ORDER BY CASE WHEN number > 0 THEN 0 ELSE 1 END, number, rowid`,
 		inputID, string(source), sessionID,
 	)
 	if err != nil {
@@ -74,8 +73,15 @@ func scanMessages(rows *sql.Rows, operation string) ([]MessageRow, error) {
 	result := []MessageRow{}
 	for rows.Next() {
 		var m MessageRow
-		if err := rows.Scan(&m.UUID, &m.Role, &m.Content, &m.Timestamp); err != nil {
+		var blocksJSON string
+		if err := rows.Scan(&m.UUID, &m.Role, &m.Content, &m.Timestamp, &blocksJSON, &m.Number, &m.OriginPath, &m.OriginLine, &m.PayloadID); err != nil {
 			return nil, fmt.Errorf("%s: scan row: %w", operation, err)
+		}
+		if err := json.Unmarshal([]byte(blocksJSON), &m.Blocks); err != nil {
+			return nil, fmt.Errorf("%s: decode blocks: %w", operation, err)
+		}
+		if len(m.Blocks) == 0 {
+			m.Blocks = nil
 		}
 		result = append(result, m)
 	}

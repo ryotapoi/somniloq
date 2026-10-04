@@ -14,7 +14,7 @@ const outlineUsageLine = "somniloq outline --config default [--source <source>] 
 const outlineHelpDetails = `Columns (TSV, in order):
   turn: 1-based user turn number shared with show --turn and search results.
   time: local timestamp of the user message.
-  body_size: UTF-8 byte size of all non-sidechain message bodies in that turn.
+  body_size: UTF-8 byte size of own message bodies in that turn (including Codex body sidechain records).
   first_line: first non-empty line of the user message, with tabs/newlines flattened for TSV.
 
 JSON fields:

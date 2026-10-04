@@ -2,6 +2,8 @@ package core
 
 import (
 	"database/sql"
+	"encoding/json"
+	"fmt"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
 	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
@@ -22,6 +24,16 @@ func (t importTx) UpsertSession(meta ingest.SessionMeta, importedAt string) erro
 
 func (t importTx) InsertMessage(msg ingest.NormalizedMessage) error {
 	return insertMessage(t.tx, t.inputID, msg)
+}
+
+// ReplaceSession clears one conversation before a canonical group rewrite.
+// The enclosing transaction also owns replacement rows and import cursors.
+func (t importTx) ReplaceSession(source ingest.Source, sessionID string) error {
+	if _, err := t.tx.Exec(`DELETE FROM messages WHERE input_id=? AND source=? AND session_id=?`, t.inputID, string(source), sessionID); err != nil {
+		return err
+	}
+	_, err := t.tx.Exec(`DELETE FROM sessions WHERE input_id=? AND source=? AND session_id=?`, t.inputID, string(source), sessionID)
+	return err
 }
 
 func (t importTx) UpdateSessionTitle(source ingest.Source, sessionID, title, importedAt string) error {
@@ -49,12 +61,37 @@ func (d *DB) UpsertSession(inputID int64, meta SessionMeta, importedAt string) e
 }
 
 func upsertSession(e execer, inputID int64, meta SessionMeta, importedAt string) error {
+	identity := rootIdentity(meta.SessionID)
+	parentIdentity := meta.ParentIdentity
+	if parentIdentity == "" && meta.ParentSessionID != "" {
+		parentIdentity = rootIdentity(meta.ParentSessionID)
+	}
+	if parentIdentity != "" {
+		if parentIdentity == identity {
+			return fmt.Errorf("session %q cannot parent itself", meta.SessionID)
+		}
+		var cycle bool
+		err := e.QueryRow(`WITH RECURSIVE ancestors(identity) AS (
+			SELECT ?
+			UNION
+			SELECT s.parent_identity FROM sessions s JOIN ancestors a ON s.identity=a.identity
+			WHERE s.input_id=? AND s.parent_identity<>''
+		) SELECT EXISTS(SELECT 1 FROM ancestors WHERE identity=?)`, parentIdentity, inputID, identity).Scan(&cycle)
+		if err != nil {
+			return err
+		}
+		if cycle {
+			return fmt.Errorf("session %q parent relation would create a cycle", meta.SessionID)
+		}
+	}
 	// custom_title and agent_name have source-specific update paths; excluding
 	// them here prevents ordinary message imports from overwriting that metadata.
 	_, err := e.Exec(`
-		INSERT INTO sessions (input_id, identity, source, session_id, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
-		VALUES (?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
+		INSERT INTO sessions (input_id, identity, source, session_id, parent_session_id, parent_identity, cwd, repo_path, git_branch, version, started_at, ended_at, imported_at)
+		VALUES (?, ?, ?, ?, ?, ?, ?, NULLIF(?, ''), ?, ?, ?, ?, ?)
 		ON CONFLICT(input_id, source, session_id) DO UPDATE SET
+		  parent_session_id = CASE WHEN excluded.parent_session_id<>'' THEN excluded.parent_session_id ELSE sessions.parent_session_id END,
+		  parent_identity = CASE WHEN excluded.parent_identity<>'' THEN excluded.parent_identity ELSE sessions.parent_identity END,
 		  cwd = COALESCE(NULLIF(excluded.cwd, ''), sessions.cwd),
 		  repo_path = COALESCE(NULLIF(excluded.repo_path, ''), sessions.repo_path),
 		  git_branch = COALESCE(NULLIF(excluded.git_branch, ''), sessions.git_branch),
@@ -74,7 +111,7 @@ func upsertSession(e execer, inputID int64, meta SessionMeta, importedAt string)
 		    ELSE sessions.ended_at
 		  END,
 		  imported_at = excluded.imported_at`,
-		inputID, rootIdentity(meta.SessionID), string(meta.Source), meta.SessionID, meta.CWD, meta.RepoPath, meta.GitBranch,
+		inputID, identity, string(meta.Source), meta.SessionID, meta.ParentSessionID, parentIdentity, meta.CWD, meta.RepoPath, meta.GitBranch,
 		meta.Version, meta.StartedAt, meta.EndedAt, importedAt,
 	)
 	return err
@@ -85,11 +122,23 @@ func (d *DB) InsertMessage(inputID int64, msg NormalizedMessage) error {
 }
 
 func insertMessage(e execer, inputID int64, msg NormalizedMessage) error {
-	_, err := e.Exec(`
-		INSERT OR IGNORE INTO messages (input_id, uuid, source, session_id, parent_uuid, role, content, timestamp, is_sidechain)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+	blocks := msg.Blocks
+	if blocks == nil {
+		blocks = []string{}
+	}
+	encodedBlocks, err := json.Marshal(blocks)
+	if err != nil {
+		return err
+	}
+	membership := msg.Membership
+	if membership == "" {
+		membership = "body"
+	}
+	_, err = e.Exec(`
+		INSERT OR IGNORE INTO messages (input_id, uuid, source, session_id, parent_uuid, role, content, blocks_json, timestamp, is_sidechain, number, origin_path, origin_line, membership, payload_id)
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		inputID, msg.UUID, string(msg.Source), msg.SessionID, msg.ParentUUID, msg.Role,
-		msg.Content, msg.Timestamp, msg.IsSidechain,
+		msg.Content, string(encodedBlocks), msg.Timestamp, msg.IsSidechain, msg.Number, msg.OriginPath, msg.OriginLine, membership, msg.PayloadID,
 	)
 	return err
 }
@@ -122,14 +171,15 @@ func (d *DB) UpsertImportState(inputID int64, state ImportState) error {
 
 func upsertImportState(e execer, inputID int64, state ImportState) error {
 	_, err := e.Exec(`
-		INSERT INTO import_state (input_id, jsonl_path, source, file_size, last_offset, imported_at)
-		VALUES (?, ?, ?, ?, ?, ?)
+		INSERT INTO import_state (input_id, jsonl_path, source, file_size, last_offset, imported_at, content_hash)
+		VALUES (?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(input_id, jsonl_path) DO UPDATE SET
 		  source = excluded.source,
 		  file_size = excluded.file_size,
 		  last_offset = excluded.last_offset,
-		  imported_at = excluded.imported_at`,
-		inputID, state.JSONLPath, string(state.Source), state.FileSize, state.LastOffset, state.ImportedAt,
+		  imported_at = excluded.imported_at,
+		  content_hash = excluded.content_hash`,
+		inputID, state.JSONLPath, string(state.Source), state.FileSize, state.LastOffset, state.ImportedAt, state.ContentHash,
 	)
 	return err
 }

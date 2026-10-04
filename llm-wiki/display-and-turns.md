@@ -24,13 +24,13 @@ sources:
 
 ## search からセッションを再参照する
 
-`cmd/somniloq/search.go` は `internal/core/db_search.go` の `SearchMessages` の結果に、`searchTurnsByUUID` でターンを付ける。結果の `source` と `session_id`（JSON では `sessionId`）を組で保持し、`show --source <source> --turn <N> <session_id>` または `outline --source <source> <session_id>` に渡す。
+`cmd/somniloq/search.go` は `internal/core/db_search.go` の `SearchMessages` の結果に、`searchTurnsByUUID` でターンを付ける。結果の完全 REF を `show --turn <N> <REF>` または `outline <REF>` に渡す。Codex の子本人も独立 REF で選ぶが、現在の search は親子のまとまりを展開しない。
 
-source の受理は `cmd/somniloq/session_source.go` の `parseSessionSource`、対象セッションの選択は `cmd/somniloq/session_resolution.go` の `resolveSessionByID` を読む。両コマンドの入口は `cmd/somniloq/show.go` と `cmd/somniloq/outline.go`。ID 解決を変える際は両方の呼び出しと `cmd/somniloq/session_source_test.go` / `cmd/somniloq/session_resolution_test.go` を一緒に確認する。
+source の受理は `cmd/somniloq/session_source.go` の `parseSessionSource`、完全 REF からの対象選択は `cmd/somniloq/session_resolution.go` を読む。両コマンドの入口は `cmd/somniloq/show.go` と `cmd/somniloq/outline.go`。選択を変える際は両方の呼び出しと `cmd/somniloq/session_source_test.go` / `cmd/somniloq/session_resolution_test.go` を一緒に確認する。
 
 ## メッセージとターンを変更する
 
-解決したセッションの本文は `internal/core/db_messages_summary.go` の `GetMessages` から得る。`cmd/somniloq/turn.go` の `assignTurns` はその全メッセージ列を受け、show の `filterTurns` / `filterLastTurns`、outline の `userTurnMessages`、search の `searchTurnsByUUID` が番号を共有する。順序や採番を変えるときはこの経路と `cmd/somniloq/show_turn_test.go` / `cmd/somniloq/outline_test.go` / `cmd/somniloq/search_test.go` を確認する。
+解決した本人セッションの本文は `internal/core/db_messages_summary.go` の `GetMessages` から保存済み発言番号順に得る。継承 context・所属不明本文はここへ混ぜない。`cmd/somniloq/turn.go` の `assignTurns` はその本人列を受け、show の `filterTurns` / `filterLastTurns`、outline の `userTurnMessages`、search の `searchTurnsByUUID` が旧 turn 番号を共有する。保存済み発言番号と旧 turn 番号は別物。順序や採番を変えるときはこの経路と `cmd/somniloq/show_turn_test.go` / `cmd/somniloq/outline_test.go` / `cmd/somniloq/search_test.go` を確認する。
 
 user message の表示除外は `cmd/somniloq/user_message_exclusion.go` の共有 matcher で行う。outline は全メッセージへ採番し、turn body size を計算した後に user message を除外するため、後続の番号は元のまま残る。show summary は時系列の `GetMessages` 列から user message を除外してから先頭 N 件を選ぶ。全文 show、turn/tail、search、保存処理は matcher を通らない。
 

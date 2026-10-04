@@ -19,10 +19,15 @@ const importHelpDetails = `Output:
   failed: files that were discovered but could not be imported.
   unparsed lines: broken JSON or malformed payload lines. Deliberately ignored record types are not counted.
   Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.
+  Codex records with a boundary but no ordinal are retained as unresolved, without a body number.
 
 Notes:
   Default import is differential. Use --full to rebuild only selected inputs, preserving other inputs.
   With --source cursor-agent --full, only selected Cursor Agent inputs are rebuilt.
+  Codex rebuilds each changed owner across all rollouts, ordered by relative path and physical line.
+  Matching payload IDs deduplicate only identical role, text blocks, and raw timestamp; conflicts fail the group.
+  Codex inheritance context is stored separately and excluded from show, outline, and body search.
+  Missing record timestamps remain unknown; session metadata does not supply message time.
   An unparsed final line without a newline is retried if the file grows; completed malformed lines are skipped.
   Claude Code messages need non-empty session and message IDs; Codex session metadata needs a non-empty ID.
   Claude Code and Codex sessions from existing linked Git worktrees are grouped under the main repository.

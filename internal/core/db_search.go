@@ -24,7 +24,7 @@ type SearchPagination struct {
 	Offset int
 }
 
-// SearchMessages returns non-sidechain messages whose content contains the
+// SearchMessages returns body messages whose content contains the
 // query, newest first. Matching uses SQLite LIKE with literal query text and
 // ASCII-only case-insensitivity. filter.Since/Until apply to the
 // message timestamp, not the session start, because the search target is the
@@ -36,7 +36,8 @@ func (d *DB) SearchMessages(filter SessionFilter, query string, pagination Searc
 		FROM messages m
 		JOIN inputs i ON m.input_id=i.id
  JOIN sessions s ON m.input_id=s.input_id AND m.source = s.source AND m.session_id = s.session_id
-		WHERE m.is_sidechain = 0
+		WHERE m.membership = 'body'
+		  AND (m.source = 'codex' OR m.is_sidechain = 0)
 		  AND m.content LIKE '%' || ? || '%' ESCAPE '\'`
 	args := []any{escapeLikeLiteral(query)}
 	conditions, filterArgs := sessionFilterConditions(filter, messageTimestampColumn)

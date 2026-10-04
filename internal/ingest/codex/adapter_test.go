@@ -100,8 +100,7 @@ func TestAdapter_InvalidSessionMetaPrefixRecoversAtValidMetadata(t *testing.T) {
 	}
 }
 
-func TestAdapter_UsesOriginalSessionTimestampAfterTimestampedMessage(t *testing.T) {
-	const sessionTimestamp = "2026-07-12T00:00:00Z"
+func TestAdapter_MissingRecordTimestampRemainsUnknown(t *testing.T) {
 	const contents = `{"timestamp":"2026-07-12T00:00:00Z","type":"session_meta","payload":{"id":"s1","cwd":"/repo"}}
 {"timestamp":"2026-07-12T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"first"}]}}
 {"type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"second"}]}}
@@ -131,8 +130,8 @@ func TestAdapter_UsesOriginalSessionTimestampAfterTimestampedMessage(t *testing.
 	if got, want := tx.messages[0].Timestamp, "2026-07-12T00:00:01Z"; got != want {
 		t.Errorf("first message timestamp = %q, want %q", got, want)
 	}
-	if got := tx.messages[1].Timestamp; got != sessionTimestamp {
-		t.Errorf("second message timestamp = %q, want original session metadata timestamp %q", got, sessionTimestamp)
+	if got := tx.messages[1].Timestamp; got != "" {
+		t.Errorf("second message timestamp = %q, want unknown", got)
 	}
 }
 

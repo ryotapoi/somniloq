@@ -129,7 +129,9 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 	if opts.Full {
 		ids := make([]int64, 0, len(selected))
 		for _, item := range selected {
-			ids = append(ids, item.id)
+			if item.input.Source != SourceCodex {
+				ids = append(ids, item.id)
+			}
 		}
 		if err := db.DeleteInputs(ids); err != nil {
 			return nil, fmt.Errorf("delete selected inputs: %w", err)
@@ -137,7 +139,13 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 	}
 	result := &ImportResult{}
 	for _, item := range selected {
-		r, err := importWithAdapter(db, item.id, item.input.Root, item.adapter, importedAt)
+		var r *ImportResult
+		var err error
+		if a, ok := item.adapter.(codex.Adapter); ok {
+			r, err = importCodexGroups(db, item.id, item.input.Root, a, importedAt, opts.Full)
+		} else {
+			r, err = importWithAdapter(db, item.id, item.input.Root, item.adapter, importedAt)
+		}
 		if err != nil {
 			return nil, err
 		}
@@ -192,6 +200,9 @@ func (r *ImportResult) addUnparsedDiagnostics(diagnostics []error) {
 }
 
 func importWithAdapter(db *DB, inputID int64, rootDir string, adapter ingest.Adapter, importedAt string) (*ImportResult, error) {
+	if a, ok := adapter.(codex.Adapter); ok {
+		return importCodexGroups(db, inputID, rootDir, a, importedAt, false)
+	}
 	files, scanErrs := adapter.ScanFiles(rootDir)
 
 	// Scan errors already carry their "scan <path>:" context from the adapter.

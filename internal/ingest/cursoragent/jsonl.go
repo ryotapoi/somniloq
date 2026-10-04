@@ -40,7 +40,7 @@ func normalizeRecord(record *rawRecord, sessionID, path string, lineNumber int) 
 		return nil, err
 	}
 
-	content, err := extractText(envelope.Content)
+	blocks, err := extractTextBlocks(envelope.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -50,22 +50,31 @@ func normalizeRecord(record *rawRecord, sessionID, path string, lineNumber int) 
 			SessionID: sessionID,
 		},
 		Message: ingest.NormalizedMessage{
-			UUID:      messageUUID(path, lineNumber),
-			Source:    ingest.SourceCursorAgent,
-			SessionID: sessionID,
-			Role:      record.Role,
-			Content:   content,
+			UUID:       messageUUID(path, lineNumber),
+			Source:     ingest.SourceCursorAgent,
+			SessionID:  sessionID,
+			Role:       record.Role,
+			Content:    strings.Join(blocks, "\n\n"),
+			Blocks:     blocks,
+			OriginPath: path,
+			OriginLine: lineNumber,
+			Membership: "body",
 		},
 	}, nil
 }
 
 func extractText(raw json.RawMessage) (string, error) {
+	blocks, err := extractTextBlocks(raw)
+	return strings.Join(blocks, "\n\n"), err
+}
+
+func extractTextBlocks(raw json.RawMessage) ([]string, error) {
 	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
-		return "", fmt.Errorf("content must be an array")
+		return nil, fmt.Errorf("content must be an array")
 	}
 	var blocks []contentBlock
 	if err := json.Unmarshal(raw, &blocks); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var texts []string
@@ -74,17 +83,15 @@ func extractText(raw json.RawMessage) (string, error) {
 			continue
 		}
 		if len(block.Text) == 0 || bytes.Equal(bytes.TrimSpace(block.Text), []byte("null")) {
-			return "", fmt.Errorf("text block: text must be a string")
+			return nil, fmt.Errorf("text block: text must be a string")
 		}
 		var text string
 		if err := json.Unmarshal(block.Text, &text); err != nil {
-			return "", fmt.Errorf("text block: %w", err)
+			return nil, fmt.Errorf("text block: %w", err)
 		}
-		if text != "" {
-			texts = append(texts, text)
-		}
+		texts = append(texts, text)
 	}
-	return strings.Join(texts, "\n\n"), nil
+	return texts, nil
 }
 
 func messageUUID(path string, lineNumber int) string {

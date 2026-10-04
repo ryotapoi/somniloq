@@ -2,7 +2,7 @@
 
 本書が CLI 仕様・コマンド挙動・スキーマの正。README.md / README.ja.md は本書の派生ビューなので、本書のこれらの記述を変更したら README 両方を同期する。
 
-v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・root 会話の完全 REF は利用できる。親子取り込み、まとまりの解決、新 search/show の原文・ページ仕様、専用 migrate は後続実装。以下は現在利用できる CLI の仕様。
+v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex の本人と直接親の保存・各本人会話の完全 REF は利用できる。Claude Code の子孫取り込み、まとまりの解決、新 search/show の原文・ページ仕様、専用 migrate は後続実装。以下は現在利用できる CLI の仕様。
 
 ## 主要機能
 
@@ -49,14 +49,11 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 #### Codex 用（`somniloq import --config NAME_OR_PATH --source codex`）
 
 - 設定した Codex root（init の既定は `~/.codex/sessions/`）配下の日付ディレクトリを再帰走査し、rollout JSONL を列挙
-- 各 JSONL を行単位で読み、`response_item` かつ `payload.type == "message"` かつ `role in ("user", "assistant")` のレコードのみを取り込み対象とする
-- `payload.content` は `input_text` / `output_text` / `text` block の `text` のみを抽出し、複数 block は空行区切りで結合する
-- `session_id` は `session_meta.payload.id` を使う
-- `session_meta.payload.cwd` から `repo_path` を解決して sessions に保存（解決ロジックは Claude Code 側と共有）
-- `git_branch` は `session_meta.payload.git.branch`、`version` は `session_meta.payload.cli_version` から保存する
-- `messages.uuid` の一意性は `(rollout_path, line_number)` ベースで判定（Codex のレコードは Claude Code のような UUID を持たないため）
-- 差分取り込みで追記分だけを読む場合も、offset 直前までの `session_meta` を先に読み直して session メタデータを復元する
-- 差分取り込み・`--full` 等のオプション体系は `import` と揃える
+- 各 JSONL を物理行順に読み、`response_item` かつ `payload.type == "message"` かつ `role in ("user", "assistant")` の text 本文を対象とする。`input_text` / `output_text` / `text` block の文字列を配列順・空白込みで保持し、表示用本文は空行で連結する。空白のみ・tool-only は発言に数えない
+- 最初の有効な `session_meta.payload.id` を本人 identity とし、本人の `cwd`、`git.branch`、`cli_version` を後続の埋込み親 metadata で上書きしない。`cwd` の `repo_path` 解決は Claude Code と共通。明示 `source.subagent.thread_spawn.parent_thread_id` は同入力の直接親参照として保存する。親が後着しても本人 REF と本文を変えず、別入力の同名 ID へ接続しない
+- `subagent_history_start_ordinal` の明示境界がある場合だけ、境界未満の本文を継承 context として区別し、本人原文・発言番号・活動日時・本文検索に混ぜない。境界があるのに本文 ordinal が欠落した場合は所属不明として診断・保持し、本人へ推測分類しない。境界がなければ ordinal や最初の user から継承を推測しない。本人の sidechain 本文も一律除外しない
+- 本人原文は同じ本人に属する rollout の入力内相対 path UTF-8 byte 辞書順、次に物理行順で `messageNumber` を1から付ける。payload.id のある本文は同じ ID・role・blocks・元 timestamp の完全一致だけを重複除外し、不一致は競合として既存 group と cursor を保護する。ID のない本文は物理的出自ごとに保持する。前方 path の追加・追記・途中編集では同本人全体を再構築して番号を確定する
+- 発言日時は当該 record 自身の元 timestamp だけを保持する。欠落・空・不正値は比較上未知とし、metadata・mtime・import 時刻で補完しない。変更のない再 import は重複や `imported_at` の更新を生まない。差分再開と `--full` は同じ最終ファイル集合から同じ本人原文列を得る
 
 #### Cursor Agent 用（`somniloq import --config NAME_OR_PATH --source cursor-agent`）
 
@@ -68,7 +65,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 時刻フィルタの共通規則
 
-- 保存済み timestamp の NULL・空文字列・RFC3339 として解釈できない値は、比較上は時点不明として扱う。範囲 filter には一致せず、filter なしでは行・本文を保持し、並び順は既存の NULL 順（昇順で先、降順で後、message 同値は rowid）に従う。不正な非空文字列は保存・JSON 出力・時刻表示にそのまま残し、時刻を補完しない。ただし sessions TSV の時刻欄はタブ・改行を空白化する。CLI の不正な時刻引数はエラーとする。
+- 保存済み timestamp の NULL・空文字列・RFC3339 として解釈できない値は、比較上は時点不明として扱う。範囲 filter には一致せず、filter なしでは行・本文を保持する。本人の本文取得順は発言番号であり、timestamp の有無や SQLite rowid で変えない。時刻を基準とする一覧・検索の並びは各コマンド節に従う。不正な非空文字列は保存・JSON 出力・時刻表示にそのまま残し、時刻を補完しない。ただし sessions TSV の時刻欄はタブ・改行を空白化する。CLI の不正な時刻引数はエラーとする。
 - RFC3339 instant 入力の小数秒はミリ秒へ切り捨てず、ナノ秒精度で保持して時点として比較し、offset 表現が異なっても同じ時点なら等しい。`--since` は包含下限、`--until` は排他上限
 
 ### セッション一覧（sessions）
@@ -85,7 +82,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - 出力 TSV の列: `ref`, `time_range`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `source`。source は `claude_code` / `codex` / `cursor_agent`
 - TSV の `time_range`、`project`、`custom_title` はタブ・改行を空白に置換し、列と行の境界を保つ。JSON は生の文字列を出す
 - `logical_day` は `ended_at`（無ければ `started_at`）をローカルタイムに変換し、その暦日の `dayBoundary` の境界時点より前なら前暦日、境界以降なら当暦日（`YYYY-MM-DD`）として出す。セッションを途中で分割せず、表示時に計算する
-- `body_size` は非 sidechain メッセージの本文合計サイズ（UTF-8 バイト数）。show が出力する量の予測値として使う（show 前に大きいセッションかを判定する用途）。文字数でなくバイト数なのは、コンテキスト量の感覚と一致させるため。`message_count` は従来どおり sidechain を含む全行数
+- `body_size` は show 対象となる本人本文の合計サイズ（UTF-8 バイト数）。Codex は本人 sidechain を含み、Claude Code / Cursor Agent は従来の sidechain 除外に従う。show 前に大きいセッションかを判定する用途で、文字数でなくバイト数なのはコンテキスト量の感覚と一致させるため。`message_count` は本人本文の保存行数
 - `--format tsv|json`（デフォルト `tsv`）。JSON のフィールドは `ref`, `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `logicalDay`, `messageCount`, `bodySize`（共通仕様は「JSON 出力」節参照）
 
 ### プロジェクト一覧（projects）
@@ -122,13 +119,13 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 ### アウトライン表示（outline）
 
 - `outline REF` で、セッションの user メッセージだけを「ターン番号・時刻・本文合計サイズ・先頭 1 行」の TSV で時系列表示する。長いセッションを全文 show する前に構造を掴む用途
-- ターン番号は 1 始まり。sidechain を除いたメッセージ列を時系列に走査し、user メッセージごとに 1 増える（sidechain 除外は show と同じで、採番にも含めない）。最初の user メッセージより前のメッセージはターン 1 に畳み込む
+- ターン番号は 1 始まり。show 対象の本人メッセージ列を発言番号順に走査し、user メッセージごとに 1 増える。Codex は本人 sidechain を含み、Claude Code / Cursor Agent は従来の sidechain 除外に従う。最初の user メッセージより前のメッセージはターン 1 に畳み込む
 - `/clear` エコーや `<local-command-caveat>` などの合成 user メッセージも turn 採番に数える。除外 pattern に一致すれば表示だけを省き、後続の turn 番号は元の値を保つ
-- メッセージの時系列順は `timestamp` 昇順、同値は挿入順（rowid）で決定的に並べる（旧形式 Codex rollout は全レコードが同一 timestamp になるため、タイブレーカーがないと採番が実行ごとに揺れる）
+- 本人メッセージは保存済み発言番号順に取得する。outline と旧 `--turn` の番号はその列の user 発言から計算し、発言番号とは異なる
 - 会話の選択は show と同じ完全 REF。`--source` を付ける場合は REF の source と一致しなければならない
 - 時刻はローカルタイム `2006-01-02 15:04` 形式
 - 出力 TSV の列: `turn`, `time`, `body_size`, `first_line`
-- `body_size` はその turn に属する非 sidechain メッセージ本文の合計サイズ（UTF-8 バイト数）。`show --turn` で読む範囲の重さを見積もるため、user メッセージだけでなくその turn の assistant 応答等も含む。スキーマや import 結果には保存せず、表示時に `GetMessages` 結果から計算する
+- `body_size` はその turn に属する show 対象の本人メッセージ本文の合計サイズ（UTF-8 バイト数）。`show --turn` で読む範囲の重さを見積もるため、user メッセージだけでなくその turn の assistant 応答等も含む。スキーマや import 結果には保存せず、表示時に `GetMessages` 結果から計算する
 - 先頭 1 行は、前後の空白を除去した本文の最初の行。タブ・改行は空白に置換（TSV 保全）。切り詰めは行わない
 - `--format tsv|json`（デフォルト `tsv`）。JSON のフィールドは `turn`, `timestamp`, `bodySize`, `firstLine`（`firstLine` は TSV と同じ先頭 1 行抽出だが、タブ・改行の空白置換は行わない）
 
@@ -137,7 +134,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - `search --config NAME_OR_PATH [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] <query>` で全メッセージ本文を横断検索する。デフォルトは `tsv`。フラグは検索語より前に置く
 - 実装は LIKE 全走査。FTS5 は日本語だと trigram 必須で索引が本文の 2〜3 倍に膨らみ、3 文字未満のクエリが索引で引けないため、LIKE で困るスケールになるまで見送り（本文 42 MB の DB で実測 0.1 秒前後）
 - マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ。query の `%`、`_`、`\` は文字列として扱う
-- sidechain メッセージは除外（show と同じ扱い）
+- 継承 context と所属不明本文は検索しない。Codex の本人 sidechain は対象とし、Claude Code / Cursor Agent は従来の sidechain 除外に従う（show と同じ扱い）
 - 出力 TSV の列: `ref`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順（メッセージ `timestamp` 降順、同値は rowid 降順）
 - `turn` は outline / show --turn と同じ採番。ヒットしたメッセージが属する turn 番号を出すため、検索結果の完全 `ref` を `somniloq show --config NAME_OR_PATH --turn <N> REF` または `somniloq outline --config NAME_OR_PATH REF` に渡して再参照できる
 - `time` はローカルタイム `2006-01-02 15:04` 形式
@@ -233,9 +230,9 @@ DB path は TOML の db で指定する。新 DB は revision 1（`PRAGMA user_v
 | import_state | input と JSONL path ごとに差分再開状態を保持する |
 | migration_origin | 新規 DB では空。専用移行の receipt は通常 import で作らない |
 
-入力キーは `sha256(UTF8(DB source) + NUL + UTF8(canonical root))` の64桁小文字 hex。同じ source/root は再処理や name 変更でも同入力、root 移動は別入力。root 会話 identity は HTML escape なし・空白なし JSON 配列 `[sessionId]`。
+入力キーは `sha256(UTF8(DB source) + NUL + UTF8(canonical root))` の64桁小文字 hex。同じ source/root は再処理や name 変更でも同入力、root 移動は別入力。Codex・Cursor Agent・Claude Code root の会話 identity は HTML escape なし・空白なし JSON 配列 `[sessionId]`。
 
-完全 REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`（padding なし RFC4648 URL alphabet）。path・name・DB rowid は含まない。同じ root/source/identity なら再 import・別 DB でも安定する。現在は root 会話の発行と本人選択に対応し、子孫 identity・親子解決・legacy REF は後続実装。
+完全 REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`（padding なし RFC4648 URL alphabet）。path・name・DB rowid は含まない。同じ root/source/identity なら再 import・別 DB でも安定する。Codex は子本人の identity と明示親参照を保存し、各本人 REF で会話を選べる。Claude Code の子孫 identity、まとまり・子孫を展開する query、legacy REF は後続実装。
 
 ## Known limitations
 

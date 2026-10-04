@@ -3,6 +3,7 @@ package cursoragent
 import (
 	"bytes"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -55,6 +56,7 @@ type fileHandler struct {
 	sessionID  string
 	importedAt string
 	lineNumber int
+	bodyNumber int
 }
 
 func (h *fileHandler) Begin(path string, offset int64) error {
@@ -67,11 +69,23 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 		return err
 	}
 	defer f.Close()
-	lines, err := ingest.CountLineFeeds(f, offset)
+	_, err = ingest.ForEachLine(io.LimitReader(f, offset), -1, func(line []byte) error {
+		if len(line) > 0 && line[len(line)-1] == '\n' {
+			h.lineNumber++
+		}
+		record, err := parseRecord(bytes.TrimSpace(line))
+		if err != nil || (record.Role != "user" && record.Role != "assistant") {
+			return nil
+		}
+		normalized, err := normalizeRecord(record, h.sessionID, path, h.lineNumber)
+		if err == nil && strings.TrimSpace(normalized.Message.Content) != "" {
+			h.bodyNumber++
+		}
+		return nil
+	})
 	if err != nil {
 		return err
 	}
-	h.lineNumber = lines
 	return nil
 }
 
@@ -91,6 +105,10 @@ func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (inge
 	normalized, err := normalizeRecord(record, h.sessionID, h.path, h.lineNumber)
 	if err != nil {
 		return h.unparsed(err), nil
+	}
+	if strings.TrimSpace(normalized.Message.Content) != "" {
+		h.bodyNumber++
+		normalized.Message.Number = h.bodyNumber
 	}
 	if err := ingest.PersistMessage(tx, normalized, h.importedAt); err != nil {
 		return ingest.LineResult{}, err

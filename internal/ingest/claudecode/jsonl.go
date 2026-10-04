@@ -78,7 +78,7 @@ func ParseMessage(rec *RawRecord) (*ingest.NormalizedMessage, error) {
 		return nil, err
 	}
 
-	content, err := ExtractText(env.Content)
+	blocks, err := ExtractTextBlocks(env.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -89,28 +89,34 @@ func ParseMessage(rec *RawRecord) (*ingest.NormalizedMessage, error) {
 		ParentUUID:  rec.ParentUUID,
 		SessionID:   rec.SessionID,
 		Role:        env.Role,
-		Content:     content,
+		Content:     strings.Join(blocks, "\n\n"),
+		Blocks:      blocks,
 		Timestamp:   rec.Timestamp,
 		IsSidechain: rec.IsSidechain,
 	}, nil
 }
 
 func ExtractText(raw json.RawMessage) (string, error) {
+	blocks, err := ExtractTextBlocks(raw)
+	return strings.Join(blocks, "\n\n"), err
+}
+
+func ExtractTextBlocks(raw json.RawMessage) ([]string, error) {
 	var s string
 	if err := json.Unmarshal(raw, &s); err == nil {
-		return s, nil
+		return []string{s}, nil
 	}
 
 	var blocks []ContentBlock
 	if err := json.Unmarshal(raw, &blocks); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var texts []string
 	for _, b := range blocks {
-		if b.Type == "text" && b.Text != "" {
+		if b.Type == "text" {
 			texts = append(texts, b.Text)
 		}
 	}
-	return strings.Join(texts, "\n\n"), nil
+	return texts, nil
 }

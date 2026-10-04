@@ -39,9 +39,11 @@ Every database command requires `--config NAME_OR_PATH`, before or after the com
 
 `import` is incremental. Input selections are ORed, then intersected with `--source`. **`--full` rebuilds only the selected inputs' conversations and import state**, retaining other inputs. Check that the selected inputs' original logs are available. It asks for confirmation; `--yes` skips the prompt and is required in noninteractive environments.
 
+Codex import keeps each person's conversation separate from inherited context. The first valid session metadata identifies the conversation; an explicit parent ID is retained even if the parent arrives later. Text blocks, their source path and line, original timestamps (including unknown values), and one-based message numbers are stored. Multiple rollouts for the same conversation are ordered by relative path and physical line; incremental import rebuilds that order when earlier content changes. Use a child's full REF to read its own conversation. Current `show`, `outline`, and `search` still use their existing flags and output formats.
+
 New databases use schema revision 1. Normal commands reject legacy or unsupported databases without modifying them. A dedicated `migrate` command is planned. Read commands reject missing databases without creating them.
 
-Use `somniloq <command> --help` for flags and formats. `sessions`, `projects`, `search`, and `outline` support `--format json`; `show` supports Markdown or JSON. JSON still returns arrays, and search still uses literal substring matching. Parent/child ingestion, grouped search, and the redesigned original-text `show` interface are planned separately.
+Use `somniloq <command> --help` for flags and formats. `sessions`, `projects`, `search`, and `outline` support `--format json`; `show` supports Markdown or JSON. JSON still returns arrays, and search still uses literal substring matching. Claude Code child ingestion, grouped search, descendant selection, and the redesigned original-text `show` interface are planned separately.
 
 ## Configuration
 

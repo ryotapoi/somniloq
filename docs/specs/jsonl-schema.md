@@ -2,7 +2,7 @@
 
 Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造。
 
-この文書の既存取り込み・保存記述は現行実装の契約。v0.14.0 の子孫・本人／継承・原文日時の実装予定契約と合成 fixture は [元ログ調査](v0.14.0-log-evidence.md) を参照する。以下の観測追記は現行 parser がすでに対応している意味ではない。
+この文書の取り込み・保存記述は現行実装の契約。Codex の本人／継承・原文日時は実装済みで、Claude Code の子孫は後続実装。[元ログ調査](v0.14.0-log-evidence.md) と合成 fixture は観測根拠であり、観測追記だけで現行 parser の対応を意味しない。
 
 ## source 値
 
@@ -91,7 +91,7 @@ type, message, sessionId, cwd, timestamp, gitBranch, uuid, parentUuid, version, 
 
 | type | 内容 | 保存対象 |
 |---|---|---|
-| `session_meta` | セッションメタデータ | `payload.id`, `payload.cwd`, `payload.cli_version`, `payload.git.branch` |
+| `session_meta` | セッションメタデータ | 最初の有効な本人 `payload.id` と metadata、明示された直接親・継承境界 |
 | `response_item` | モデル応答・ユーザー入力・tool call 等 | `payload.type == "message"` かつ `payload.role` が `user` / `assistant` の text のみ |
 | `event_msg` | token count, task complete 等のイベント | 不要 |
 | `turn_context` | turn ごとの実行コンテキスト | 不要 |
@@ -106,24 +106,25 @@ id, timestamp, cwd, originator, cli_version, source, model_provider, git
 - `git.branch` は存在する場合のみ `git_branch` に保存する
 - `cli_version` は `version` に保存する
 - `id` が欠落・空文字列・`null` の `session_meta` は unparsed とし、path・物理行・原因を診断する。有効な metadata がまだない rollout の後続本文は保存しない。差分取り込みの prefix 復元でも同じ検証を適用する。
+- 最初の有効な metadata が本人 identity と本人の cwd・git branch・version を確定する。後続の埋込み親 metadata では上書きしない。最初の metadata にある `source.subagent.thread_spawn.parent_thread_id` を同入力の直接親参照として保存する。親未到着でも参照を残し、別入力の同名 ID を親としない。
 - 既存 DB に保存済みの空 ID の session / message は自動修復しない。元のログが残っていれば `import --config NAME_OR_PATH --full` で再構築できる。選択入力の再構築については「共通の末尾行と差分再開」の注意に従う。
 
 #### response_item.payload の保存対象
 
 - `payload.type == "message"`
 - `payload.role in ("user", "assistant")`
-- `payload.content` は配列。`type` が `input_text`, `output_text`, `text` の要素の `text` を抽出し、複数あれば空行区切りで結合する
+- `payload.content` は配列。`type` が `input_text`, `output_text`, `text` の要素の文字列 `text` を順序と空白込みの block 配列として保持し、複数あれば空行区切りで結合する。空白だけの本文、tool-only は本人発言にしない
 - `function_call`, `function_call_output`, `reasoning`, `event_msg` 等は保存しない
-- レコード自身が `timestamp` を持たない場合は `session_meta` の `timestamp` を使う。per-record timestamp を持たない旧形式の rollout では、結果として同一セッションの全メッセージが同じ timestamp になる
+- 本文日時は record 自身の元 `timestamp` だけを保存する。欠落・空・不正値は比較上未知で、不正な元値も保持する。`session_meta`、mtime、取り込み時刻から補完しない
 
-### 本人と継承の観測（v0.14.0 調査）
+### 本人と継承
 
-子 rollout の最初の metadata が本人 ID、その後に埋め込まれた metadata が親 ID の例がある。最初の metadata の `source.subagent.thread_spawn.parent_thread_id` は直接親を示す。`session_meta.payload.subagent_history_start_ordinal` がある場合、本文 record の top-level `ordinal` が境界未満なら継承 context、境界以上なら本人。本人最初の本文が assistant の例を確認しており、最初の user を境界にしない。境界がない旧形式は ordinal の有無にかかわらず除外を推測しない。旧 UUID の物理行出自は本人帰属の証明とは別。具体的な入力と非推測の境界は [代表 fixture](../../internal/ingest/testdata/v0.14.0/README.md) を参照する。
+子 rollout の最初の metadata が本人 ID、その後に埋め込まれた metadata が親 ID の例がある。`session_meta.payload.subagent_history_start_ordinal` がある場合、本文 record の top-level `ordinal` が境界未満なら継承 context、境界以上なら本人。context は保存上区別し、本人発言番号・活動日時・検索に使わない。境界があるのに ordinal がない本文は所属不明として診断・保持し、本人に推測分類しない。境界がない旧形式は ordinal の有無、本文の類似、最初の user から除外を推測しない。本人最初の本文が assistant の例もある。具体的な入力と非推測の境界は [代表 fixture](../../internal/ingest/testdata/v0.14.0/README.md) を参照する。
 
 ### 一意性と差分取り込み
 
-- Codex の message レコードには Claude Code の `uuid` 相当が無いため、`messages.uuid` は `(rollout_path, line_number)` から決定的に生成する
-- 差分取り込み時も、追記分を読む前にファイル先頭から offset 直前までの `session_meta` を読み直す。通常 `session_meta` はファイル先頭にあり、追記分だけを読むと session メタデータを失うため
+- Codex の message record には Claude Code の `uuid` 相当がない。物理的出自として入力内相対 rollout path と行番号を保持する。payload.id のある本文は同本人内で同一 ID・role・blocks・元 timestamp の完全一致だけを重複除外し、同 ID の内容不一致は競合として既存保存を維持する。ID のない本文は出自ごとに保持する
+- 同本人の複数 rollout は入力内相対 path の UTF-8 byte 辞書順、次に物理行順で本人原文を並べ、`messageNumber` を1から付ける。前方 path の追加・前方 rollout への追記・途中編集では本人全体を再構築する。通常差分と全文再処理は同じ最終ファイル集合から同じ列・番号を作り、不変再取り込みは `imported_at` を更新しない
 
 ## Cursor Agent
 

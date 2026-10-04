@@ -20,6 +20,8 @@ CREATE TABLE sessions (
  source TEXT NOT NULL CHECK(source <> ''),
  session_id TEXT NOT NULL,
  identity TEXT NOT NULL,
+ parent_session_id TEXT NOT NULL DEFAULT '',
+ parent_identity TEXT NOT NULL DEFAULT '',
  cwd TEXT,
  repo_path TEXT,
  git_branch TEXT,
@@ -41,8 +43,14 @@ CREATE TABLE messages (
  parent_uuid TEXT,
  role TEXT NOT NULL,
  content TEXT NOT NULL,
+ blocks_json TEXT NOT NULL DEFAULT '[]',
  timestamp TEXT NOT NULL,
  is_sidechain BOOLEAN DEFAULT FALSE,
+ number INTEGER NOT NULL DEFAULT 0,
+ origin_path TEXT NOT NULL DEFAULT '',
+ origin_line INTEGER NOT NULL DEFAULT 0,
+ membership TEXT NOT NULL DEFAULT 'body' CHECK(membership IN ('body','context','unresolved')),
+ payload_id TEXT NOT NULL DEFAULT '',
  PRIMARY KEY(input_id,uuid),
  FOREIGN KEY(input_id,source,session_id) REFERENCES sessions(input_id,source,session_id)
 );
@@ -54,6 +62,7 @@ CREATE TABLE import_state (
  file_size INTEGER,
  last_offset INTEGER,
  imported_at TEXT NOT NULL,
+ content_hash TEXT NOT NULL DEFAULT '',
  PRIMARY KEY(input_id,jsonl_path),
  FOREIGN KEY(input_id,source) REFERENCES inputs(id,source)
 );

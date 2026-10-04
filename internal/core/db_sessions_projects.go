@@ -8,18 +8,21 @@ import (
 )
 
 type SessionRow struct {
-	InputID      int64
-	REF          string
-	Source       Source
-	SessionID    string
-	CWD          string
-	RepoPath     string
-	StartedAt    string
-	EndedAt      string
-	CustomTitle  string
-	MessageCount int
+	InputID         int64
+	REF             string
+	Source          Source
+	SessionID       string
+	ParentSessionID string
+	ParentIdentity  string
+	ParentREF       string
+	CWD             string
+	RepoPath        string
+	StartedAt       string
+	EndedAt         string
+	CustomTitle     string
+	MessageCount    int
 	// BodySize is the total content size in bytes (UTF-8, not runes) of the
-	// session's non-sidechain messages: approximately what `show` would
+	// session's body messages: approximately what `show` would
 	// print, excluding the Markdown headers show adds.
 	BodySize int
 }
@@ -36,14 +39,16 @@ type SessionFilter struct {
 
 // Keep these selected columns in the same order as scanSessionRow. The
 // body-size sum counts bytes (OCTET_LENGTH; LENGTH on TEXT would count
-// characters) and skips sidechain rows so the value predicts what `show`
-// prints. MessageCount keeps counting every row.
+// characters) and counts only body rows, matching show and search.
 const sessionRowSelect = `
-	SELECT s.input_id, i.input_key, s.source, s.session_id, COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''),
+	SELECT s.input_id, i.input_key, s.source, s.session_id, s.parent_session_id, s.parent_identity,
+	       COALESCE(p.source, ''), COALESCE(p.session_id, ''), COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''),
 	       COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''),
-	       COUNT(m.uuid), COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.is_sidechain = 0), 0)
+	       COUNT(m.uuid) FILTER (WHERE m.membership = 'body'),
+	       COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.membership = 'body' AND (m.source = 'codex' OR m.is_sidechain = 0)), 0)
 	FROM sessions s
  JOIN inputs i ON s.input_id=i.id
+	LEFT JOIN sessions p ON p.input_id=s.input_id AND p.identity=s.parent_identity
 	LEFT JOIN messages m ON s.input_id=m.input_id AND s.source = m.source AND s.session_id = m.session_id`
 
 // rowScanner abstracts *sql.Row and *sql.Rows so scanSessionRow serves both
@@ -55,11 +60,16 @@ type rowScanner interface {
 func scanSessionRow(row rowScanner) (SessionRow, error) {
 	var r SessionRow
 	var inputKey string
+	var parentSource, parentSessionID string
 	if err := row.Scan(
 		&r.InputID,
 		&inputKey,
 		&r.Source,
 		&r.SessionID,
+		&r.ParentSessionID,
+		&r.ParentIdentity,
+		&parentSource,
+		&parentSessionID,
 		&r.CWD,
 		&r.RepoPath,
 		&r.StartedAt,
@@ -71,6 +81,9 @@ func scanSessionRow(row rowScanner) (SessionRow, error) {
 		return SessionRow{}, err
 	}
 	r.REF = RootREF(inputKey, r.Source, r.SessionID)
+	if parentSessionID != "" {
+		r.ParentREF = RootREF(inputKey, Source(parentSource), parentSessionID)
+	}
 	return r, nil
 }
 

@@ -44,7 +44,7 @@ somniloq show --config default --format json <REF>
 
 Cursor Agent の履歴には時刻がないことがあり、`--since` / `--until` を付けると対象外になります。時刻不明でも直近に取り込んだ履歴は、`somniloq sessions --config default --imported-since 24h` で探せます。日時で絞り込む必要がある場合は CLI help を確認してください。`search` の query、および `sessions`、`show`、`search` の `--project` では、`%`、`_`、`\` はワイルドカードではなく文字そのものとして扱う。`--since`、`--until`、`sessions --imported-since` は、相対時刻とローカルの日付・分単位日時に加え、`Z` または数値オフセット付きの RFC3339 instant を受け付ける。
 
-追加 root は TOML の inputs に設定します。`import --config default --input PATH` を繰り返して入力を選べ、`--source` とは交差条件です。`--full` は選択入力だけを再構築し、他入力を保持します。親子取り込み・まとまり検索・新しい原文 show は後続実装です。
+追加 root は TOML の inputs に設定します。`import --config default --input PATH` を繰り返して入力を選べ、`--source` とは交差条件です。`--full` は選択入力だけを再構築し、他入力を保持します。Codex の子本人は継承文脈と分けて保存され、完全 REF で本人会話を選べます。Claude Code の子孫取り込み、まとまり検索・子孫選択・新しい原文 show は後続実装です。
 
 ## 詳細は CLI help を見る
 

@@ -41,6 +41,17 @@ func TestExtractText_MultipleTextBlocks(t *testing.T) {
 	}
 }
 
+func TestParseMessagePreservesTextBlocks(t *testing.T) {
+	rec := &RawRecord{UUID: "u1", SessionID: "s1", Message: json.RawMessage(`{"role":"user","content":[{"type":"text","text":" first "},{"type":"tool_result","content":"ignored"},{"type":"text","text":" second "}]}`)}
+	msg, err := ParseMessage(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if msg.Content != " first \n\n second " || len(msg.Blocks) != 2 || msg.Blocks[0] != " first " || msg.Blocks[1] != " second " || msg.Timestamp != "" {
+		t.Fatalf("message = %+v", msg)
+	}
+}
+
 func TestParseRecord_User(t *testing.T) {
 	line := []byte(`{"type":"user","uuid":"u1","parentUuid":"p1","sessionId":"s1","timestamp":"2026-03-28T14:10:45.977Z","cwd":"/tmp","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}`)
 	rec, err := ParseRecord(line)

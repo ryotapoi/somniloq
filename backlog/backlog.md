@@ -28,7 +28,7 @@
 
   TOML 設定で DB と複数の入力ルートを指定し、同じ DB へ取り込む。DB 操作は明示した `--config` だけを使い、設定生成・名前指定・エラー案内・path 解決は [複数のログ入力](v0.14.0-reference.md#複数のログ入力)に従う。入力を source と実体 root で識別し、会話・発言・差分状態を入力ごとに分ける。標準ルートと追加ルート、同名 ID、symlink・相対 path、設定欠落・上書き拒否を fixture と CLI で確認する。設定から保存・取得まで動く状態を完了とする。
 
-- [ ] 共通保存モデルと Codex の親子取り込みを実装する
+- [x] 共通保存モデルと Codex の親子取り込みを実装する
 
   Codex adapter、共通正規化型、SQLite 保存を一緒に変更し、本人 identity・直接親・子孫の独立本文・発言順序と未知日時を保持する。[Codex の継承境界](v0.14.0-reference.md#調査で確認した実装上の条件)を `subagent_history_start_ordinal` のあるログだけに適用し、親 metadata で本人 identity を上書きしない。子先行・親後着、差分再開・再処理、別入力の同名 ID を fixture で確認する。他 source の root も新規 DB で保存・取得できる状態を完了とする。
 

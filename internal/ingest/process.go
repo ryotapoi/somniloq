@@ -131,6 +131,9 @@ func processJSONL(newTransaction NewImportTransaction, source Source, handler Fi
 		switch lineResult.Outcome {
 		case LineWroteBody:
 			hasBody = true
+			if lineResult.Diagnostic != nil && len(result.UnparsedDiagnostics) < MaxUnparsedDiagnostics {
+				result.UnparsedDiagnostics = append(result.UnparsedDiagnostics, lineResult.Diagnostic)
+			}
 		case LineUnparsed:
 			// An unterminated final line may still be appended to. Retry it
 			// from its start, while accepting valid JSON without a trailing LF.

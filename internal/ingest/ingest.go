@@ -11,11 +11,12 @@ const (
 
 // ImportState records the incremental import cursor for one JSONL file.
 type ImportState struct {
-	JSONLPath  string
-	Source     Source
-	FileSize   int64
-	LastOffset int64
-	ImportedAt string
+	JSONLPath   string
+	Source      Source
+	FileSize    int64
+	LastOffset  int64
+	ImportedAt  string
+	ContentHash string
 }
 
 // NormalizedMessage is a source-independent message row ready for persistence.
@@ -26,20 +27,28 @@ type NormalizedMessage struct {
 	SessionID   string
 	Role        string
 	Content     string
+	Blocks      []string
 	Timestamp   string
 	IsSidechain bool
+	Number      int
+	OriginPath  string
+	OriginLine  int
+	Membership  string
+	PayloadID   string
 }
 
 // SessionMeta is a source-independent session row ready for persistence.
 type SessionMeta struct {
-	Source    Source
-	SessionID string
-	CWD       string
-	RepoPath  string
-	GitBranch string
-	Version   string
-	StartedAt string
-	EndedAt   string
+	Source          Source
+	SessionID       string
+	ParentSessionID string
+	ParentIdentity  string
+	CWD             string
+	RepoPath        string
+	GitBranch       string
+	Version         string
+	StartedAt       string
+	EndedAt         string
 }
 
 // NormalizedRecord is one conversation record normalized into session and
