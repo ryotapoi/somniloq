@@ -105,3 +105,55 @@
   SPEC-11 のユーザー確認で決まった変更。session 指定なしの `search` は、`--limit` を省略した場合に条件に合うまとまりを全件返す。明示 `--limit N` がある場合だけ N 件に制限し、`--offset` は順序付けた結果から指定件数を飛ばす。`--limit 0` は従来どおり項目 0 件とし、総数を保持する。検索条件・集約・並び順は変えない。
 
   JSON・TSV のページ情報で、件数上限を省略した状態を表現する。全件取得・offset のみ・明示 limit・limit 0・0 件・末尾超過で総数と返却項目が一致することを確認する。正本・usage・README 両言語・skill の既定 20 件の説明と例を同期し、影響する検証と必須 gate が通れば完了とする。
+
+#### 9. レビューで判明した修正と性能改善
+
+`43597927c1443206b64ea7f111214e757bf27423..66c28c76f85534652e0221d465b810129fe7b2c3` の Fresh Review と Finding Verification で、以下の8件を `confirmed`・`actionable` と判定した。FR-001〜006 は CLI で動的再現済み、FR-007・008 は静的な処理量の確認のみ。各タスクは記載した再現条件と完了条件を基準に実装・検証し、共通の必須 gate を通す。
+
+- [ ] Claude の本文不変時に取り込み日時を保持する
+
+  FR-001。本文を1件以上保存した Claude 会話へ空行だけを追記して通常 `import` すると、本文・番号が同一でも `imported_at` が更新されることを再現した。不変判定の期待値は `Provenance` が空、取得値は `source_record` であり、構造体全体の比較が不一致となって本人の削除・再保存へ進む。`search --imported-since` に不変会話が混ざる。
+
+  空行追記後も本文・番号・取り込み日時を保持し、取り込み日時の絞り込み結果が変わらないことを確認すれば完了。tool-only / progress の全種類は個別再現しておらず、本文0件は別分岐で本件の対象外。入口は [不変判定と本人置換](../internal/core/import_claude.go) の `claudeOwnerUnchanged`、[本文取得](../internal/core/db_messages_summary.go) の `GetIdentityMessages`。日時保持の契約は [v0.14.0契約](../docs/specs/v0.14.0-contract.md)「原文・順序・日時」と [JSONL schema](../docs/specs/jsonl-schema.md) を参照する。
+
+- [ ] Codex の本文なし編集を通常取り込みへ反映する
+
+  FR-002。同本人の a / b rollout を保存し、a を正常な metadata-only ファイルへ編集して b を不変のまま通常 `import` すると、a の旧本文と a=1 / b=2 の番号が残った。同じ最終ファイル集合の `--full` は b=1 だけを保存する。本文なしの a が本人 group の state 集合から外れ、現在残る b の hash だけで不変と判定するため、`show` / `search` が古い内容を返す。
+
+  metadata-only 編集後の通常取り込みと `--full` で本文列・番号が一致することを確認すれば完了。malformed-only 編集の保持方針は対象外。物理削除・入力外移動は同じ skip 経路を静的確認しただけで、独立した契約は未確認。入口は [group構築](../internal/ingest/codex/group.go) の `BuildGroups` と [通常・full取り込み](../internal/core/import_codex.go)。編集再構築と通常 / full 一致の契約は [制約](../docs/rules/constraints.md)「SQLとデータの意味」、[JSONL schema](../docs/specs/jsonl-schema.md)、[v0.14.0契約](../docs/specs/v0.14.0-contract.md) を参照する。
+
+- [ ] Codex の循環した親情報でも本人本文を保持する
+
+  FR-003。正常本文を持つ A / B が `parent_thread_id` で互いを指す入力を通常 `import` すると、循環保存エラーで exit 1 となり A 本文だけが残り B 本文が欠落した。続く `--full` も exit 1 となり、入力全体の置換を rollback して A だけの状態に戻る。親と本文を同じ保存経路に置くため、循環辺を未確定として扱う関係解決器へ本人本文が届かない。
+
+  通常取り込みと `--full` の両方で A / B の正常本文を参照でき、循環辺だけが未確定として診断され、確定辺のみを使うことを確認すれば完了。異常 metadata の発生頻度は未確認で、専用 `migrate` の厳格失敗契約は対象外。入口は [親の保存](../internal/core/db_write.go) の `upsertSession`、[本文を含むtransaction](../internal/core/import_codex.go)、[関係解決](../internal/core/session_relations.go) の `buildSessionRelations`。契約は [v0.14.0契約](../docs/specs/v0.14.0-contract.md)「関係とまとまり」を参照する。
+
+- [ ] 同時 import による古い snapshot の上書きを防ぐ
+
+  FR-004。Codex / Claude の各 CLI で、先発 A をファイル全文読取後の Git resolver 内で待機させ、追記済みファイルを後発 B が保存してから A を再開すると、両実行 exit 0 のまま新本文が消えた。cursor は Codex で 352→226、Claude で 368→184、`imported_at` も1秒退行した。snapshot 解析後に期待 cursor を取得するため、A が B の新 cursor を期待値として受け入れ、transaction 内の再比較を通って古い本文を保存する。
+
+  両 source でこの実行順を決定的に作り、後発が保存した新本文・cursor・取り込み日時を先発が退行させないことを確認すれば完了。実環境の重複実行頻度は未測定で、ログが残れば次回取り込みで復旧できる。`--full` は別経路で再現対象外。入口は [Codex取り込み](../internal/core/import_codex.go) と [Claude取り込み](../internal/core/import_claude.go) の snapshot 作成・旧 state 取得・transaction 内再比較、および全文を読む [Codex group構築](../internal/ingest/codex/group.go) / [Claude snapshot構築](../internal/ingest/claudecode/snapshot.go)。
+
+- [ ] migrate 再実行前に欠落した rollout の本文を保持する
+
+  FR-005。空の有効 legacy-v013 snapshot と同本人 a / b rollout で初回 `migrate` を行い、b を削除して同じ snapshot / config で再実行すると、exit 0・`copy_performed=false`・`groups_replaced=1` のまま b の正常本文が消え、b の旧 cursor だけが残った。当回の発見集合と再走査だけを比較し、前回保存した rollout 集合を照合しないため、a だけの本人全文で置換する。
+
+  再実行の開始前に一部 rollout が欠落した場合、当該 group を成功置換せず、既存正常本文・旧行・cursor を保持することを確認すれば完了。全 rollout が消えて group 自体がない場合は本件の対象外。動的再現は旧本文0件の snapshot であり、初回削除済み legacy コピーを receipt により復元できない追加影響は静的確認のみ。入口は [group検査・置換](../internal/core/migrate.go) の `replaceMigrationGroup` と [receiptによるコピー省略](../internal/core/migrate_snapshot.go)。保持契約は [移行契約](../docs/specs/v0.14.0-migration.md) の rollout 欠落時の失敗条件を参照する。
+
+- [ ] Claude snapshot の同一 cwd で Git 解決を再利用する
+
+  FR-006。通常 repository の同じ cwd を持つ20 user record を CLI で取り込み、PATH の wrapper で数えると Git 起動は初回40回、不変再取り込みも40回だった。後者は1 file skip でも、hash 判定より前に全 record で resolver を呼ぶ。旧 adapter の cwd cache を使わず、通常 repository で record 数 R に対して2R回の同期外部 process 待ちが生じる。
+
+  同じ cwd の record 数を増やしても Git 解決の起動数が record 数に比例せず、repository / branch の結果と不変取り込みの skip が維持されることを確認すれば完了。異なる cwd の結果を混同しないことも確認する。wall-clock 性能と実ログでの頻度は未測定。空 cwd と `/.claude/worktrees/` は Git 不要で、linked worktree は通常より起動数が多い場合がある。過去の取り込み中止原因には帰属しない。入口は [snapshot構築](../internal/ingest/claudecode/snapshot.go)、[hash判定](../internal/core/import_claude.go)、[Git resolver](../internal/core/repo_path.go)。再利用の既存例は [adapter](../internal/ingest/claudecode/adapter.go) の cwd cache を参照する。
+
+- [ ] migrate の group ごとの無関係な legacy 全件読取を減らす
+
+  FR-007。多数の Codex group と legacy 発言を持つ snapshot の `migrate` では、UUID→group evidence を事前構築済みでも、各 group の write transaction 内で `source='codex'` の残存 legacy 行をすべて Scan し、Go 側で対象を選ぶ。G group の各回に残存 L_i 行を読み、置換不能な行が残れば G×L の反復が生じることを静的確認した。[実ログの規模](../docs/specs/v0.14.0-log-evidence.md) は旧 DB 14,783会話・196,787発言を記録している。
+
+  当該 group に無関係な全行を毎回 Go へ移送する処理を減らし、大きい fixture で読取量と所要時間を比較して改善を確認すれば完了。旧行の限定削除・競合証拠の保持・失敗時 rollback の契約も既存 fixture で維持する。実際の G・L_i・削除分布・経過時間・SQLite cache 効果は未測定で、G×L/2 は均等削除時の近似にすぎない。inventory 再検査の安全保証と費用は本件に含めない。入口は [migration](../internal/core/migrate.go) の evidence 構築と `replaceMigrationGroup` の全行 query、[UUID UNIQUE制約](../internal/core/db_schema.go)。削除・保持契約は [移行契約](../docs/specs/v0.14.0-migration.md) を参照する。
+
+- [ ] 複数 REF の show で namespace 集計と関係構築を共有する
+
+  FR-008。help にある `search` の `.items[].members[]` を複数 REF として `show` へ渡す経路では、同じ Claude / Codex namespace の全 session・全 message 集約と graph 構築を REF ごとに繰り返す。子孫指定なしでも発言フィルタと重複除外より前に行うため、同 namespace の K REF で集約・構築が K 回になることを静的確認した。
+
+  同 namespace の複数 REF で広範な集約・関係構築を共有し、REF 数と履歴量を増やした fixture で処理回数と所要時間を比較して改善を確認すれば完了。本人 / 子孫、重複・順序、発言フィルタ・番号・ページ化・JSON の結果を維持し、別 namespace を混同しないことも確認する。実測時間・query plan・cache 効果は未測定で、`OCTET_LENGTH` 集約を本文全 bytes の逐次読取とは断定しない。Cursor / legacy は早期 return で対象外。入口は [showのREF loop](../cmd/somniloq/show.go)、[ResolveSession](../internal/core/session_relations.go)、[message JOINと集約](../internal/core/db_sessions_projects.go)。出力契約は [v0.14.0契約](../docs/specs/v0.14.0-contract.md) の原文取得を参照する。
