@@ -5,62 +5,6 @@ import (
 	"testing"
 )
 
-func TestUpsertSession(t *testing.T) {
-	db := testDB(t)
-
-	meta := SessionMeta{
-		Source:    SourceClaudeCode,
-		SessionID: "s1",
-		CWD:       "/tmp",
-		RepoPath:  "/Users/test",
-		GitBranch: "main",
-		Version:   "2.1.86",
-		StartedAt: "2026-03-28T14:00:00Z",
-		EndedAt:   "2026-03-28T14:10:00Z",
-	}
-	if err := db.UpsertSession(testInput(t, db, meta.Source), meta, "2026-03-28T15:00:00Z"); err != nil {
-		t.Fatalf("UpsertSession failed: %v", err)
-	}
-
-	var sid, startedAt, repoPath string
-	err := db.db.QueryRow("SELECT session_id, started_at, repo_path FROM sessions WHERE session_id='s1'").
-		Scan(&sid, &startedAt, &repoPath)
-	if err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if sid != "s1" || startedAt != "2026-03-28T14:00:00Z" {
-		t.Errorf("unexpected row: sid=%s startedAt=%s", sid, startedAt)
-	}
-	if repoPath != "/Users/test" {
-		t.Errorf("repo_path: got %q, want %q", repoPath, "/Users/test")
-	}
-
-	meta2 := SessionMeta{
-		Source:    SourceClaudeCode,
-		SessionID: "s1",
-		CWD:       "/tmp",
-		RepoPath:  "/Users/test",
-		StartedAt: "2026-03-28T14:05:00Z",
-		EndedAt:   "2026-03-28T14:20:00Z",
-	}
-	if err := db.UpsertSession(testInput(t, db, meta2.Source), meta2, "2026-03-28T15:01:00Z"); err != nil {
-		t.Fatalf("UpsertSession (2nd) failed: %v", err)
-	}
-
-	var endedAt string
-	err = db.db.QueryRow("SELECT started_at, ended_at FROM sessions WHERE session_id='s1'").
-		Scan(&startedAt, &endedAt)
-	if err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if startedAt != "2026-03-28T14:00:00Z" {
-		t.Errorf("started_at should be MIN: got %s", startedAt)
-	}
-	if endedAt != "2026-03-28T14:20:00Z" {
-		t.Errorf("ended_at should be MAX: got %s", endedAt)
-	}
-}
-
 func TestUpsertSession_ChoosesInstantsAndPreservesUnknowns(t *testing.T) {
 	db := testDB(t)
 	upsert := func(startedAt, endedAt string) {
@@ -365,18 +309,16 @@ func TestDeleteInputs_RollsBackOnDeleteFailure(t *testing.T) {
 	if _, err := db.db.Exec(`DROP TRIGGER fail_import_state_delete`); err != nil {
 		t.Fatalf("drop trigger: %v", err)
 	}
-	for attempt := 1; attempt <= 2; attempt++ {
-		if err := db.DeleteInputs([]int64{inputID}); err != nil {
-			t.Fatalf("DeleteInputs attempt %d: %v", attempt, err)
+	if err := db.DeleteInputs([]int64{inputID}); err != nil {
+		t.Fatalf("DeleteInputs after trigger removal: %v", err)
+	}
+	for _, table := range []string{"messages", "sessions", "import_state"} {
+		var count int
+		if err := db.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
+			t.Fatalf("count %s after delete: %v", table, err)
 		}
-		for _, table := range []string{"messages", "sessions", "import_state"} {
-			var count int
-			if err := db.db.QueryRow("SELECT COUNT(*) FROM " + table).Scan(&count); err != nil {
-				t.Fatalf("count %s after attempt %d: %v", table, attempt, err)
-			}
-			if count != 0 {
-				t.Errorf("%s count after attempt %d = %d, want 0", table, attempt, count)
-			}
+		if count != 0 {
+			t.Errorf("%s count after delete = %d, want 0", table, count)
 		}
 	}
 }

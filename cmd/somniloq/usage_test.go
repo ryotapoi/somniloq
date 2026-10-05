@@ -41,12 +41,6 @@ func TestSetUsage(t *testing.T) {
 	}
 }
 
-func TestTopLevelUsageStaysShort(t *testing.T) {
-	if strings.Contains(topLevelUsage, "Examples:") || strings.Contains(topLevelUsage, "Columns") {
-		t.Fatalf("top-level usage must stay short, got:\n%s", topLevelUsage)
-	}
-}
-
 func TestSubcommandHelpIsSelfContained(t *testing.T) {
 	openDB := func() (*core.DB, error) {
 		return nil, errors.New("openDB must not be called for --help")

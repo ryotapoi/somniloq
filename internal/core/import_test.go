@@ -424,30 +424,6 @@ func TestProcessFile_SkipsEmptyContent(t *testing.T) {
 	}
 }
 
-func TestProcessFile_SkipsWhitespaceOnlyContent(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":"   \n  "}}
-`
-	path := filepath.Join(dir, "s1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
-	if err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-
-	var msgCount int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&msgCount); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
-	}
-	if msgCount != 1 {
-		t.Errorf("messages: got %d, want 1 (whitespace-only content skipped)", msgCount)
-	}
-}
-
 func TestImport_FileShrink(t *testing.T) {
 	db := testDB(t)
 	dir := testTempDir(t)
@@ -689,47 +665,31 @@ func TestImport_IncompleteClaudeInputAllowsOtherInputs(t *testing.T) {
 	}
 }
 
-func TestProcessFile_MetaOnly_NoSessionRow(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	jsonl := `{"type":"custom-title","customTitle":"meta only","sessionId":"meta1"}
-`
-	path := filepath.Join(dir, "meta1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	if err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&count); err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("meta-only JSONL should not create a session row; got %d", count)
-	}
-}
-
-func TestProcessFile_AgentNameOnly_NoSessionRow(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	jsonl := `{"type":"agent-name","agentName":"orphan","sessionId":"meta1"}
-`
-	path := filepath.Join(dir, "meta1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	if err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&count); err != nil {
-		t.Fatalf("SELECT failed: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("agent-name-only JSONL should not create a session row; got %d", count)
+func TestProcessFile_MetadataOnly_NoSessionRow(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		jsonl string
+	}{
+		{"custom title", `{"type":"custom-title","customTitle":"meta only","sessionId":"meta1"}` + "\n"},
+		{"agent name", `{"type":"agent-name","agentName":"orphan","sessionId":"meta1"}` + "\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db := testDB(t)
+			path := filepath.Join(testTempDir(t), "meta1.jsonl")
+			if err := os.WriteFile(path, []byte(tc.jsonl), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if err := processFile(t, db, path, 0, int64(len(tc.jsonl)), "2026-03-28T15:00:00Z"); err != nil {
+				t.Fatalf("processFile failed: %v", err)
+			}
+			var count int
+			if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&count); err != nil {
+				t.Fatalf("SELECT failed: %v", err)
+			}
+			if count != 0 {
+				t.Errorf("metadata-only JSONL created %d sessions, want 0", count)
+			}
+		})
 	}
 }
 

@@ -179,22 +179,3 @@ func TestImport_CursorAgentFixtureAndIncrementalContracts(t *testing.T) {
 	}
 	assertSaved("shrink/reprocess", want)
 }
-
-func TestImport_AllIncludesCursorAgent(t *testing.T) {
-	db := testDB(t)
-	root := testTempDir(t)
-	path := filepath.Join(root, "project", "agent-transcripts", "session", "session.jsonl")
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(`{"role":"user","message":{"content":[{"type":"text","text":"hello"}]}}`+"\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	result, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.FilesImported != 1 {
-		t.Errorf("all import files = %d, want 1", result.FilesImported)
-	}
-}

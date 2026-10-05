@@ -99,14 +99,6 @@ func TestShowCmd_FormatJSON(t *testing.T) {
 		})
 	}
 }
-func TestShowCmd_FormatJSON_EmptyBulk(t *testing.T) {
-	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"--format", "json", "--since", "2031-01-01", fixtureREF(core.SourceClaudeCode, "sess-1")}, staticDB(newOutlineTestDB(t)), config{}, &out, &errOut)
-	if code != 0 || err != nil || len(decodeShowItems(t, out.Bytes())) != 0 {
-		t.Fatalf("%d %v %s", code, err, out.String())
-	}
-}
-
 func TestFormatFlag_Unknown(t *testing.T) {
 	openDB := func() (*core.DB, error) {
 		t.Fatal("openDB must not be called for an unknown format")

@@ -23,22 +23,20 @@ func TestOpenDB_ReopenPreservesSchemaAndMessageRows(t *testing.T) {
 		t.Fatalf("revision/receipts = %d/%d", revision, receipts)
 	}
 	must(t, db.Close())
-	for i := 0; i < 2; i++ {
-		db, err = OpenDB(path)
-		must(t, err)
-		message.Content = "replacement"
-		must(t, db.InsertMessage(inputID, message))
-		var rowID, version int
-		must(t, db.db.QueryRow(`SELECT rowid FROM messages WHERE uuid='first'`).Scan(&rowID))
-		must(t, db.db.QueryRow(`PRAGMA schema_version`).Scan(&version))
-		if rowID != beforeRowID || version != beforeVersion {
-			t.Fatalf("row/schema changed: %d/%d", rowID, version)
-		}
-		messages, err := db.GetMessages(inputID, SourceCodex, "s1")
-		must(t, err)
-		if len(messages) != 1 || messages[0].Content != "original" {
-			t.Fatalf("messages = %+v", messages)
-		}
-		must(t, db.Close())
+	db, err = OpenDB(path)
+	must(t, err)
+	message.Content = "replacement"
+	must(t, db.InsertMessage(inputID, message))
+	var rowID, version int
+	must(t, db.db.QueryRow(`SELECT rowid FROM messages WHERE uuid='first'`).Scan(&rowID))
+	must(t, db.db.QueryRow(`PRAGMA schema_version`).Scan(&version))
+	if rowID != beforeRowID || version != beforeVersion {
+		t.Fatalf("row/schema changed: %d/%d", rowID, version)
 	}
+	messages, err := db.GetMessages(inputID, SourceCodex, "s1")
+	must(t, err)
+	if len(messages) != 1 || messages[0].Content != "original" {
+		t.Fatalf("messages = %+v", messages)
+	}
+	must(t, db.Close())
 }

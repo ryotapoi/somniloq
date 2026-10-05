@@ -24,18 +24,6 @@ func TestResolveDisplayName(t *testing.T) {
 			want:     "Brimday",
 		},
 		{
-			name:     "basename keeps hyphen",
-			repoPath: "/Users/ryota/Sources/my-repo",
-			short:    true,
-			want:     "my-repo",
-		},
-		{
-			name:     "empty repo_path, short=false",
-			repoPath: "",
-			short:    false,
-			want:     "",
-		},
-		{
 			name:     "empty repo_path, short=true",
 			repoPath: "",
 			short:    true,

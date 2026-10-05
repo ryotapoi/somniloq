@@ -225,15 +225,12 @@ func TestProjectAliasLiteralConditionsAcrossCommands(t *testing.T) {
 						t.Fatalf("%s = %d, %v (stderr: %q)", command.name, code, err, errOut.String())
 					}
 					for i := range aliases {
-						expected := fmt.Sprintf("alias-%d", i)
-						if command.name != "show" {
-							expected = fixtureREF(core.SourceClaudeCode, expected)
-						}
+						expected := fixtureREF(core.SourceClaudeCode, fmt.Sprintf("alias-%d", i))
 						if !strings.Contains(out.String(), expected) {
 							t.Errorf("%s output missing alias-%d:\n%s", command.name, i, out.String())
 						}
 					}
-					if strings.Contains(out.String(), "false-positive") || strings.Contains(out.String(), fixtureREF(core.SourceClaudeCode, "false-positive")) {
+					if strings.Contains(out.String(), fixtureREF(core.SourceClaudeCode, "false-positive")) {
 						t.Errorf("%s output included wildcard false positive:\n%s", command.name, out.String())
 					}
 				})

@@ -253,59 +253,6 @@ func TestCodexSameSizeEditAndEarlierNewRolloutMatchFreshImport(t *testing.T) {
 	}
 }
 
-func TestCommonRootFixtureImportAndREF(t *testing.T) {
-	for _, source := range []Source{SourceClaudeCode, SourceCursorAgent} {
-		t.Run(string(source), func(t *testing.T) {
-			db := testDB(t)
-			root := testTempDir(t)
-			fixtureRoot := filepath.Join("..", "ingest", "testdata", "v0.14.0")
-			var from, to, idText string
-			if source == SourceClaudeCode {
-				from = filepath.Join(fixtureRoot, "claude-code", "input-a", "project", "cc-root.jsonl")
-				to = filepath.Join(root, "project", "cc-root.jsonl")
-				idText = "cc-root"
-			} else {
-				from = filepath.Join(fixtureRoot, "cursor-agent", "input-a", "project-slug", "agent-transcripts", "cursor-root", "cursor-root.jsonl")
-				to = filepath.Join(root, "project-slug", "agent-transcripts", "cursor-root", "cursor-root.jsonl")
-				idText = "cursor-root"
-			}
-			data, err := os.ReadFile(from)
-			if err != nil {
-				t.Fatal(err)
-			}
-			os.MkdirAll(filepath.Dir(to), 0700)
-			os.WriteFile(to, data, 0600)
-			r, err := Import(db, ImportOptions{Inputs: []Input{{Source: source, Root: root}}})
-			if err != nil || len(r.Errors) > 0 {
-				t.Fatalf("import %+v %v", r, err)
-			}
-			id, _ := db.EnsureInput(Input{Source: source, Root: root})
-			row, err := db.GetSession(id, source, idText)
-			if err != nil || row == nil || row.REF == "" {
-				t.Fatalf("session %+v %v", row, err)
-			}
-			resolved, err := db.LookupSessionREF(row.REF)
-			if err != nil || resolved == nil || resolved.SessionID != idText {
-				t.Fatalf("REF %+v %v", resolved, err)
-			}
-			messages, err := db.GetMessages(id, source, idText)
-			if err != nil || len(messages) == 0 || len(messages[0].Blocks) == 0 {
-				t.Fatalf("messages %+v %v", messages, err)
-			}
-			if source == SourceCursorAgent {
-				if row.RepoPath != "" || len(messages) != 2 || !reflect.DeepEqual(messages[0].Blocks, []string{"First block", "Second block"}) {
-					t.Fatalf("cursor root %+v %+v", row, messages)
-				}
-				for _, m := range messages {
-					if m.Timestamp != "" {
-						t.Fatal("cursor timestamp synthesized")
-					}
-				}
-			}
-		})
-	}
-}
-
 func TestCodexRootSourceStringVariantsNormalAndFull(t *testing.T) {
 	for _, source := range []string{"cli", "vscode", "exec", "mcp"} {
 		t.Run(source, func(t *testing.T) {

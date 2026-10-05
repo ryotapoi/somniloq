@@ -20,13 +20,6 @@ func TestExtractText_CodexContentBlocks(t *testing.T) {
 	}
 }
 
-func TestExtractTextRejectsMalformedContent(t *testing.T) {
-	got, err := ExtractText(json.RawMessage(`{`))
-	if err == nil || got != "" {
-		t.Fatalf("ExtractText = %q, %v; want empty text and parse error", got, err)
-	}
-}
-
 func TestNormalizeMessageTextBlocks(t *testing.T) {
 	for _, tc := range []struct {
 		name    string

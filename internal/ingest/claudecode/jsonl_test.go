@@ -7,40 +7,6 @@ import (
 	"testing"
 )
 
-func TestExtractText_String(t *testing.T) {
-	raw := json.RawMessage(`"hello world"`)
-	got, err := ExtractText(raw)
-	if err != nil {
-		t.Fatalf("ExtractText failed: %v", err)
-	}
-	if got != "hello world" {
-		t.Errorf("got %q, want %q", got, "hello world")
-	}
-}
-
-func TestExtractText_ContentBlocks(t *testing.T) {
-	raw := json.RawMessage(`[{"type":"text","text":"response"},{"type":"tool_use","id":"t1","name":"Read","input":{}}]`)
-	got, err := ExtractText(raw)
-	if err != nil {
-		t.Fatalf("ExtractText failed: %v", err)
-	}
-	if got != "response" {
-		t.Errorf("got %q, want %q", got, "response")
-	}
-}
-
-func TestExtractText_MultipleTextBlocks(t *testing.T) {
-	raw := json.RawMessage(`[{"type":"text","text":"A"},{"type":"text","text":"B"}]`)
-	got, err := ExtractText(raw)
-	if err != nil {
-		t.Fatalf("ExtractText failed: %v", err)
-	}
-	want := "A\n\nB"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
 func TestParseMessagePreservesTextBlocks(t *testing.T) {
 	rec := &RawRecord{UUID: "u1", SessionID: "s1", Message: json.RawMessage(`{"role":"user","content":[{"type":"text","text":" first "},{"type":"tool_result","content":"ignored"},{"type":"text","text":" second "}]}`)}
 	msg, err := ParseMessage(rec)

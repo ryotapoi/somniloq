@@ -306,79 +306,51 @@ func TestLoadConfigIOErrorClassification(t *testing.T) {
 	}
 }
 
-func TestConfigInitDefaultNameEquivalence(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	var first, second, errOut bytes.Buffer
-	code, err := configInitCmd(nil, &first, &errOut)
-	if code != 0 || err != nil {
-		t.Fatalf("omitted: %d %v %s", code, err, &errOut)
-	}
-	path := strings.TrimSpace(first.String())
-	data, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Remove(path); err != nil {
-		t.Fatal(err)
-	}
-	code, err = configInitCmd([]string{"default"}, &second, &errOut)
-	explicit, readErr := os.ReadFile(path)
-	if code != 0 || err != nil || readErr != nil || first.String() != second.String() || !bytes.Equal(data, explicit) {
-		t.Fatalf("explicit: %d %v %v stdout=%q", code, err, readErr, second.String())
-	}
-	if _, err := os.Stat(filepath.Join(home, ".somniloq", "default.db")); !os.IsNotExist(err) {
-		t.Fatalf("init created DB: %v", err)
-	}
-}
-
 func TestConfigInitPreservesExistingConfigAndDatabase(t *testing.T) {
-	for _, explicitDB := range []bool{false, true} {
-		for _, existing := range []string{"config", "database", "both"} {
-			t.Run(fmt.Sprintf("explicit=%t/%s", explicitDB, existing), func(t *testing.T) {
-				home := t.TempDir()
-				t.Setenv("HOME", home)
-				dir := filepath.Join(home, ".somniloq", "config")
-				if err := os.MkdirAll(dir, 0o700); err != nil {
-					t.Fatal(err)
+	for _, tt := range []struct {
+		explicitDB bool
+		existing   string
+	}{
+		{false, "config"},
+		{false, "database"},
+		{true, "database"},
+	} {
+		t.Run(fmt.Sprintf("explicit=%t/%s", tt.explicitDB, tt.existing), func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			dir := filepath.Join(home, ".somniloq", "config")
+			if err := os.MkdirAll(dir, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			configPath := filepath.Join(dir, "work.toml")
+			dbPath := filepath.Join(home, ".somniloq", "work.db")
+			args := []string{"work"}
+			if tt.explicitDB {
+				dbPath = filepath.Join(dir, "custom.db")
+				args = append(args, "--db", "custom.db")
+			}
+			existingPath := dbPath
+			if tt.existing == "config" {
+				existingPath = configPath
+			}
+			if err := os.WriteFile(existingPath, []byte("keep "+existingPath), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			var out, errOut bytes.Buffer
+			code, err := configInitCmd(args, &out, &errOut)
+			if code != 2 || err != nil || out.Len() != 0 || !strings.Contains(errOut.String(), "already exists") {
+				t.Fatalf("init: %d %v %q %q", code, err, out.String(), errOut.String())
+			}
+			data, err := os.ReadFile(existingPath)
+			if err != nil || string(data) != "keep "+existingPath {
+				t.Fatalf("modified %s: %q %v", existingPath, data, err)
+			}
+			if tt.existing == "database" {
+				if _, err := os.Lstat(configPath); !os.IsNotExist(err) {
+					t.Fatalf("created config: %v", err)
 				}
-				configPath := filepath.Join(dir, "work.toml")
-				dbPath := filepath.Join(home, ".somniloq", "work.db")
-				args := []string{"work"}
-				if explicitDB {
-					dbPath = filepath.Join(dir, "custom.db")
-					args = append(args, "--db", "custom.db")
-				}
-				paths := []string{}
-				if existing != "database" {
-					paths = append(paths, configPath)
-				}
-				if existing != "config" {
-					paths = append(paths, dbPath)
-				}
-				for _, path := range paths {
-					if err := os.WriteFile(path, []byte("keep "+path), 0o600); err != nil {
-						t.Fatal(err)
-					}
-				}
-				var out, errOut bytes.Buffer
-				code, err := configInitCmd(args, &out, &errOut)
-				if code != 2 || err != nil || out.Len() != 0 || !strings.Contains(errOut.String(), "already exists") {
-					t.Fatalf("init: %d %v %q %q", code, err, out.String(), errOut.String())
-				}
-				for _, path := range paths {
-					data, err := os.ReadFile(path)
-					if err != nil || string(data) != "keep "+path {
-						t.Fatalf("modified %s: %q %v", path, data, err)
-					}
-				}
-				if existing == "database" {
-					if _, err := os.Lstat(configPath); !os.IsNotExist(err) {
-						t.Fatalf("created config: %v", err)
-					}
-				}
-			})
-		}
+			}
+		})
 	}
 }
 

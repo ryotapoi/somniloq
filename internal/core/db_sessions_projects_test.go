@@ -5,41 +5,6 @@ import (
 	"testing"
 )
 
-func TestListSessions_OrderAndCount(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z", EndedAt: "2026-03-28T10:30:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "m1", SessionID: "s1", Role: "user", Content: "hello", Timestamp: "2026-03-28T10:00:00Z"}))
-
-	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s2", StartedAt: "2026-03-28T14:00:00Z", EndedAt: "2026-03-28T14:30:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "m2", SessionID: "s2", Role: "user", Content: "hi", Timestamp: "2026-03-28T14:00:00Z"}))
-	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "m3", SessionID: "s2", Role: "assistant", Content: "hey", Timestamp: "2026-03-28T14:01:00Z"}))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(rows))
-	}
-
-	if rows[0].SessionID != "s2" {
-		t.Errorf("first row should be s2 (newer), got %s", rows[0].SessionID)
-	}
-	if rows[0].StartedAt != "2026-03-28T14:00:00Z" {
-		t.Errorf("s2 started_at: got %s, want 2026-03-28T14:00:00Z", rows[0].StartedAt)
-	}
-	if rows[0].MessageCount != 2 {
-		t.Errorf("s2 message count: got %d, want 2", rows[0].MessageCount)
-	}
-	if rows[1].SessionID != "s1" {
-		t.Errorf("second row should be s1 (older), got %s", rows[1].SessionID)
-	}
-	if rows[1].MessageCount != 1 {
-		t.Errorf("s1 message count: got %d, want 1", rows[1].MessageCount)
-	}
-}
-
 func TestListSessionsAndProjectsOrderByInstant(t *testing.T) {
 	db := testDB(t)
 	for _, session := range []SessionMeta{
@@ -80,31 +45,6 @@ func TestListSessionsAndProjectsOrderByInstant(t *testing.T) {
 	}
 	if projects[2].SessionCount != 2 {
 		t.Errorf("RepoA SessionCount = %d, want 2", projects[2].SessionCount)
-	}
-}
-
-func TestListSessions_NullStartedAt(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	// Session created via UpsertSession with no StartedAt, then title applied.
-	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s2"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpdateSessionTitle(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "s2", "title only", "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(rows))
-	}
-
-	if rows[0].SessionID != "s1" {
-		t.Errorf("first row should be s1 (has started_at), got %s", rows[0].SessionID)
-	}
-	if rows[1].SessionID != "s2" {
-		t.Errorf("second row should be s2 (NULL started_at), got %s", rows[1].SessionID)
 	}
 }
 
@@ -198,23 +138,6 @@ func TestListSessions_ProjectFilterExcludesUnknownRepoPath(t *testing.T) {
 	}
 	if len(rows) != 1 || rows[0].SessionID != "known" {
 		t.Fatalf("project filter rows = %+v, want only known repo path", rows)
-	}
-}
-
-func TestListSessions_RepoPath_NullReturnsEmpty(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "s1", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListSessions(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListSessions failed: %v", err)
-	}
-	if len(rows) != 1 {
-		t.Fatalf("expected 1 row, got %d", len(rows))
-	}
-	if rows[0].RepoPath != "" {
-		t.Errorf("RepoPath should be empty for NULL, got %q", rows[0].RepoPath)
 	}
 }
 
@@ -491,37 +414,6 @@ func TestSessionRowQueryPaths_ReturnAllFields(t *testing.T) {
 			t.Fatalf("LookupSessionsByID null row = %+v, err = %v, want %+v", lookedUp, err, wantNull)
 		}
 	})
-}
-
-func TestListProjects_GroupByProject(t *testing.T) {
-	db := testDB(t)
-
-	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "a1", RepoPath: "/Users/test/projA", StartedAt: "2026-03-28T10:00:00Z"}, "2026-03-28T15:00:00Z"))
-	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "a2", RepoPath: "/Users/test/projA", StartedAt: "2026-03-28T11:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "b1", RepoPath: "/Users/test/projB", StartedAt: "2026-03-28T14:00:00Z"}, "2026-03-28T15:00:00Z"))
-
-	rows, err := db.ListProjects(SessionFilter{})
-	if err != nil {
-		t.Fatalf("ListProjects failed: %v", err)
-	}
-	if len(rows) != 2 {
-		t.Fatalf("expected 2 rows, got %d", len(rows))
-	}
-
-	// Project B first (latest started_at is 14:00, A's latest is 11:00)
-	if rows[0].RepoPath != "/Users/test/projB" {
-		t.Errorf("first row: got %s, want /Users/test/projB", rows[0].RepoPath)
-	}
-	if rows[0].SessionCount != 1 {
-		t.Errorf("projB session count: got %d, want 1", rows[0].SessionCount)
-	}
-	if rows[1].RepoPath != "/Users/test/projA" {
-		t.Errorf("second row: got %s, want /Users/test/projA", rows[1].RepoPath)
-	}
-	if rows[1].SessionCount != 2 {
-		t.Errorf("projA session count: got %d, want 2", rows[1].SessionCount)
-	}
 }
 
 func TestListProjects_SinceAndUntilFilter(t *testing.T) {

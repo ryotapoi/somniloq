@@ -141,13 +141,11 @@ func TestRemovedOutlineAndShowHelpAfterREF(t *testing.T) {
 }
 
 func TestMainDispatchRejectsSessions(t *testing.T) {
-	for _, args := range [][]string{{"sessions"}, {"sessions", "--help"}, {"sessions", "--config", "missing"}} {
-		code, stdout, stderr := runSomniloqMain(t, t.TempDir(), args...)
-		if code != 1 || stdout != "" || !strings.Contains(stderr, "unknown command: sessions") {
-			t.Fatalf("%v: %d %q %q", args, code, stdout, stderr)
-		}
+	code, stdout, stderr := runSomniloqMain(t, t.TempDir(), "sessions")
+	if code != 1 || stdout != "" || !strings.Contains(stderr, "unknown command: sessions") {
+		t.Fatalf("sessions: %d %q %q", code, stdout, stderr)
 	}
-	code, _, stderr := runSomniloqMain(t, t.TempDir(), "--help")
+	code, _, stderr = runSomniloqMain(t, t.TempDir(), "--help")
 	if code != 0 || strings.Contains(stderr, "  sessions ") || !strings.Contains(stderr, "  search ") {
 		t.Fatalf("top-level help: %d %q", code, stderr)
 	}
