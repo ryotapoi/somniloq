@@ -76,7 +76,7 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return searchCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "matchedMembers", "# page metadata", "Default limit: 20", "-limit", "-offset", "--session <REF>"},
+			want: []string{"Examples:", "matchedMembers", "# page metadata", "Default unlimited", "-limit", "-offset", "--session <REF>"},
 		},
 		{
 			name: "projects",

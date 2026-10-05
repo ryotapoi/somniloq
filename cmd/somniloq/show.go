@@ -30,7 +30,7 @@ Examples:
   somniloq show --config default <REF> --messages 40:60 --limit 10
 
 Selected day's original messages (POSIX sh; requires jq):
-  Selects the default 20 groups; use hasMore/nextOffset to fetch further pages.
+  Selects all matching groups; explicit --limit caps the selection.
   members includes the full group, including root-only members; matchedMembers contains candidates.
   Full REFs contain no whitespace/glob characters. sort order becomes show's conversation order.
   An empty selection skips show; the same period filters original messages.

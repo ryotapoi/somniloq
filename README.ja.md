@@ -52,7 +52,7 @@ somniloq show --config default REF --role user --one-line
 somniloq show --config default REF --messages 12:18 --limit 50 --format json
 ```
 
-一覧の JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`、既定20件です。pattern 省略で一覧、複数 -e は OR、--all は候補本文集合で AND、-F は固定文字列。input/source は繰り返しの OR、条件種間は AND。project は末尾名の大小文字区別 substring と完全一致 alias 展開です。members は全まとまり、matchedMembers は候補本人。root metadata を子で補完せず、全 members の本人原文日時で last 降順・未知最後・group key 順に整列します。limit=0 と末尾超過も total を返します。
+一覧の JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`、既定全件（limit=null）です。明示 `--limit N` だけが上限となり、`--offset` のみでは整列済み結果の残り全件を返します。pattern 省略で一覧、複数 -e は OR、--all は候補本文集合で AND、-F は固定文字列。input/source は繰り返しの OR、条件種間は AND。project は末尾名の大小文字区別 substring と完全一致 alias 展開です。members は全まとまり、matchedMembers は候補本人。root metadata を子で補完せず、全 members の本人原文日時で last 降順・未知最後・group key 順に整列します。limit=0 と末尾超過も total を返します。
 
 search の日時は日付または zone 付き RFC3339。日付は dayBoundary（CLI で上書き可）が起点で、until 日付は指定日全体を含み、日時の上限は排他です。--time-mode は active（既定）/started/last/overlap、明示時は期間必須。active は期間内候補本文で照合し、pattern なしでも実発言が必要です。他 mode は全 members の開始/最後・重なる期間でまとまりを選び、候補全文を照合します。--imported-since RFC3339 は候補本人の取り込み下限で、除外された親本文を AND に使いません。詳細は active のみです。相対時刻・zone なし日時・空値は拒否します。
 

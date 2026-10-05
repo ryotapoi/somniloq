@@ -12,6 +12,6 @@ regexp期待区間はGo標準regexpのUTF8 byte区間を直接確認する。dup
 
 lineText の LF 境界は search_matches_test.go の具体例で保護する。`one\ntwo` の LF 一文字一致 `[3,4)` は `one`、LF 直後のゼロ幅 `[4,4)` は `two`、`one\n` の末尾ゼロ幅は空の末尾行。複数行一致は途中の LF を保持し、一致の末尾が LF ならその後の行を含めない。
 
-`expected.json` の listExample は build CLI で確認した親子 AND の一覧 envelope 例。members/matchedMembers は全6本人で、本文抜粋を含まない。importedAt は例の取り込み時点であり、実行ごとに変わる。実行時は config.toml の db を一時ディレクトリに置き、root を実体 path に設定して import 後に `search --config PATH --all -e "Inherited question" -e "Child answer" --format json` を呼ぶ。既定20件、明示0件、末尾超過の TSV/JSON も同じ config で試用できる。
+`expected.json` の listExample は build CLI で確認した親子 AND の一覧 envelope 例。members/matchedMembers は全6本人で、本文抜粋を含まない。importedAt は例の取り込み時点であり、実行ごとに変わる。実行時は config.toml の db を一時ディレクトリに置き、root を実体 path に設定して import 後に `search --config PATH --all -e "Inherited question" -e "Child answer" --format json` を呼ぶ。既定全件（limit=null）、明示上限、offset のみ、明示0件、末尾超過の TSV/JSON も同じ config で試用できる。
 
 日時の直接オラクルは `internal/core/search_groups_test.go` の `TestSearchGroupsActivityModesAndImportCandidates`。親子孫の min/max、gap の active/overlap 差、offset/nanosecond、未知日時、子だけ project/取り込み候補と AND を同じ SQLite fixture で検証する。CLI の日付 upper・設定上書き・厳密入力・filter 後 total/page は `cmd/somniloq/search_test.go` で保護する。詳細は active のみ、非 active mode は一覧専用として拒否し、取り込み下限は共通候補条件とする。

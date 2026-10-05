@@ -57,7 +57,7 @@ somniloq show --config default REF --role user --one-line
 somniloq show --config default REF --messages 12:18 --limit 50 --format json
 ```
 
-一覧の既定20件から REF を選ぶ例です。全件が必要なら hasMore/nextOffset で続きのページを取得します。
+一覧の条件に合うまとまり全件から REF を選ぶ例です。明示 --limit で上限を指定できます。
 
 ```sh
 sh <<'SH'
@@ -86,4 +86,4 @@ somniloq projects --help
 
 `search -> show` や `show --role user --one-line -> show --messages` の使い方も各 command help で確認します。
 
-既知 REF の詳細は `somniloq search --config default --session REF -e "Inherited question" -e "Child answer" --all --format json` で検索します。本人と確定子孫の本文集合で AND を判定し、一致箇所の ref/messageNumber は show と共通です。-F は全 pattern を固定文字列にします。JSON/TSV は show と同じ page envelope（total は箇所数）、既定全件、明示 limit/offset だけ箇所単位です。フラグは位置 PATTERN より前に置き、patternIndexes は位置 PATTERN→-e 指定順です。session なし search も同じ照合器を使うまとまり一覧です。pattern 省略可、既定20件、同じ envelope の total はまとまり数。input/source は繰り返し OR、条件種間 AND。members は全まとまり、matchedMembers は候補本人。root project/title と全 member の本人原文日時を表示し、last 降順・未知最後・group key 順です。limit=0/末尾超過も total を返します。日付は dayBoundary を使い until 日付を翌日境界へ進め、日時上限は排他です。--time-mode active（既定）は期間内候補本文だけで照合し、pattern なしでも実発言が必要。started/last/overlap は全体の開始/最後・重なる期間で選び候補全文を照合します。明示 mode は期間必須、詳細は active のみ。--imported-since RFC3339 は候補本人の包含下限で、表示 members/日時は全体のままです。
+既知 REF の詳細は `somniloq search --config default --session REF -e "Inherited question" -e "Child answer" --all --format json` で検索します。本人と確定子孫の本文集合で AND を判定し、一致箇所の ref/messageNumber は show と共通です。-F は全 pattern を固定文字列にします。JSON/TSV は show と同じ page envelope（total は箇所数）、既定全件、明示 limit/offset だけ箇所単位です。フラグは位置 PATTERN より前に置き、patternIndexes は位置 PATTERN→-e 指定順です。session なし search も同じ照合器を使うまとまり一覧です。pattern 省略可、既定全件（limit=null）、明示 --limit だけが上限、offset のみでは整列済み結果の残り全件、同じ envelope の total はまとまり数。input/source は繰り返し OR、条件種間 AND。members は全まとまり、matchedMembers は候補本人。root project/title と全 member の本人原文日時を表示し、last 降順・未知最後・group key 順です。limit=0/末尾超過も total を返します。日付は dayBoundary を使い until 日付を翌日境界へ進め、日時上限は排他です。--time-mode active（既定）は期間内候補本文だけで照合し、pattern なしでも実発言が必要。started/last/overlap は全体の開始/最後・重なる期間で選び候補全文を照合します。明示 mode は期間必須、詳細は active のみ。--imported-since RFC3339 は候補本人の包含下限で、表示 members/日時は全体のままです。

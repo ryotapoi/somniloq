@@ -132,7 +132,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - 一行は同じ input/source 内のまとまり。Claude root 所属だけの子も members に含む。legacy と Cursor は独立。欠落親は key のみで member に数えない。ref は存在する root の REF、欠落 root では member REF の最小辞書順。
 - JSON item は `ref,input,source,project,title,startedAt,lastAt,importedAt,members,matchedMembers,memberCount` の全 field。本文抜粋・旧 turn は返さない。input は canonical root、legacy は null。project/title は存在する root の保存値のみ、欠落 root は null。members は元の全まとまり、matchedMembers は候補に残った本人（実際の pattern 一致本人には狭めない）、memberCount は全 members 数。
 - startedAt/lastAt は全 members の本人本文の既知日時の最小/最大。importedAt は全 members の最大を時点比較して raw 値を返す。未知日時は補完しない。lastAt 既知の降順→未知最後→まとまり key 辞書順。
-- JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`、既定 limit=20。全 filter 後・page 前のまとまり数が total、items 数が count。明示 limit=0 は空ページ、hasMore は offset<total、nextOffset は null。offset は0以上、末尾超過も total を返す。結果0件も items=[] で成功 exit 0。入力エラーは stdout 空で exit 2。
+- JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`、既定全件（limit=null）。明示 `--limit N` だけが上限となり、`--offset` のみでは整列済み結果の残り全件を返す。全 filter 後・page 前のまとまり数が total、items 数が count。明示 limit=0 は空ページ、hasMore は offset<total、nextOffset は null。offset は0以上、末尾超過も total を返す。結果0件も items=[] で成功 exit 0。入力エラーは stdout 空で exit 2。
 - TSV は先頭 `# page\t` の後に items を除く compact JSON、一行 header、item ごと一行。列順は上記 field 順。null は `\N`、配列は compact JSON、文字列は show/詳細と同じ可逆 escape。
 - 件数・項目・関係・metadata は同じ read snapshot。照合前に limit を適用しない。DB 変更を跨ぐ別ページの固定は保証しない。
 - `--since` / `--until` は日付または zone 付き RFC3339 / RFC3339Nano。相対時刻・zone なし日時・空値は exit 2。日付は設定 dayBoundary（既定00:00、CLI --day-boundary が上書き）を起点にし、until 日付は翌日の境界へ進める。下限包含・上限排他で、小数秒と offset の instant を保つ。since >= until、不正 mode、不正 dayBoundary を拒否する。
@@ -211,7 +211,7 @@ somniloq --config ./archive.toml search
 somniloq --version
 ```
 
-一覧から指定日の原文を取得する POSIX sh 例（既定20件のページ。全件は hasMore/nextOffset で続きのページを取得）:
+一覧から指定日の原文を取得する POSIX sh 例（条件に合うまとまり全件を選択。明示 --limit で上限を指定できる）:
 
 ```sh
 sh <<'SH'

@@ -24,7 +24,7 @@ const searchHelpDetails = `Search lists saved work groups, without body snippets
   Candidates are selected before body matching. Members lists the full group;
   matchedMembers lists candidate members, including members without a pattern hit.
   Root project/title are not filled from children. Dates use all members' known own-body times.
-  Sort: lastAt descending, unknown last, group key ascending. Default limit: 20.
+  Sort: lastAt descending, unknown last, group key ascending. Default unlimited; only explicit --limit caps results.
   JSON: {items,total,count,limit,offset,hasMore,nextOffset}.
   TSV: # page metadata, then ref,input,source,project,title,startedAt,lastAt,importedAt,members,matchedMembers,memberCount.
   Strings use reversible escapes, null is \N, arrays are compact JSON.
@@ -54,7 +54,7 @@ Examples:
   somniloq search --config default --session <REF> -F 'auth bug'
 
 Selected day's original messages (POSIX sh; requires jq):
-  Selects the default 20 groups; use hasMore/nextOffset to fetch further pages.
+  Selects all matching groups; explicit --limit caps the selection.
   members includes the full group, including root-only members; matchedMembers contains candidates.
   Full REFs contain no whitespace/glob characters. sort order becomes show's conversation order.
   An empty selection skips show; the same period filters original messages.
@@ -74,7 +74,7 @@ type searchFlags struct {
 
 func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
-	f := searchFlags{session: fs.String("session", "", "search self and confirmed descendants"), since: fs.String("since", "", "inclusive activity lower bound (date or RFC3339)"), until: fs.String("until", "", "activity upper bound (date includes day; RFC3339 exclusive)"), dayBoundary: fs.String("day-boundary", "", "logical day boundary (HH:MM)"), project: fs.String("project", "", "case-sensitive project basename substring or exact alias"), limit: fs.Int("limit", 0, "maximum results (at least 0; list default 20, detail unlimited)"), offset: fs.Int("offset", 0, "ordered results to skip (at least 0)"), format: fs.String("format", "tsv", "output format (tsv, json)")}
+	f := searchFlags{session: fs.String("session", "", "search self and confirmed descendants"), since: fs.String("since", "", "inclusive activity lower bound (date or RFC3339)"), until: fs.String("until", "", "activity upper bound (date includes day; RFC3339 exclusive)"), dayBoundary: fs.String("day-boundary", "", "logical day boundary (HH:MM)"), project: fs.String("project", "", "case-sensitive project basename substring or exact alias"), limit: fs.Int("limit", 0, "maximum results (at least 0; default unlimited)"), offset: fs.Int("offset", 0, "ordered results to skip (at least 0)"), format: fs.String("format", "tsv", "output format (tsv, json)")}
 	f.timeMode = fs.String("time-mode", "active", "list activity mode: active, started, last, overlap")
 	f.importedSince = fs.String("imported-since", "", "candidate importedAt inclusive RFC3339 lower bound")
 	f.fixed = fs.Bool("F", false, "treat all patterns as fixed strings")
@@ -125,7 +125,7 @@ type searchGroupJSON struct {
 	Items      []core.SearchGroup `json:"items"`
 	Total      int                `json:"total"`
 	Count      int                `json:"count"`
-	Limit      int                `json:"limit"`
+	Limit      *int               `json:"limit"`
 	Offset     int                `json:"offset"`
 	HasMore    bool               `json:"hasMore"`
 	NextOffset *int               `json:"nextOffset"`
@@ -192,13 +192,16 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	if err != nil {
 		return 1, err
 	}
-	limit := 20
+	var limit *int
 	if flagWasProvided(fs, "limit") {
-		limit = *f.limit
+		limit = f.limit
 	}
 	page := searchGroupJSON{Items: []core.SearchGroup{}, Total: len(items), Limit: limit, Offset: *f.offset}
 	start := min(page.Offset, len(items))
-	end := start + min(limit, len(items)-start)
+	end := len(items)
+	if limit != nil {
+		end = start + min(*limit, end-start)
+	}
 	page.Items = append(page.Items, items[start:end]...)
 	page.Count = len(page.Items)
 	page.HasMore = page.Offset < page.Total && page.Count < page.Total-page.Offset
@@ -220,7 +223,7 @@ func writeSearchGroupTSV(out io.Writer, page searchGroupJSON) error {
 	metadata := struct {
 		Total      int  `json:"total"`
 		Count      int  `json:"count"`
-		Limit      int  `json:"limit"`
+		Limit      *int `json:"limit"`
 		Offset     int  `json:"offset"`
 		HasMore    bool `json:"hasMore"`
 		NextOffset *int `json:"nextOffset"`
