@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,7 +87,7 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 				if err != nil || code != 0 {
 					t.Fatalf("--since %q = %d, %v (stderr: %q)", since, code, err, errOut.String())
 				}
-				if out.Len() == 0 {
+				if !timeFilterHasResults(t, tt.name, &out) {
 					t.Fatalf("--since %q produced no matching output", since)
 				}
 			}
@@ -100,7 +102,7 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 				if err != nil || code != 0 {
 					t.Fatalf("--until %q = %d, %v (stderr: %q)", until, code, err, errOut.String())
 				}
-				if out.Len() != 0 {
+				if timeFilterHasResults(t, tt.name, &out) {
 					t.Fatalf("--until %q included equal boundary: %q", until, out.String())
 				}
 			}
@@ -118,7 +120,7 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 				if err != nil || code != 0 {
 					t.Fatalf("--until %q = %d, %v (stderr: %q)", until, code, err, errOut.String())
 				}
-				if out.Len() == 0 {
+				if !timeFilterHasResults(t, tt.name, &out) {
 					t.Fatalf("--until %q excluded earlier fractional timestamp", until)
 				}
 			}
@@ -133,7 +135,7 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 				if err != nil || code != 0 {
 					t.Fatalf("--since %q = %d, %v (stderr: %q)", since, code, err, errOut.String())
 				}
-				if out.Len() != 0 {
+				if timeFilterHasResults(t, tt.name, &out) {
 					t.Fatalf("--since %q included earlier fractional timestamp: %q", since, out.String())
 				}
 			}
@@ -167,4 +169,19 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 			}
 		})
 	}
+}
+
+func timeFilterHasResults(t *testing.T, command string, out *bytes.Buffer) bool {
+	t.Helper()
+	if command != "search" {
+		return out.Len() > 0
+	}
+	first := strings.SplitN(out.String(), "\n", 2)[0]
+	var metadata struct {
+		Total int `json:"total"`
+	}
+	if err := json.Unmarshal([]byte(strings.TrimPrefix(first, "# page\t")), &metadata); err != nil {
+		t.Fatal(err, out.String())
+	}
+	return metadata.Total > 0
 }

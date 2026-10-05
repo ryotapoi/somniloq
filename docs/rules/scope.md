@@ -2,7 +2,7 @@
 
 本書が CLI 仕様・コマンド挙動・スキーマの正。README.md / README.ja.md は本書の派生ビューなので、本書のこれらの記述を変更したら README 両方を同期する。
 
-v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF と専用 migrate は利用できる。共通 resolver による関係解決と、複数 REF・確定子孫・発言フィルタ・ページ・TSV/JSON による show 原文取得は利用できる。新 search は後続実装。以下は現在利用できる CLI の仕様。
+v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF と専用 migrate は利用できる。共通 resolver による関係解決と、複数 REF・確定子孫・発言フィルタ・ページ・TSV/JSON による show 原文取得は利用できる。まとまり一覧と共通 regexp の全一致詳細 search は利用できる。新日時 mode は後続実装。以下は現在利用できる CLI の仕様。
 
 ## 主要機能
 
@@ -126,7 +126,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 検索（search）
 
-- `search --config NAME_OR_PATH` は session 指定の有無で詳細と横断検索を選ぶ。デフォルトは `tsv`。フラグは位置 pattern/query より前に置く
+- `search --config NAME_OR_PATH` は session 指定の有無で全一致詳細とまとまり一覧を選ぶ。デフォルトは `tsv`。フラグは位置 pattern/query より前に置く
 
 #### 詳細検索（--session REF）
 
@@ -138,37 +138,33 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - matchText は一致原文、lineText は一致の先頭・末尾を含む行全体。LF は直前の行に属し、非空一致の末尾は endByte-1 の行まで含む。ゼロ幅は startByte の行、本文末尾は末尾行（末尾 LF の後なら空行）。行末 LF 自体は lineText に含めないが複数行の途中 LF は保持する。
 - JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`。item は `ref,messageNumber,occurrenceNumber,role,timestamp,startByte,endByte,patternIndexes,matchText,lineText` を常に返す。日時は raw 値、未知は null。TSV は同じ列順、先頭 `# page` metadata、可逆 escape を show と共有する。
 - 既定は全件（limit=null/offset=0）。明示 limit/offset だけ箇所単位で page 化する。limit=0 の hasMore は offset<total、nextOffset=null。末尾超過も page 前 total を返す。REF 解決・本文・件数は同じ read snapshot。
-- 負の limit/offset、不正・不存在 REF、pattern エラーは stdout 空の exit 2。現行 project alias/repo_path substring と発言 timestamp の条件を先に適用して AND を判定する。期間なしでは未知日時を保持する。新しい候補会話・日時 mode の契約は後続実装。
+- 負の limit/offset、不正・不存在 REF、pattern エラーは stdout 空の exit 2。下記と同じ input/source/project 候補条件、発言 timestamp 条件を先に適用して AND を判定する。期間なしでは未知日時を保持する。新日時 mode は後続実装。
 
-#### 横断検索（--session なし、一覧切替前）
+#### まとまり一覧（--session なし）
 
-`--session` なしは query 必須の既存 LIKE 検索。`-e` / `-F` / `--all` を指定すると exit 2。以下の turn/snippet/配列・limit>=1 の仕様はこの入口だけに適用する。
+`search --config NAME_OR_PATH [PATTERN] [-e PATTERN...] [-F] [--all] [--input PATH...] [--source SOURCE...] [--project TEXT] [--since VALUE] [--until VALUE] [--day-boundary HH:MM] [--limit N] [--offset N] [--format tsv|json]`。フラグは位置 PATTERN より前に置く。pattern は省略でき、全候補を一覧にする。空・無効 pattern は exit 2。照合器と OR/AND の意味は詳細と共通で、親子に別 pattern があっても同じまとまり内の候補で AND を満たせる。
 
-- 実装は LIKE 全走査。FTS5 は日本語だと trigram 必須で索引が本文の 2〜3 倍に膨らみ、3 文字未満のクエリが索引で引けないため、LIKE で困るスケールになるまで見送り（本文 42 MB の DB で実測 0.1 秒前後）
-- マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ。query の `%`、`_`、`\` は文字列として扱う
-- 継承 context と所属不明本文は検索しない。Claude Code・Codex の本人 sidechain は対象とし、Cursor Agent は従来の sidechain 除外に従う（show と同じ扱い）
-- 出力 TSV の列: `ref`, `turn`, `time`, `project`, `snippet`, `source`。source は `claude_code` / `codex` / `cursor_agent`。新しい順（メッセージ `timestamp` 降順、同値は rowid 降順）
-- 現行 search の `turn` は user 発言から計算する旧番号で、show の保存済み `messageNumber` とは異なる。`turn` を `--messages` へそのまま渡さない。検索結果の完全 `ref` を show に渡し、本人原文の発言番号を確認する
-- `time` はローカルタイム `2006-01-02 15:04` 形式
-- `project` は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合は `repo_path` をそのまま
-- snippet はマッチの前後各 40 文字（rune 単位）。前後が切れている場合は `...` を付加。前後の空白は trim し、タブ・改行は空白に置換（TSV 保全）
-- JSON のフィールドは `ref`, `source`, `sessionId`, `turn`, `timestamp`, `project`, `snippet`。`timestamp` は DB 保存値、`snippet` はタブ・改行を置換しない生値（共通仕様は「JSON 出力」節参照）
-- `--since`/`--until` は**メッセージの timestamp 基準**。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な timestamp は時刻条件に一致しない。sessions のセッション開始基準とは異なり、show と同じ発言基準となる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と日時は `dayBoundary` の影響を受けない
-- `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ、alias 展開含む）
-- `--limit N` は最大 N 件を返す。未指定時は無制限、N は 1 以上。`--offset M` は順序付け済みの先頭 M 件を飛ばす。未指定時は 0、M は 0 以上。すべての既存 filter と新しい順（timestamp 降順、同値は rowid 降順）を適用した後にページ化する
-- 同じ query・filter・`--limit` で `--offset` を増やせば続きのページを取得できる。ただし、この保証は DB が固定で、相対時刻 filter を含む場合は解決済みの時刻条件も固定である場合だけ。DB の変更を跨ぐページの固定は保証しない
+- input/source/project で候補本人を選び、その本文だけを照合して保存関係でまとまりに集約する。input/source は各 OR、条件種間は AND。source は `claude-code|codex|cursor-agent` の3種のみ、all は拒否。input は設定の実体親を基準に path を正規化し、DB の canonical root と照合する。
+- project は repo_path の末尾名への大小文字区別 substring。alias 完全一致時だけ canonical と aliases へ OR 展開する。未知 project は不一致。親を候補から除くとその本文で AND を満たさない。
+- 一行は同じ input/source 内のまとまり。Claude root 所属だけの子も members に含む。legacy と Cursor は独立。欠落親は key のみで member に数えない。ref は存在する root の REF、欠落 root では member REF の最小辞書順。
+- JSON item は `ref,input,source,project,title,startedAt,lastAt,importedAt,members,matchedMembers,memberCount` の全 field。本文抜粋・旧 turn は返さない。input は canonical root、legacy は null。project/title は存在する root の保存値のみ、欠落 root は null。members は元の全まとまり、matchedMembers は候補に残った本人（実際の pattern 一致本人には狭めない）、memberCount は全 members 数。
+- startedAt/lastAt は全 members の本人本文の既知日時の最小/最大。importedAt は全 members の最大を時点比較して raw 値を返す。未知日時は補完しない。lastAt 既知の降順→未知最後→まとまり key 辞書順。
+- JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`、既定 limit=20。全 filter 後・page 前のまとまり数が total、items 数が count。明示 limit=0 は空ページ、hasMore は offset<total、nextOffset は null。offset は0以上、末尾超過も total を返す。結果0件も items=[] で成功 exit 0。入力エラーは stdout 空で exit 2。
+- TSV は先頭 `# page\t` の後に items を除く compact JSON、一行 header、item ごと一行。列順は上記 field 順。null は `\N`、配列は compact JSON、文字列は show/詳細と同じ可逆 escape。
+- 件数・項目・関係・metadata は同じ read snapshot。照合前に limit を適用しない。DB 変更を跨ぐ別ページの固定は保証しない。
+- 暫定日時条件は一覧・詳細とも従来の発言 timestamp filter。relative/local date/datetime/RFC3339 を受理し、date-only は dayBoundary で解釈する。until の日付は翌日の境界が上限。不正/未知時刻は期間に一致しない。pattern なしの期間一覧も対象発言が必要。表示日時と整列は期間外も含む全 group の本人原文日時を使う。time-mode と新日時入力は後続タスク。
 
 ### JSON 出力（--format json）
 
 機械消費（スクリプト・skill からの利用）向けの構造化出力。判断の経緯は `docs/decisions/0012-json-output-schema.md` 参照。
 
 - 対象コマンド: `sessions` / `projects` / `search` / `show`（`--format tsv|json`、デフォルト `tsv`）
-- show と search --session は envelope object、その他は JSON 配列。結果0件は envelope の items=[]、配列入口は `[]`。show と詳細 search の関係・本文・件数は同じ read transaction から取得する。
+- show と search は envelope object、sessions/projects は JSON 配列。結果0件は envelope の items=[]、配列入口は `[]`。show と search の関係・本文・件数は同じ read transaction から取得する。
 - フィールド名は camelCase
-- タイムスタンプは DB 保存値をそのまま出す。show は元の offset・精度・不正な非空 raw 値も保持する。ローカルタイム整形は sessions / projects / 横断 search の TSV 側だけの表示都合とする（タイムゾーン情報を失わないため）
+- タイムスタンプは DB 保存値をそのまま出す。show は元の offset・精度・不正な非空 raw 値も保持する。ローカルタイム整形は sessions / projects の TSV 側だけの表示都合とする（タイムゾーン情報を失わないため）
 - 文字列は生値（TSV のタブ・改行置換はしない。エスケープは JSON 側で担保される）
 - `title` は `custom_title` の生値（session_id フォールバックはしない）
-- `project` は alias canonical 表示と `--short` を反映した表示名（alias 一致時は canonical 名のみ、alias 非一致時のデフォルトは `repo_path` の生値）
+- sessions/projects の `project` は alias canonical 表示と `--short` を反映した表示名（alias 一致時は canonical 名のみ、alias 非一致時のデフォルトは `repo_path` の生値）
 - 不正な `--format` 値はエラー（`unknown format: ...`）。DB を開く前に検証する
 - インデント 2 スペース、HTML エスケープ（`<` `>` `&` の `\uXXXX` 化）は無効
 
@@ -245,7 +241,7 @@ DB path は TOML の db で指定する。新 DB は revision 1（`PRAGMA user_v
 
 入力キーは `sha256(UTF8(DB source) + NUL + UTF8(canonical root))` の64桁小文字 hex。同じ source/root は再処理や name 変更でも同入力、root 移動は別入力。Codex・Cursor Agent・Claude Code root の会話 identity は HTML escape なし・空白なし JSON 配列 `[sessionId]`。
 
-完全 REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`（padding なし RFC4648 URL alphabet）。path・name・DB rowid は含まない。同じ root/source/identity なら再 import・別 DB でも安定する。Codex は子本人の identity と明示親参照を保存し、各本人 REF で会話を選べる。Claude Code の子・孫は `[rootSessionId,agentId]` で個別 REF を発行・選択できる。まとまりの検索一覧は後続実装。確定子孫の show 展開と search の `--session REF` は利用できる。移行した旧会話は `slq1:legacy:<snapshot_sha256>:<source>:<base64url_legacy_session_id>` の完全 REF で選択でき、正常入力の同名会話と区別する。部分置換後も旧 REF と残行の番号を維持する。
+完全 REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`（padding なし RFC4648 URL alphabet）。path・name・DB rowid は含まない。同じ root/source/identity なら再 import・別 DB でも安定する。Codex は子本人の identity と明示親参照を保存し、各本人 REF で会話を選べる。Claude Code の子・孫は `[rootSessionId,agentId]` で個別 REF を発行・選択できる。まとまりの検索一覧は保存関係と共通 resolver で本人 REF を集約する。確定子孫の show 展開と search の `--session REF` は利用できる。移行した旧会話は `slq1:legacy:<snapshot_sha256>:<source>:<base64url_legacy_session_id>` の完全 REF で選択でき、正常入力の同名会話と区別する。部分置換後も旧 REF と残行の番号を維持する。
 
 ## Known limitations
 

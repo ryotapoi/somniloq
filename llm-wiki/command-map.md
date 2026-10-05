@@ -6,7 +6,6 @@ sources:
   - cmd/somniloq/sessions.go
   - cmd/somniloq/show.go
   - cmd/somniloq/show_tsv.go
-  - cmd/somniloq/turn.go
   - cmd/somniloq/search.go
   - cmd/somniloq/filter.go
   - cmd/somniloq/projects.go
@@ -15,6 +14,8 @@ sources:
   - internal/core/db_import_state.go
   - internal/core/db_sessions_projects.go
   - internal/core/db_messages_summary.go
+  - internal/core/search_groups.go
+  - internal/core/search_matches.go
   - internal/core/db_search.go
   - internal/core/import.go
   - docs/rules/scope.md
@@ -31,7 +32,7 @@ CLI 入口を触る前に、まずこの表で「cmd 層」「core 層」「仕�
 | `import` | `cmd/somniloq/import.go` | `internal/core/import.go`, `internal/ingest/*` | `cmd/somniloq/import*_test.go`, `internal/core/import_test.go`, `internal/core/codex_import_test.go` | `docs/rules/scope.md` の 取り込み |
 | `sessions` | `cmd/somniloq/sessions.go` | `internal/core/db_sessions_projects.go` の `ListSessions` | `cmd/somniloq/sessions_test.go`, `internal/core/db_sessions_projects_test.go` | `docs/rules/scope.md` の セッション一覧 |
 | `show` | `cmd/somniloq/show.go`, `cmd/somniloq/show_tsv.go`, `cmd/somniloq/jsonout.go` | `session_relations.go` の `ResolveSession`、`db_messages_summary.go` の `GetIdentityMessages` を同じ `ReadSnapshot` で利用。発言 filter / page / one-line は cmd 層 | `cmd/somniloq/show_contract_test.go`, `cmd/somniloq/show_filters_test.go`, `cmd/somniloq/jsonout_test.go` | `docs/rules/scope.md` の 内容表示 |
-| `search` | `cmd/somniloq/search.go`, `cmd/somniloq/filter.go` | `SearchMessages` | `cmd/somniloq/search_test.go`, `internal/core/db_search_test.go` | `docs/rules/scope.md` の 検索 |
+| `search` | `cmd/somniloq/search.go`, `cmd/somniloq/filter.go` | `SearchGroups` / `SearchOccurrences`（候補本文・matcher・snapshot を共有） | `cmd/somniloq/search_test.go`, `cmd/somniloq/search_detail_test.go`, `internal/core/search_groups_test.go` | `docs/rules/scope.md` の 検索 |
 | `projects` | `cmd/somniloq/projects.go` | `internal/core/db_sessions_projects.go` の `ListProjects` | `cmd/somniloq/jsonout_test.go`, `internal/core/db_sessions_projects_test.go` | `docs/rules/scope.md` の プロジェクト一覧 |
 
 ## 変更時の読む順序

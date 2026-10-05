@@ -41,7 +41,11 @@ func TestUsageErrorsKeepExactStderr(t *testing.T) {
 			if err != nil {
 				t.Fatalf("command returned error: %v", err)
 			}
-			if code != 1 {
+			wantCode := 1
+			if tt.name == "search" {
+				wantCode = 2
+			}
+			if code != wantCode {
 				t.Fatalf("exit code = %d, want 1", code)
 			}
 			if got := errOut.String(); got != tt.want {

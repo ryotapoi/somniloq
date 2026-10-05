@@ -18,7 +18,7 @@ go install github.com/ryotapoi/somniloq/cmd/somniloq@latest
 somniloq config init                              # Create default TOML; no DB is created
 somniloq import --config default                  # Import all configured inputs
 somniloq sessions --config default --since 7d      # Find recent sessions
-somniloq search --config default "auth bug"        # Search message bodies
+somniloq search --config default "auth bug"        # 本文の語からまとまりを探す
 somniloq show --config default <REF> --messages 12:18 # 発言番号で読む
 ```
 
@@ -33,7 +33,7 @@ Every database command requires `--config NAME_OR_PATH`, before or after the com
 | `migrate` | Copy a fixed snapshot of a supported legacy database to another database, replacing only old rows proven by remaining Codex logs. |
 | `sessions` | List sessions; `--since 24h` filters by session time, while `--imported-since 24h` finds sessions saved or updated recently. |
 | `projects` | List projects and session counts. |
-| `search` | Search message bodies; use `--project` or `--since` to narrow results. |
+| `search` | 語・入力・source・project から作業のまとまりを選ぶ。既知 REF は全一致詳細で探す。 |
 | `show` | 複数会話の原文を TSV / JSON で取得し、発言フィルタ・ページ・一行表示を選ぶ。 |
 
 `import` is incremental. Input selections are ORed, then intersected with `--source`. **`--full` rebuilds only the selected inputs' conversations and import state**, retaining other inputs. Check that the selected inputs' original logs are available. It asks for confirmation; `--yes` skips the prompt and is required in noninteractive environments.
@@ -42,9 +42,9 @@ Codex import keeps each person's conversation separate from inherited context. T
 
 New databases use schema revision 1. Normal commands reject legacy or unsupported databases, including the earlier root-only revision 1 shape, without modifying them. Use `somniloq migrate --config archive --from ./archive-snapshot.db` for the supported legacy shape. Set the config’s `db` to a missing or empty destination and configure all remaining Codex roots. Supply a fixed standalone snapshot without sidecars. Rerun only with the same snapshot and a completed copy receipt. Unknown membership, missing logs, and other sources’ old history are retained and accessible through legacy REFs. See the [migration contract](docs/specs/v0.14.0-migration.md) for details. Read commands reject missing databases without creating them.
 
-Use `somniloq <command> --help` for flags and formats. `sessions`, `projects`, `search`, and `show` support `--format tsv|json`. show と search --session の JSON は envelope、その他は配列。session なし search は literal substring 検索です。 Claude Code children and grandchildren have independent conversation REFs even when they share the root sessionId, and their original sidechain text is retained. Direct parents require matching Agent/Task calls and structured results in the same physical file; path-based root membership is stored separately. Incomplete scans or file reads preserve the affected input’s previously saved text, relations, and cursors; other inputs continue. `search --session REF PATTERN` uses the shared relation resolver to search the named conversation and confirmed descendants, excluding ancestors, siblings, and children known only by root membership. pattern 必須の Go regexp で全一致箇所を返し、複数 -e / -F / --all AND を利用できる。 まとまり検索は後続実装です。
+Use `somniloq <command> --help` for flags and formats. `sessions`, `projects`, `search`, and `show` support `--format tsv|json`. show と search の JSON は envelope、sessions/projects は配列。session なし search は本文抜粋を含まないまとまり一覧です。 Claude Code children and grandchildren have independent conversation REFs even when they share the root sessionId, and their original sidechain text is retained. Direct parents require matching Agent/Task calls and structured results in the same physical file; path-based root membership is stored separately. Incomplete scans or file reads preserve the affected input’s previously saved text, relations, and cursors; other inputs continue. `search --session REF PATTERN` uses the shared relation resolver to search the named conversation and confirmed descendants, excluding ancestors, siblings, and children known only by root membership. pattern 必須の Go regexp で全一致箇所を返し、複数 -e / -F / --all AND を利用できる。
 
-複数の完全 REF を一回の呼び出しで渡し、指定日の実発言だけを Daily Note の材料として取得できます。REF の指定順・各会話の元の発言番号順を保ち、`--descendants` は確定子孫だけを展開して重複会話を除きます。role・発言番号・日時で絞った後に、発言単位で limit / offset / tail を適用します。`--one-line` は text だけを最初の一行へ短縮し、blocks は原文を保ちます。既定 TSV、JSON は `{items,total,count,limit,offset,hasMore,nextOffset}` envelope です。show の日時は日付または zone 付き RFC3339 で指定し、相対時刻は受理しません。旧 outline・summary・turn・表示除外・Markdown・REF なし期間入口は廃止しました。session なし search の `turn` は show の `messageNumber` とは異なります。詳細 search の messageNumber は show と同じ原文番号です。詳細は [現行仕様](docs/rules/scope.md#内容表示show) を参照してください。
+複数の完全 REF を一回の呼び出しで渡し、指定日の実発言だけを Daily Note の材料として取得できます。REF の指定順・各会話の元の発言番号順を保ち、`--descendants` は確定子孫だけを展開して重複会話を除きます。role・発言番号・日時で絞った後に、発言単位で limit / offset / tail を適用します。`--one-line` は text だけを最初の一行へ短縮し、blocks は原文を保ちます。既定 TSV、JSON は `{items,total,count,limit,offset,hasMore,nextOffset}` envelope です。show の日時は日付または zone 付き RFC3339 で指定し、相対時刻は受理しません。旧 outline・summary・turn・表示除外・Markdown・REF なし期間入口は廃止しました。一覧は REF と metadata を返し、本文抜粋・turn を含みません。詳細 search の messageNumber は show と同じ原文番号です。詳細は [現行仕様](docs/rules/scope.md#内容表示show) を参照してください。
 
 ```sh
 # REF1 / REF2 は sessions / search からコピーした完全 REF
@@ -53,10 +53,12 @@ somniloq show --config default REF --role user --one-line
 somniloq show --config default REF --messages 12:18 --limit 50 --format json
 ```
 
-次は後続 search 実装後の最終契約例です。現在の session なし search JSON は配列で、`.items[].members[]` や query なしの日付一覧はまだ利用できません。
+一覧の JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`、既定20件です。pattern 省略で一覧、複数 -e は OR、--all は候補本文集合で AND、-F は固定文字列。input/source は繰り返しの OR、条件種間は AND。project は末尾名の大小文字区別 substring と完全一致 alias 展開です。members は全まとまり、matchedMembers は候補本人。root metadata を子で補完せず、全 members の本人原文日時で last 降順・未知最後・group key 順に整列します。limit=0 と末尾超過も total を返します。
+
+次は既定ページから REF を選ぶ例です。since/until/dayBoundary は暫定的に従来の発言時刻 filter を使い、pattern なしでも期間内の本文が必要です。全件が必要なら hasMore/nextOffset を見てページを取得します。新しい time-mode は後続実装です。
 
 ```sh
-set -- $(somniloq search --config default --since 2026-10-01 --until 2026-10-01 --time-mode active --format json | jq -r '.items[].members[]' | sort -u)
+set -- $(somniloq search --config default --since 2026-10-01 --until 2026-10-01 --format json | jq -r '.items[].members[]' | sort -u)
 if [ "$#" -gt 0 ]; then
   somniloq show --config default "$@" --since 2026-10-01 --until 2026-10-01 --format json
 fi
@@ -106,7 +108,7 @@ Add more `[[inputs]]` entries for additional roots. The same source and resolved
 
 [MIT License](LICENSE)
 
-既知 REF の詳細検索は既定全件で、明示 limit/offset は一致箇所単位です。原文 UTF-8 byte 位置、matchText、行全体の lineText と番号を返し、同じ REF/番号で show に戻れます。フラグは位置 PATTERN より前に置き、patternIndexes は位置 PATTERN が先頭、次に -e の指定順です。session なしで -e/-F/--all は exit 2 になります。
+既知 REF の詳細検索は既定全件で、明示 limit/offset は一致箇所単位です。原文 UTF-8 byte 位置、matchText、行全体の lineText と番号を返し、同じ REF/番号で show に戻れます。フラグは位置 PATTERN より前に置き、patternIndexes は位置 PATTERN が先頭、次に -e の指定順です。一覧でも同じ -e/-F/--all を使えます。
 
 ```sh
 somniloq search --config default --session REF -e "Inherited question" -e "Child answer" --all --format json

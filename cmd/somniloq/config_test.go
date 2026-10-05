@@ -182,7 +182,7 @@ func TestProjectsCmd_ShortDoesNotAggregateUnaliasedBasenameCollisions(t *testing
 	}
 }
 
-func TestSearchCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
+func TestSearchCmd_ProjectAliasFilterPreservesRootValue(t *testing.T) {
 	db := newProjectAliasDisplayDB(t)
 	cfg := config{ProjectAliases: map[string][]string{
 		"somniloq": {"Brimday"},
@@ -201,12 +201,10 @@ func TestSearchCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
 	if !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "new-1")) || !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "old-1")) {
 		t.Fatalf("search output missing alias sessions:\n%s", got)
 	}
-	if strings.Contains(got, "Brimday") || strings.Contains(got, "/Users/test/somniloq") {
-		t.Errorf("search output should use only the canonical project name:\n%s", got)
+	if !strings.Contains(got, "/Users/test/somniloq") || !strings.Contains(got, "/Users/test/Brimday") {
+		t.Fatalf("root project values missing: %s", got)
 	}
-	if count := strings.Count(got, "\tsomniloq\t"); count != 2 {
-		t.Errorf("canonical project column count = %d, want 2:\n%s", count, got)
-	}
+
 }
 
 // End-to-end: --project with an old name must list sessions stored under both

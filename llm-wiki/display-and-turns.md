@@ -3,10 +3,11 @@ regen: compiled
 sources:
   - docs/rules/scope.md
   - docs/specs/v0.14.0-contract.md
+  - internal/core/search_groups.go
+  - cmd/somniloq/search_detail.go
   - cmd/somniloq/search.go
   - cmd/somniloq/show.go
   - cmd/somniloq/show_tsv.go
-  - cmd/somniloq/turn.go
   - cmd/somniloq/sessions.go
   - cmd/somniloq/config.go
   - cmd/somniloq/jsonout.go
@@ -17,7 +18,7 @@ sources:
 
 # Display and turns
 
-表示・番号・ページを変えるときは `docs/rules/scope.md` の対象コマンド節を読み、show と旧 search の採番経路を分けて追う。
+表示・番号・ページを変えるときは `docs/rules/scope.md` の対象コマンド節を読み、show と search の選択・ページ経路を追う。
 
 ## show の選択から表示まで
 
@@ -25,10 +26,10 @@ sources:
 - 発言 filter、ページ、一行化は show の cmd 層にある。番号範囲は `parseMessageRange`、日時の受理は `parseShowTime`、一行化は `showFirstLine` が入口。保存済み番号・raw timestamp・blocks の読み取りを変えずに text だけを変換する経路を確認する。回帰の入口は `cmd/somniloq/show_contract_test.go` と `cmd/somniloq/show_filters_test.go`。
 - JSON の item/envelope 型と構築は `cmd/somniloq/jsonout.go`、TSV の page 行・header・escape は `cmd/somniloq/show_tsv.go`。両形式の件数と本文は show で組み立てる同じ結果を使う。出力契約の正本は `docs/specs/v0.14.0-contract.md` の「出力」。
 
-## 現行 search の turn
+## search の一覧と詳細
 
-`cmd/somniloq/search.go` は `internal/core/db_search.go` の `SearchMessages` の結果に、`searchTurnsByUUID` で旧 turn を付ける。`cmd/somniloq/turn.go` の `assignTurns` は本人メッセージ列の user 発言から採番する。show の `messageNumber` は保存済み発言番号なので、この turn を show の番号範囲へ流用しない。再参照は検索結果の完全 REF を show に渡して本人原文の番号を確認する。search の新照合器・まとまり一覧は後続実装。
+一覧は `cmd/somniloq/search.go` の `searchCmd` → `internal/core/search_groups.go` の `SearchGroups`。候補選択・照合・group metadata は core、ページ/envelope と TSV は cmd。`resolveSessionGroups` は共通の関係 graph を namespace ごとに一度構築する。回帰入口は `internal/core/search_groups_test.go` と `cmd/somniloq/search_test.go`。
 
-旧 turn helper の変更時は `cmd/somniloq/search_test.go` と `cmd/somniloq/turn_test.go` を確認する。show はこの helper を使わない。旧 outline / summary / turn / 表示除外の入口はない。
+全一致詳細は `cmd/somniloq/search_detail.go` → `SearchOccurrences`。保存済み番号を返し、show と一致する。候補本文取得は一覧と共通の `candidateBodies`、pattern は `PatternMatcher`。一覧は turn/snippet を返さない。旧一覧専用の turn helper は撤去済み。
 
 `sessions` は `ListSessions` の行メタデータだけを出す。本人本文の取得や発言 filter は show 側で行う。

@@ -1,5 +1,5 @@
 {
-  "applicability": "planned v0.14.0; conceptual canonical roots, not host paths",
+  "applicability": "v0.14.0 implemented list/detail/show; new time-mode cases remain planned; conceptual canonical roots, not host paths",
   "refs": {
     "R": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJyb290Il0",
     "C": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJjaGlsZCJd",
@@ -252,5 +252,50 @@
       ],
       "deduplicate": true
     }
-  ]
+  ],
+  "listExample": {
+    "patterns": [
+      "Inherited question",
+      "Child answer"
+    ],
+    "all": true,
+    "expected": {
+      "items": [
+        {
+          "ref": "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJyb290Il0",
+          "input": "/fixtures/codex/input-a",
+          "source": "codex",
+          "project": "/fixtures/project",
+          "title": null,
+          "startedAt": "2026-10-01T00:01:00Z",
+          "lastAt": "2026-10-01T00:01:00Z",
+          "importedAt": "2026-10-05T02:11:46Z",
+          "members": [
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJ1bmtub3duLW93bmVyIl0",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJjaGlsZCJd",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJncmFuZGNoaWxkIl0",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJvbGQtY2hpbGQiXQ",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJvcmRpbmFsLWNoaWxkIl0",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJyb290Il0"
+          ],
+          "matchedMembers": [
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJ1bmtub3duLW93bmVyIl0",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJjaGlsZCJd",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJncmFuZGNoaWxkIl0",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJvbGQtY2hpbGQiXQ",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJvcmRpbmFsLWNoaWxkIl0",
+            "slq1:ea6a22be2e3a6aac02204fd94ec7814ffdf1522669c017e1b79614abe4f83919:codex:WyJyb290Il0"
+          ],
+          "memberCount": 6
+        }
+      ],
+      "total": 1,
+      "count": 1,
+      "limit": 20,
+      "offset": 0,
+      "hasMore": false,
+      "nextOffset": null
+    },
+    "note": "importedAt is an example import instant, not a fixed fixture oracle"
+  }
 }

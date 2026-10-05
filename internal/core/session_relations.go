@@ -43,22 +43,27 @@ func (d *DB) ResolveSession(ref string) (*SessionResolution, error) {
 	return resolveSessionRelations(*self, sessions, key), nil
 }
 
-func resolveSessionRelations(self SessionRow, sessions []SessionRow, inputKey string) *SessionResolution {
-	byID := map[string]SessionRow{}
-	parents := map[string]string{}
+type sessionRelations struct {
+	byID        map[string]SessionRow
+	parents     map[string]string
+	groups      map[string][]SessionRow
+	groupKeys   map[string]string
+	diagnostics []string
+}
+
+func buildSessionRelations(sessions []SessionRow) *sessionRelations {
+	g := &sessionRelations{byID: map[string]SessionRow{}, parents: map[string]string{}, groups: map[string][]SessionRow{}, groupKeys: map[string]string{}}
 	for _, s := range sessions {
-		byID[s.Identity] = s
+		g.byID[s.Identity] = s
 		if s.ParentIdentity != "" {
-			parents[s.Identity] = s.ParentIdentity
+			g.parents[s.Identity] = s.ParentIdentity
 		}
 	}
-	// Remove every edge participating in a cycle, rather than choosing an
-	// arbitrary root from a cycle. Edges into the cycle remain explicit evidence.
 	cyclic := map[string]bool{}
-	for id := range byID {
+	for id := range g.byID {
 		path := []string{}
 		seen := map[string]int{}
-		for current := id; current != ""; current = parents[current] {
+		for current := id; current != ""; current = g.parents[current] {
 			if at, ok := seen[current]; ok {
 				for _, member := range path[at:] {
 					cyclic[member] = true
@@ -69,59 +74,61 @@ func resolveSessionRelations(self SessionRow, sessions []SessionRow, inputKey st
 			path = append(path, current)
 		}
 	}
-	result := &SessionResolution{}
 	for id := range cyclic {
-		delete(parents, id)
-		result.Diagnostics = append(result.Diagnostics, "unconfirmed cyclic parent: "+byID[id].REF)
+		delete(g.parents, id)
+		g.diagnostics = append(g.diagnostics, "unconfirmed cyclic parent: "+g.byID[id].REF)
 	}
-	sort.Strings(result.Diagnostics)
-	groupID := func(id string) string {
-		if self.Source == SourceClaudeCode {
-			if root := byID[id].RootIdentity; root != "" {
-				return root
+	sort.Strings(g.diagnostics)
+	for id, s := range g.byID {
+		group := id
+		if s.Source == SourceClaudeCode {
+			if s.RootIdentity != "" {
+				group = s.RootIdentity
 			}
-			return id
+		} else {
+			for g.parents[group] != "" {
+				group = g.parents[group]
+			}
 		}
-		for parents[id] != "" {
-			id = parents[id]
-		}
-		return id
+		g.groupKeys[id] = group
 	}
-	group := groupID(self.Identity)
-	result.GroupKey = IdentityREF(inputKey, self.Source, group)
-	// Expose only existing, confirmed direct parents; root membership is separate.
-	for id, s := range byID {
-		s.ParentREF = ""
-		s.RootREF = ""
-		if p, ok := byID[parents[id]]; ok {
+	for id, s := range g.byID {
+		s.ParentREF, s.RootREF = "", ""
+		if p, ok := g.byID[g.parents[id]]; ok {
 			s.ParentREF = p.REF
 		}
-		if r, ok := byID[groupID(id)]; ok {
+		if r, ok := g.byID[g.groupKeys[id]]; ok {
 			s.RootREF = r.REF
 		}
-		byID[id] = s
+		g.byID[id] = s
+		group := g.groupKeys[id]
+		g.groups[group] = append(g.groups[group], s)
 	}
-	result.Self = byID[self.Identity]
-	if p, ok := byID[parents[self.Identity]]; ok {
+	for group := range g.groups {
+		sort.Slice(g.groups[group], func(i, j int) bool { return g.groups[group][i].REF < g.groups[group][j].REF })
+	}
+	return g
+}
+
+func (g *sessionRelations) resolve(self SessionRow, inputKey string, descendants bool) *SessionResolution {
+	group := g.groupKeys[self.Identity]
+	result := &SessionResolution{Self: g.byID[self.Identity], GroupKey: IdentityREF(inputKey, self.Source, group), Members: g.groups[group], Diagnostics: g.diagnostics}
+	if p, ok := g.byID[g.parents[self.Identity]]; ok {
 		result.Parent = &p
 	}
-	if r, ok := byID[group]; ok {
+	if r, ok := g.byID[group]; ok {
 		result.Root = &r
 		result.RepresentativeREF = r.REF
-	}
-	for id, s := range byID {
-		if groupID(id) == group {
-			result.Members = append(result.Members, s)
-		}
-	}
-	sort.Slice(result.Members, func(i, j int) bool { return result.Members[i].REF < result.Members[j].REF })
-	if result.RepresentativeREF == "" {
+	} else {
 		result.RepresentativeREF = result.Members[0].REF
 	}
+	if !descendants {
+		return result
+	}
 	children := map[string][]SessionRow{}
-	for id, parent := range parents {
-		if _, exists := byID[parent]; exists {
-			children[parent] = append(children[parent], byID[id])
+	for id, parent := range g.parents {
+		if _, exists := g.byID[parent]; exists {
+			children[parent] = append(children[parent], g.byID[id])
 		}
 	}
 	for parent := range children {
@@ -141,6 +148,35 @@ func resolveSessionRelations(self SessionRow, sessions []SessionRow, inputKey st
 	}
 	visit(result.Self)
 	return result
+}
+
+func resolveSessionRelations(self SessionRow, sessions []SessionRow, inputKey string) *SessionResolution {
+	return buildSessionRelations(sessions).resolve(self, inputKey, true)
+}
+
+// resolveSessionGroups builds each namespace graph once, keeping saved members
+// separate from missing parent keys and preserving the single-REF resolver rules.
+func resolveSessionGroups(sessions []SessionRow) []*SessionResolution {
+	namespaces := map[string][]SessionRow{}
+	results := []*SessionResolution{}
+	for _, s := range sessions {
+		if s.InputID < 0 || s.Source == SourceCursorAgent {
+			root := s
+			results = append(results, &SessionResolution{Self: s, Root: &root, GroupKey: s.REF, RepresentativeREF: s.REF, Members: []SessionRow{s}})
+			continue
+		}
+		key, _, _, _ := parseREF(s.REF)
+		namespace := key + ":" + string(s.Source)
+		namespaces[namespace] = append(namespaces[namespace], s)
+	}
+	for _, rows := range namespaces {
+		key, _, _, _ := parseREF(rows[0].REF)
+		g := buildSessionRelations(rows)
+		for _, members := range g.groups {
+			results = append(results, g.resolve(members[0], key, false))
+		}
+	}
+	return results
 }
 
 // sessionScopeCondition preserves the full namespace, including legacy snapshots.

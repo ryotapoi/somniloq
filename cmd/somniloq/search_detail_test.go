@@ -107,6 +107,30 @@ func TestSearchDetailFixture(t *testing.T) {
 			t.Fatalf("%+v", page)
 		}
 	}
+	// List and detail share candidate selection, before the AND check.
+	for _, c := range []struct {
+		flags []string
+		total int
+	}{
+		{[]string{"--source", "cursor-agent"}, 0},
+		{[]string{"--input", filepath.Join(base, "codex/input-b")}, 0},
+		{[]string{"--project", "fixtures"}, 0},
+		{[]string{"--source", "codex", "--input", root, "--project", "project"}, 2},
+	} {
+		args := append([]string{"--session", ref, "--format", "json", "--all", "-e", "Inherited question", "-e", "Child answer"}, c.flags...)
+		var out, diag bytes.Buffer
+		code, e := searchCmd(args, open, config{}, &out, &diag)
+		if code != 0 || e != nil {
+			t.Fatal(code, e, diag.String())
+		}
+		var page searchDetailJSON
+		if e = json.Unmarshal(out.Bytes(), &page); e != nil {
+			t.Fatal(e)
+		}
+		if page.Total != c.total {
+			t.Fatal(c, page)
+		}
+	}
 	child := core.IdentityREF(core.InputKey(core.SourceCodex, root), core.SourceCodex, `["child"]`)
 	for _, c := range []struct {
 		args  []string
@@ -173,7 +197,7 @@ func TestSearchDetailFixture(t *testing.T) {
 }
 func newInt(v int) *int { return &v }
 func TestSearchDetailValidationBeforeDB(t *testing.T) {
-	for _, args := range [][]string{{"--session", "bad"}, {"--session", "bad", ""}, {"--session", "bad", "(?=foo)"}, {"--session", "bad", "--limit", "-1", "foo"}, {"--session", "bad", "--offset", "-1", "foo"}, {"-e", "foo"}, {"-F", "foo"}, {"--all", "foo"}, {"--all=false", "foo"}, {"-F=false", "foo"}} {
+	for _, args := range [][]string{{"--session", "bad"}, {"--session", "bad", ""}, {"--session", "bad", "(?=foo)"}, {"--session", "bad", "--limit", "-1", "foo"}, {"--session", "bad", "--offset", "-1", "foo"}} {
 		var out, diag bytes.Buffer
 		code, e := searchCmd(args, func() (*core.DB, error) { t.Fatal("DB opened"); return nil, nil }, config{}, &out, &diag)
 		if code != 2 || e == nil || out.Len() != 0 {

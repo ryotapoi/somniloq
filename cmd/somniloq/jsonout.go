@@ -41,16 +41,6 @@ type projectJSON struct {
 	SessionCount int    `json:"sessionCount"`
 }
 
-type searchJSON struct {
-	REF       string `json:"ref"`
-	Source    string `json:"source"`
-	SessionID string `json:"sessionId"`
-	Turn      int    `json:"turn"`
-	Timestamp string `json:"timestamp"`
-	Project   string `json:"project"`
-	Snippet   string `json:"snippet"`
-}
-
 type showMessageJSON struct {
 	REF           string   `json:"ref"`
 	MessageNumber int      `json:"messageNumber"`

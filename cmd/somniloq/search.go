@@ -1,299 +1,217 @@
 package main
 
 import (
-	"errors"
+	"encoding/json"
 	"flag"
 	"fmt"
 	"io"
+	"path/filepath"
+	"strconv"
 	"strings"
-	"time"
-	"unicode/utf8"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const searchUsageLine = "somniloq search --config default [--session <REF>] [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] [-e PATTERN] [-F] [--all] [PATTERN]"
+const searchUsageLine = "somniloq search --config default [--session <REF>] [--input PATH...] [--source SOURCE...] [--project TEXT] [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--limit <n>] [--offset <n>] [--format tsv|json] [-e PATTERN...] [-F] [--all] [PATTERN]"
+const searchHelpDetails = `Search lists saved work groups, without body snippets. Omit patterns to list all candidates.
+  Go regexp is case sensitive; positional PATTERN comes first, then repeated -e.
+  -F treats every pattern literally; --all requires all patterns across candidate members.
+  --input and --source are repeatable OR filters; different filter kinds intersect.
+  Sources: claude-code, codex, cursor-agent (all is not accepted).
+  Input paths use the config directory and canonical path rules.
+  --project matches case-sensitive substrings of repo_path's final name; exact aliases expand.
+  Candidates are selected before body matching. Members lists the full group;
+  matchedMembers lists candidate members, including members without a pattern hit.
+  Root project/title are not filled from children. Dates use all members' known own-body times.
+  Sort: lastAt descending, unknown last, group key ascending. Default limit: 20.
+  JSON: {items,total,count,limit,offset,hasMore,nextOffset}.
+  TSV: # page metadata, then ref,input,source,project,title,startedAt,lastAt,importedAt,members,matchedMembers,memberCount.
+  Strings use reversible escapes, null is \N, arrays are compact JSON.
+  Explicit limit 0 gives an empty page; offsets beyond the end retain total.
+  Invalid input exits 2 with empty stdout; zero matches succeeds.
 
-const searchHelpDetails = `Session detail (--session REF):
-  Go regexp, case sensitive; positional PATTERN first, then repeated -e in flag order.
-  -F quotes all patterns; --all requires every pattern across the selected bodies.
-  Returns all occurrences with original messageNumber, byte offsets, matchText and full lineText.
-  JSON uses {items,total,count,limit,offset,hasMore,nextOffset}; TSV uses page metadata and a fixed header.
-  Default unlimited; explicit --limit (including 0) and --offset page occurrences.
-  Empty/invalid/missing patterns, invalid/missing REFs and negative pages exit 2.
-  Current --project and message-time filters apply before AND; new grouped/date contracts are pending.
-  Without --session, the existing LIKE search below remains; -e/-F/--all require --session.
+Session detail (--session REF):
+  Requires patterns; searches self and confirmed descendants, excluding ancestors/siblings/root-only members.
+  Uses the same candidate filters and matcher. Default unlimited; --limit/--offset page occurrences.
+  Returns ref,messageNumber,occurrenceNumber,role,timestamp,startByte,endByte,patternIndexes,matchText,lineText.
 
-Columns (TSV, in order):
-  ref: full slq1 reference containing the matching message.
-  turn: legacy user turn number containing the hit.
-  time: local timestamp of the matching message.
-  project: canonical alias name when configured, otherwise repo_path.
-  snippet: first match with about 40 runes of context on each side; tabs/newlines flattened for TSV.
-  source: internal source identifier: claude_code, codex, or cursor_agent.
-
-JSON fields:
-  ref, source, sessionId, turn, timestamp, project, snippet
-
-Notes:
-  Search scans own message bodies using SQLite LIKE; Codex inheritance context and unresolved records are excluded.
-  Claude Code and Codex body sidechain records are included.
-  --session selects the named full REF and confirmed descendants, excluding ancestors, siblings, and root-only members.
-  --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
-  LIKE is ASCII-case-insensitive; query text, including %, _, and \, is literal.
-  --project expands exact projectAliases matches, then filters repo_path by literal substring (including %, _, and \).
-  --since/--until filter message timestamps, not session start time.
-  Unknown or invalid stored message timestamps do not match time filters.
-  Date-only --since/--until values use --day-boundary or config dayBoundary.
-  Date-only boundaries follow local calendar days across daylight saving time changes.
-  --limit returns at most N results (N >= 1); --offset skips N ordered results (N >= 0).
-  Continue a fixed search with --limit and increasing --offset. Database changes or
-  different resolved relative-time filters can change later pages.
-  Typical flow: search -> show <REF> --role user --one-line -> show <REF> --messages A:B.
+Temporary time behavior (list and detail):
+  --since/--until filter candidate message timestamps, not group dates.
+  Relative values, local dates/datetimes and RFC3339 are accepted; dates use --day-boundary.
+  Unknown/invalid timestamps do not match a time filter. A pattern-free time-filtered list needs a matching body.
+  Display dates and list ordering always use the whole group's original body timestamps.
 
 Examples:
-  somniloq search --config default --session <REF> -e "Inherited question" -e "Child answer" --all --format json
-  somniloq search --config default --session <REF> -F --limit 20 --offset 20 "auth bug"
-  somniloq search --config default "auth bug"
-  somniloq search --config default --since 7d --project somniloq "migration"
-  somniloq search --config default --limit 50 --offset 50 "auth bug"
-  somniloq search --config default --format json "auth bug"
-  somniloq show --config default <REF> --messages 42:42`
-
-// snippetContext is the number of runes kept on each side of the match.
-const snippetContext = 40
-
-// searchCmd runs the search subcommand without calling os.Exit, so it can be
-// tested directly.
-func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
-	fs, flags := newSearchFlagSet()
-	setUsage(fs, "Search message content across sessions", searchUsageLine, searchHelpDetails)
-	if code, ok := parseFlags(fs, errOut, args); !ok {
-		return code, nil
-	}
-
-	searchUsage := "usage: " + searchUsageLine
-
-	if fs.NArg() > 1 {
-		writeUsageError(errOut, "too many arguments")
-		fmt.Fprintln(errOut, searchUsage)
-		if flagWasProvided(fs, "session") {
-			return 2, nil
-		}
-		return 1, nil
-	}
-	if flagWasProvided(fs, "session") {
-		return searchDetailCmd(fs, flags, openDB, cfg, out, errOut)
-	}
-	if flagWasProvided(fs, "e") || flagWasProvided(fs, "F") || flagWasProvided(fs, "all") {
-		return 2, fmt.Errorf("-e, -F and --all require --session until grouped search is implemented")
-	}
-	query := fs.Arg(0)
-	if query == "" {
-		fmt.Fprintln(errOut, searchUsage)
-		return 1, nil
-	}
-	if err := validateFormat(*flags.format, "tsv", "json"); err != nil {
-		return 1, err
-	}
-	if *flags.limit < 0 || *flags.limit == 0 && flagWasProvided(fs, "limit") {
-		return 1, fmt.Errorf("limit must be at least 1")
-	}
-	if *flags.offset < 0 {
-		return 1, fmt.Errorf("offset must be at least 0")
-	}
-
-	boundary, err := resolveDayBoundary(*flags.dayBoundary, cfg)
-	if err != nil {
-		return 1, err
-	}
-	filter, err := buildSessionFilter(*flags.since, *flags.until, *flags.project, cfg, boundary)
-	if err != nil {
-		return 1, err
-	}
-
-	db, err := openDB()
-	if err != nil {
-		return 1, err
-	}
-	defer db.Close()
-
-	if flagWasProvided(fs, "session") {
-		if _, code, err := resolveSessionREF(db, *flags.session, nil, errOut); code != 0 {
-			return code, err
-		}
-	}
-	rows, err := db.SearchMessages(filter, query, core.SearchPagination{Limit: *flags.limit, Offset: *flags.offset, SessionREF: *flags.session})
-	if err != nil {
-		var refErr *core.REFError
-		if errors.As(err, &refErr) {
-			return 2, err
-		}
-		return 1, err
-	}
-
-	turnCache := map[searchSessionKey]map[string]int{}
-	entries := make([]searchJSON, 0, len(rows))
-	for _, r := range rows {
-		turns, err := searchTurnsByUUID(db, turnCache, r.InputID, r.Source, r.Identity)
-		if err != nil {
-			return 1, err
-		}
-		turn, ok := turns[r.UUID]
-		if !ok {
-			return 1, fmt.Errorf("turn not found for search hit %s/%s/%s", r.Source, r.SessionID, r.UUID)
-		}
-		project := resolveProjectDisplayName(r.RepoPath, false, cfg)
-		snippet := searchSnippet(r.Content, query)
-		if *flags.format == "json" {
-			entries = append(entries, searchJSON{
-				REF:       r.REF,
-				Source:    string(r.Source),
-				SessionID: r.SessionID,
-				Turn:      turn,
-				Timestamp: r.Timestamp,
-				Project:   project,
-				Snippet:   snippet,
-			})
-			continue
-		}
-		if _, err := fmt.Fprintf(out, "%s\t%d\t%s\t%s\t%s\t%s\n",
-			r.REF,
-			turn,
-			sanitizeTSV(formatLocalTime(r.Timestamp, time.Local)),
-			sanitizeTSV(project),
-			sanitizeTSV(snippet), r.Source); err != nil {
-			return 1, err
-		}
-	}
-	if *flags.format == "json" {
-		if err := writeJSON(out, entries); err != nil {
-			return 1, err
-		}
-	}
-	return 0, nil
-}
+  somniloq search --config default --format json
+  somniloq search --config default -e 'auth' -e 'bug' --all --project somniloq
+  somniloq search --config default --limit 20 --offset 20 'migration'
+  somniloq search --config default --session <REF> -F 'auth bug'`
 
 type searchFlags struct {
 	since, until, dayBoundary, project, format, session *string
 	limit, offset                                       *int
-	patterns                                            *[]string
+	patterns, inputs, sources                           *[]string
 	fixed, all                                          *bool
 }
 
 func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 	fs := flag.NewFlagSet("search", flag.ContinueOnError)
-	flags := searchFlags{
-		session:     fs.String("session", "", "search the named full REF and confirmed descendants"),
-		since:       fs.String("since", "", "filter by message time (relative, local date/datetime, or RFC3339 instant)"),
-		until:       fs.String("until", "", "filter messages before a relative, local date/datetime, or RFC3339 instant"),
-		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)"),
-		project:     fs.String("project", "", "filter by repo path (literal substring match)"),
-		limit:       fs.Int("limit", 0, "maximum results (detail: at least 0; legacy: at least 1)"),
-		offset:      fs.Int("offset", 0, "number of ordered results to skip (at least 0)"),
-		format:      fs.String("format", "tsv", "output format (tsv, json)"),
+	f := searchFlags{session: fs.String("session", "", "search self and confirmed descendants"), since: fs.String("since", "", "filter candidate message time"), until: fs.String("until", "", "exclusive candidate message time bound"), dayBoundary: fs.String("day-boundary", "", "logical day boundary (HH:MM)"), project: fs.String("project", "", "case-sensitive project basename substring or exact alias"), limit: fs.Int("limit", 0, "maximum results (at least 0; list default 20, detail unlimited)"), offset: fs.Int("offset", 0, "ordered results to skip (at least 0)"), format: fs.String("format", "tsv", "output format (tsv, json)")}
+	f.fixed = fs.Bool("F", false, "treat all patterns as fixed strings")
+	f.all = fs.Bool("all", false, "require every pattern across candidate bodies")
+	f.patterns = new([]string)
+	f.inputs = new([]string)
+	f.sources = new([]string)
+	fs.Func("e", "append a regexp pattern", func(v string) error { *f.patterns = append(*f.patterns, v); return nil })
+	fs.Func("input", "candidate input root (repeatable)", func(v string) error { *f.inputs = append(*f.inputs, v); return nil })
+	fs.Func("source", "candidate source: claude-code, codex, cursor-agent (repeatable)", func(v string) error { *f.sources = append(*f.sources, v); return nil })
+	return fs, f
+}
+func searchCandidateFilter(f searchFlags, cfg config) (core.SearchCandidates, error) {
+	c := core.SearchCandidates{Projects: cfg.expandProject(*f.project)}
+	for _, path := range *f.inputs {
+		if path == "" {
+			return c, fmt.Errorf("--input requires a non-empty path")
+		}
+		p, err := core.CanonicalPath(path, filepath.Dir(cfg.Path))
+		if err != nil {
+			return c, err
+		}
+		c.Inputs = append(c.Inputs, p)
 	}
-	flags.fixed = fs.Bool("F", false, "treat all patterns as fixed strings (requires --session)")
-	flags.all = fs.Bool("all", false, "require every pattern across selected bodies (requires --session)")
-	flags.patterns = new([]string)
-	fs.Func("e", "append a regexp pattern (requires --session)", func(value string) error { *flags.patterns = append(*flags.patterns, value); return nil })
-	return fs, flags
+	for _, source := range *f.sources {
+		switch source {
+		case "claude-code":
+			c.Sources = append(c.Sources, core.SourceClaudeCode)
+		case "codex":
+			c.Sources = append(c.Sources, core.SourceCodex)
+		case "cursor-agent":
+			c.Sources = append(c.Sources, core.SourceCursorAgent)
+		default:
+			return c, fmt.Errorf("invalid --source %q (want claude-code, codex, or cursor-agent)", source)
+		}
+	}
+	return c, nil
 }
 
-type searchSessionKey struct {
-	inputID   int64
-	source    core.Source
-	sessionID string
+type searchGroupJSON struct {
+	Items      []core.SearchGroup `json:"items"`
+	Total      int                `json:"total"`
+	Count      int                `json:"count"`
+	Limit      int                `json:"limit"`
+	Offset     int                `json:"offset"`
+	HasMore    bool               `json:"hasMore"`
+	NextOffset *int               `json:"nextOffset"`
 }
 
-func searchTurnsByUUID(db *core.DB, cache map[searchSessionKey]map[string]int, inputID int64, source core.Source, sessionID string) (map[string]int, error) {
-	key := searchSessionKey{inputID: inputID, source: source, sessionID: sessionID}
-	if turns, ok := cache[key]; ok {
-		return turns, nil
+func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
+	fs, f := newSearchFlagSet()
+	setUsage(fs, "Search saved work groups or all matches in a selected conversation", searchUsageLine, searchHelpDetails)
+	if code, ok := parseFlags(fs, errOut, args); !ok {
+		if code != 0 {
+			code = 2
+		}
+		return code, nil
 	}
-	messages, err := db.GetIdentityTurnMessages(inputID, source, sessionID)
+	if fs.NArg() > 1 {
+		writeUsageError(errOut, "too many arguments")
+		fmt.Fprintln(errOut, "usage: "+searchUsageLine)
+		return 2, nil
+	}
+	if flagWasProvided(fs, "session") {
+		return searchDetailCmd(fs, f, openDB, cfg, out, errOut)
+	}
+	patterns := append([]string(nil), *f.patterns...)
+	if fs.NArg() > 0 {
+		patterns = append([]string{fs.Arg(0)}, patterns...)
+	}
+	var matcher *core.PatternMatcher
+	var err error
+	if len(patterns) > 0 {
+		matcher, err = core.CompilePatterns(patterns, *f.fixed)
+		if err != nil {
+			return 2, err
+		}
+	}
+	if *f.limit < 0 || *f.offset < 0 {
+		return 2, fmt.Errorf("limit and offset must be at least 0")
+	}
+	if err = validateFormat(*f.format, "tsv", "json"); err != nil {
+		return 2, err
+	}
+	boundary, err := resolveDayBoundary(*f.dayBoundary, cfg)
 	if err != nil {
-		return nil, err
+		return 2, err
 	}
-	turns := map[string]int{}
-	for _, tm := range assignTurns(messages) {
-		turns[tm.Msg.UUID] = tm.Turn
+	filter, err := buildSessionFilter(*f.since, *f.until, "", cfg, boundary)
+	if err != nil {
+		return 2, err
 	}
-	cache[key] = turns
-	return turns, nil
+	candidates, err := searchCandidateFilter(f, cfg)
+	if err != nil {
+		return 2, err
+	}
+	db, err := openDB()
+	if err != nil {
+		return 1, err
+	}
+	defer db.Close()
+	var items []core.SearchGroup
+	err = db.ReadSnapshot(func(snapshot *core.DB) error {
+		var e error
+		items, e = snapshot.SearchGroups(candidates, filter, matcher, *f.all)
+		return e
+	})
+	if err != nil {
+		return 1, err
+	}
+	limit := 20
+	if flagWasProvided(fs, "limit") {
+		limit = *f.limit
+	}
+	page := searchGroupJSON{Items: []core.SearchGroup{}, Total: len(items), Limit: limit, Offset: *f.offset}
+	start := min(page.Offset, len(items))
+	end := start + min(limit, len(items)-start)
+	page.Items = append(page.Items, items[start:end]...)
+	page.Count = len(page.Items)
+	page.HasMore = page.Offset < page.Total && page.Count < page.Total-page.Offset
+	if page.HasMore && page.Count > 0 {
+		next := page.Offset + page.Count
+		page.NextOffset = &next
+	}
+	if *f.format == "json" {
+		err = writeJSON(out, page)
+	} else {
+		err = writeSearchGroupTSV(out, page)
+	}
+	if err != nil {
+		return 1, err
+	}
+	return 0, nil
 }
-
-// searchSnippet extracts the text around the first match of query in content,
-// keeping snippetContext runes on each side and marking truncation with
-// "...". SQL already guaranteed a literal LIKE match; lookup follows LIKE's
-// ASCII-only case rule and falls back to the content head only if the position
-// cannot be pinned down.
-func searchSnippet(content, query string) string {
-	idx := indexASCIIFold(content, query)
-	if idx < 0 || idx >= len(content) {
-		idx = 0
+func writeSearchGroupTSV(out io.Writer, page searchGroupJSON) error {
+	metadata := struct {
+		Total      int  `json:"total"`
+		Count      int  `json:"count"`
+		Limit      int  `json:"limit"`
+		Offset     int  `json:"offset"`
+		HasMore    bool `json:"hasMore"`
+		NextOffset *int `json:"nextOffset"`
+	}{page.Total, page.Count, page.Limit, page.Offset, page.HasMore, page.NextOffset}
+	data, err := json.Marshal(metadata)
+	if err != nil {
+		return err
 	}
-	// ToLower can shift byte offsets for non-ASCII content, so re-anchor the
-	// index to a rune boundary before slicing.
-	for idx > 0 && !utf8.RuneStart(content[idx]) {
-		idx--
+	if _, err = fmt.Fprintf(out, "# page\t%s\nref\tinput\tsource\tproject\ttitle\tstartedAt\tlastAt\timportedAt\tmembers\tmatchedMembers\tmemberCount\n", data); err != nil {
+		return err
 	}
-
-	end := idx + len(query)
-	if end > len(content) {
-		end = len(content)
-	}
-	for end > 0 && end < len(content) && !utf8.RuneStart(content[end]) {
-		end--
-	}
-
-	start := idx
-	for i := 0; i < snippetContext && start > 0; i++ {
-		_, size := utf8.DecodeLastRuneInString(content[:start])
-		start -= size
-	}
-	for i := 0; i < snippetContext && end < len(content); i++ {
-		_, size := utf8.DecodeRuneInString(content[end:])
-		end += size
-	}
-
-	// Trim surrounding whitespace so leading blank lines do not pad the
-	// snippet once newlines are flattened for TSV.
-	snippet := strings.TrimSpace(content[start:end])
-	if start > 0 {
-		snippet = "..." + snippet
-	}
-	if end < len(content) {
-		snippet += "..."
-	}
-	return snippet
-}
-
-// indexASCIIFold returns the first byte offset where needle occurs in haystack
-// under SQLite LIKE's ASCII-only case-insensitive comparison. Bytes outside
-// ASCII must match exactly, avoiding Unicode lowercasing and offset changes.
-func indexASCIIFold(haystack, needle string) int {
-	if needle == "" {
-		return 0
-	}
-	for start := 0; start+len(needle) <= len(haystack); start++ {
-		matched := true
-		for i := 0; i < len(needle); i++ {
-			if asciiLower(haystack[start+i]) != asciiLower(needle[i]) {
-				matched = false
-				break
-			}
-		}
-		if matched {
-			return start
+	for _, s := range page.Items {
+		members, _ := json.Marshal(s.Members)
+		matched, _ := json.Marshal(s.MatchedMembers)
+		fields := []string{showTSVString(s.REF), showTSVNullable(s.Input), showTSVString(string(s.Source)), showTSVNullable(s.Project), showTSVNullable(s.Title), showTSVNullable(s.StartedAt), showTSVNullable(s.LastAt), showTSVNullable(s.ImportedAt), string(members), string(matched), strconv.Itoa(s.MemberCount)}
+		if _, err = fmt.Fprintln(out, strings.Join(fields, "\t")); err != nil {
+			return err
 		}
 	}
-	return -1
-}
-
-func asciiLower(b byte) byte {
-	if b >= 'A' && b <= 'Z' {
-		return b + ('a' - 'A')
-	}
-	return b
+	return nil
 }

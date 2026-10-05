@@ -40,7 +40,11 @@ func searchDetailCmd(fs *flag.FlagSet, f searchFlags, openDB func() (*core.DB, e
 	if err != nil {
 		return 2, err
 	}
-	filter, err := buildSessionFilter(*f.since, *f.until, *f.project, cfg, boundary)
+	filter, err := buildSessionFilter(*f.since, *f.until, "", cfg, boundary)
+	if err != nil {
+		return 2, err
+	}
+	candidates, err := searchCandidateFilter(f, cfg)
 	if err != nil {
 		return 2, err
 	}
@@ -57,7 +61,7 @@ func searchDetailCmd(fs *flag.FlagSet, f searchFlags, openDB func() (*core.DB, e
 			return e
 		}
 		var e error
-		items, e = snapshot.SearchOccurrences(*f.session, filter, matcher, *f.all)
+		items, e = snapshot.SearchOccurrences(*f.session, filter, matcher, *f.all, candidates)
 		return e
 	})
 	if code != 0 {

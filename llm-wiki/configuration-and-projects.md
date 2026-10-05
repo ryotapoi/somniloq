@@ -13,6 +13,7 @@ sources:
   - internal/core/import.go
   - internal/core/repo_path.go
   - internal/core/db_sessions_projects.go
+  - internal/core/search_groups.go
   - internal/core/db_search.go
 ---
 
@@ -30,7 +31,7 @@ sources:
 設定形式と alias の契約は `docs/rules/scope.md` の「設定ファイル（config）」、filter の対象は各コマンド節を読む。
 
 - 設定の読み込みは `cmd/somniloq/config.go` の `loadConfig`。filter への受け渡しは `cmd/somniloq/filter.go` の `buildSessionFilter` / `buildSessionFilterAt` から `config.expandProject` を辿る。
-- 展開後の `core.SessionFilter.Projects` は `internal/core/db_sessions_projects.go` の `sessionFilterConditions` → `projectsCondition` → `escapeLikeLiteral` へ進む。条件を変える際は `ListSessions` と `internal/core/db_search.go` の `SearchMessages` を併せて確認する。
+- sessions で展開後の `core.SessionFilter.Projects` は `internal/core/db_sessions_projects.go` の `sessionFilterConditions` → `projectsCondition` → `escapeLikeLiteral` へ進む。search は `searchCandidateFilter` から `SearchCandidates.accepts` へ進む別経路。候補と root 表示の回帰は `search_groups_test.go` を確認する。
 - alias の表示への波及は下の「集約と表示」を読む。filter の展開と表示名の解決は別の入口を持つ。
 
 ## dayBoundary
@@ -48,7 +49,7 @@ sources:
 - 表示名は `cmd/somniloq/shorten.go` の `resolveProjectDisplayName`。alias の canonical / old names が `repo_path` 全体または basename に一致したら canonical 名のみを出す。
 - alias 非一致時だけ、`--short` は従来どおり `resolveDisplayName` で basename にする。
 - `projects` は `cmd/somniloq/projects.go` で表示名ごとに session count を合算する。alias で同じ canonical 名になる raw `repo_path` 行を重複表示しない。
-- `search` は `internal/core.SearchRow.RepoPath` を `cmd/somniloq/search.go` で表示名に変換し、TSV の `project` 列に出す。
+- `search` の候補は `searchCandidateFilter` → `SearchCandidates.accepts`。project は basename substring、表示は root の保存値。sessions の SQL substring/alias display と分けて確認する。
 
 ## 変更時のテスト入口
 

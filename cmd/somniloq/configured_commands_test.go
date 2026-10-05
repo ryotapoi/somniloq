@@ -50,33 +50,36 @@ func TestConfiguredCommandsKeepSameSessionAndMessageIDsSeparate(t *testing.T) {
 	if len(sessions) != 2 || sessions[0].REF == sessions[1].REF {
 		t.Fatalf("sessions: %+v", sessions)
 	}
-	var hits []searchJSON
-	if err := json.Unmarshal([]byte(run("search", "--format", "json", "needle")), &hits); err != nil {
+	var page searchGroupJSON
+	if err := json.Unmarshal([]byte(run("search", "--format", "json", "needle")), &page); err != nil {
 		t.Fatal(err)
 	}
-	if len(hits) != 2 {
-		t.Fatalf("hits: %+v", hits)
+	if page.Total != 2 || page.Count != 2 {
+		t.Fatalf("hits: %+v", page)
 	}
-	seen := map[int]bool{}
-	for _, hit := range hits {
-		seen[hit.Turn] = true
+	for i := range roots {
+		roots[i], _ = filepath.EvalSymlinks(roots[i])
+	}
+	seen := map[string]bool{}
+	for _, hit := range page.Items {
+		if hit.Input == nil {
+			t.Fatal(hit)
+		}
+		seen[*hit.Input] = true
 		text := run("show", "--format", "json", hit.REF)
 		var shown showJSON
 		if err := json.Unmarshal([]byte(text), &shown); err != nil {
 			t.Fatal(err)
 		}
-		if len(shown.Items) == 0 || shown.Items[0].REF != hit.REF {
-			t.Fatalf("show: %s", text)
+		if *hit.Input == roots[0] && (len(shown.Items) != 1 || !strings.Contains(shown.Items[0].Text, "input a")) {
+			t.Fatal(text)
 		}
-		if strings.Contains(hit.Snippet, "input a") && (len(shown.Items) != 1 || !strings.Contains(shown.Items[0].Text, "input a")) {
-			t.Fatalf("mixed input a: %s", text)
-		}
-		if strings.Contains(hit.Snippet, "input b") && (len(shown.Items) != 2 || !strings.Contains(shown.Items[1].Text, "input b")) {
-			t.Fatalf("mixed input b: %s", text)
+		if *hit.Input == roots[1] && (len(shown.Items) != 2 || !strings.Contains(shown.Items[1].Text, "input b")) {
+			t.Fatal(text)
 		}
 	}
-	if !seen[1] || !seen[2] {
-		t.Fatalf("input turn cache crossed boundary: %+v", hits)
+	if !seen[roots[0]] || !seen[roots[1]] {
+		t.Fatal(page)
 	}
 	// Selector roots use the configuration's real parent, even when it is not cwd.
 	if err := os.Remove(filepath.Join(roots[0], "project", "same-id.jsonl")); err != nil {

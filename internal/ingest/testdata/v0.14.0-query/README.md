@@ -1,6 +1,6 @@
 # v0.14.0 検索・取得の期待例
 
-[確定契約](../../../../docs/specs/v0.14.0-contract.md) の代表オラクル。詳細全一致と show の例は実装済み。まとまり一覧・新日時条件の例は後続実装。
+[確定契約](../../../../docs/specs/v0.14.0-contract.md) の代表オラクル。まとまり一覧・詳細全一致と show の例は実装済み。新日時条件の例は後続実装。
 
 `config.toml` は隣の v0.14.0 fixture を指す構文例。expected.json の完全REFは host依存を避けるため canonical root `/fixtures/codex/input-a` と `/fixtures/codex/input-b` に対して計算している。実ホストでの設定実行は実際の実体rootに対するREFへ置き換える。
 
@@ -11,3 +11,5 @@ regexp期待区間はGo標準regexpのUTF8 byte区間を直接確認する。dup
 日時・project/imported-since の例は設計上の境界条件で、実ログの観測事実ではない。date bounds例は明示したstart/lastだけが既知の2発言会話を想定する。show selectorのR/Cはrefs欄を参照し、残りの略記は各identityの完全REFに置き換える。順序・重複排除・0件・末尾超過・one-line後処理を第4〜6段階の実行検証へ移す。
 
 lineText の LF 境界は search_matches_test.go の具体例で保護する。`one\ntwo` の LF 一文字一致 `[3,4)` は `one`、LF 直後のゼロ幅 `[4,4)` は `two`、`one\n` の末尾ゼロ幅は空の末尾行。複数行一致は途中の LF を保持し、一致の末尾が LF ならその後の行を含めない。
+
+`expected.json` の listExample は build CLI で確認した親子 AND の一覧 envelope 例。members/matchedMembers は全6本人で、本文抜粋を含まない。importedAt は例の取り込み時点であり、実行ごとに変わる。実行時は config.toml の db を一時ディレクトリに置き、root を実体 path に設定して import 後に `search --config PATH --all -e "Inherited question" -e "Child answer" --format json` を呼ぶ。既定20件、明示0件、末尾超過の TSV/JSON も同じ config で試用できる。

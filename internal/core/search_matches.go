@@ -88,7 +88,7 @@ type SearchOccurrence struct {
 
 // SearchOccurrences reads one selected conversation and confirmed descendants.
 // Callers use ReadSnapshot to keep resolution, filters and bodies consistent.
-func (d *DB) SearchOccurrences(ref string, filter SessionFilter, matcher *PatternMatcher, all bool) ([]SearchOccurrence, error) {
+func (d *DB) SearchOccurrences(ref string, filter SessionFilter, matcher *PatternMatcher, all bool, candidates SearchCandidates) ([]SearchOccurrence, error) {
 	scope, err := d.ResolveSession(ref)
 	if err != nil {
 		return nil, err
@@ -96,41 +96,44 @@ func (d *DB) SearchOccurrences(ref string, filter SessionFilter, matcher *Patter
 	if scope == nil {
 		return nil, fmt.Errorf("session not found: %s", ref)
 	}
-	// Reuse the current SQL project and timestamp semantics before matching.
-	rows, err := d.SearchMessages(filter, "", SearchPagination{SessionREF: ref})
+	owners, err := d.searchOwners()
 	if err != nil {
 		return nil, err
 	}
-	allowed := map[string]map[string]bool{}
-	for _, r := range rows {
-		if allowed[r.REF] == nil {
-			allowed[r.REF] = map[string]bool{}
+	descendants := map[string]bool{}
+	for _, s := range scope.Descendants {
+		descendants[s.REF] = true
+	}
+	selected := []searchOwner{}
+	for _, s := range owners {
+		if descendants[s.REF] && candidates.accepts(s) {
+			selected = append(selected, s)
 		}
-		allowed[r.REF][r.UUID] = true
+	}
+	bodies, err := d.candidateBodies(selected, filter)
+	if err != nil {
+		return nil, err
+	}
+	byREF := map[string][]searchBody{}
+	for _, b := range bodies {
+		byREF[b.ref] = append(byREF[b.ref], b)
 	}
 	members := append([]SessionRow(nil), scope.Descendants...)
 	sort.Slice(members, func(i, j int) bool { return members[i].REF < members[j].REF })
 	result := []SearchOccurrence{}
 	seen := make([]bool, len(matcher.patterns))
 	for _, s := range members {
-		messages, err := d.GetIdentityMessages(s.InputID, s.Source, s.Identity)
-		if err != nil {
-			return nil, err
-		}
-		for _, msg := range messages {
-			if !allowed[s.REF][msg.UUID] {
-				continue
-			}
+		for _, msg := range byREF[s.REF] {
 			var timestamp *string
-			if msg.Timestamp != "" {
-				v := msg.Timestamp
+			if msg.timestamp != "" {
+				v := msg.timestamp
 				timestamp = &v
 			}
-			for i, span := range matcher.FindAll(msg.Content) {
+			for i, span := range matcher.FindAll(msg.content) {
 				for _, index := range span.PatternIndexes {
 					seen[index-1] = true
 				}
-				result = append(result, SearchOccurrence{s.REF, msg.Number, i + 1, msg.Role, timestamp, span.StartByte, span.EndByte, span.PatternIndexes, span.MatchText, span.LineText})
+				result = append(result, SearchOccurrence{s.REF, msg.number, i + 1, msg.role, timestamp, span.StartByte, span.EndByte, span.PatternIndexes, span.MatchText, span.LineText})
 			}
 		}
 	}
