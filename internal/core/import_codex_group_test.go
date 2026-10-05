@@ -294,3 +294,75 @@ func TestCodexRootSourceStringVariantsNormalAndFull(t *testing.T) {
 		})
 	}
 }
+
+func TestCodexMetadataOnlyEditRebuildsOwner(t *testing.T) {
+	priorClock := timeNow
+	timeNow = func() string { return "2026-10-01T00:00:00Z" }
+	defer func() { timeNow = priorClock }()
+	db := testDB(t)
+	root := testTempDir(t)
+	meta := `{"type":"session_meta","payload":{"id":"owner","cwd":"/fixtures/project"}}` + "\n"
+	write := func(name, body string) {
+		t.Helper()
+		data := meta
+		if body != "" {
+			data += `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"` + body + `"}]}}` + "\n"
+		}
+		if err := os.WriteFile(filepath.Join(root, name), []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id, err := db.EnsureInput(Input{Source: SourceCodex, Root: root})
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := func() []MessageRow {
+		t.Helper()
+		rows, err := db.GetMessages(id, SourceCodex, "owner")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return rows
+	}
+	write("a.jsonl", "")
+	runCodexImport(t, db, root, false)
+	if state, err := db.GetImportState(id, filepath.Join(root, "a.jsonl")); err != nil || state != nil {
+		t.Fatalf("new prefix advanced cursor: %+v %v", state, err)
+	}
+	write("a.jsonl", "Old a body")
+	write("b.jsonl", "Remaining b body")
+	runCodexImport(t, db, root, false)
+	if rows := read(); len(rows) != 2 || rows[0].Number != 1 || rows[1].Number != 2 {
+		t.Fatalf("initial body=%+v", rows)
+	}
+	for _, name := range []string{"a.jsonl", "b.jsonl"} {
+		write(name, "")
+		runCodexImport(t, db, root, false)
+		rows := read()
+		if name == "a.jsonl" && (len(rows) != 1 || rows[0].Content != "Remaining b body" || rows[0].Number != 1) {
+			t.Fatalf("metadata-only edit retained old body: %+v", rows)
+		}
+		if name == "b.jsonl" && len(rows) != 0 {
+			t.Fatalf("all metadata-only retained body: %+v", rows)
+		}
+		if state, err := db.GetImportState(id, filepath.Join(root, name)); err != nil || state != nil {
+			t.Fatalf("metadata-only retained cursor: %+v %v", state, err)
+		}
+		var before, after string
+		if err := db.db.QueryRow("SELECT COALESCE(MAX(imported_at),'') FROM sessions WHERE input_id=?", id).Scan(&before); err != nil {
+			t.Fatal(err)
+		}
+		timeNow = func() string { return "2099-01-01T00:00:00Z" }
+		runCodexImport(t, db, root, false)
+		if err := db.db.QueryRow("SELECT COALESCE(MAX(imported_at),'') FROM sessions WHERE input_id=?", id).Scan(&after); err != nil {
+			t.Fatal(err)
+		}
+		if after != before || !reflect.DeepEqual(read(), rows) {
+			t.Fatal("unchanged metadata-only import changed owner")
+		}
+		runCodexImport(t, db, root, true)
+		if got := read(); !reflect.DeepEqual(got, rows) {
+			t.Fatalf("full=%+v normal=%+v", got, rows)
+		}
+	}
+}

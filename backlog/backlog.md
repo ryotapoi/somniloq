@@ -116,7 +116,7 @@
 
   空行追記後も本文・番号・取り込み日時を保持し、取り込み日時の絞り込み結果が変わらないことを確認すれば完了。tool-only / progress の全種類は個別再現しておらず、本文0件は別分岐で本件の対象外。入口は [不変判定と本人置換](../internal/core/import_claude.go) の `claudeOwnerUnchanged`、[本文取得](../internal/core/db_messages_summary.go) の `GetIdentityMessages`。日時保持の契約は [v0.14.0契約](../docs/specs/v0.14.0-contract.md)「原文・順序・日時」と [JSONL schema](../docs/specs/jsonl-schema.md) を参照する。
 
-- [ ] Codex の本文なし編集を通常取り込みへ反映する
+- [x] Codex の本文なし編集を通常取り込みへ反映する
 
   FR-002。同本人の a / b rollout を保存し、a を正常な metadata-only ファイルへ編集して b を不変のまま通常 `import` すると、a の旧本文と a=1 / b=2 の番号が残った。同じ最終ファイル集合の `--full` は b=1 だけを保存する。本文なしの a が本人 group の state 集合から外れ、現在残る b の hash だけで不変と判定するため、`show` / `search` が古い内容を返す。
 

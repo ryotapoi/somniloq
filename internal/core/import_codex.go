@@ -27,7 +27,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 			result.FilesFailed += g.Files
 			continue
 		}
-		if len(g.States) == 0 {
+		if len(g.States) == 0 && len(g.EmptyPaths) == 0 {
 			result.FilesImported += g.Files
 			for _, report := range g.Reports {
 				old, _ := db.GetImportState(inputID, report.Path)
@@ -38,19 +38,24 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 			continue
 		}
 		unchanged := true
-		oldStates := make([]*ImportState, len(g.States))
-		for i, s := range g.States {
-			old, err := db.GetImportState(inputID, s.JSONLPath)
+		paths := make([]string, 0, len(g.States)+len(g.EmptyPaths))
+		for _, s := range g.States {
+			paths = append(paths, s.JSONLPath)
+		}
+		paths = append(paths, g.EmptyPaths...)
+		oldStates := make([]*ImportState, len(paths))
+		for i, path := range paths {
+			old, err := db.GetImportState(inputID, path)
 			if err != nil {
 				return nil, err
 			}
 			oldStates[i] = old
-			if old == nil || old.ContentHash != s.ContentHash {
+			if (i < len(g.States) && (old == nil || old.ContentHash != g.States[i].ContentHash)) || (i >= len(g.States) && old != nil) {
 				unchanged = false
 			}
 		}
 		if unchanged {
-			result.FilesSkipped += len(g.States)
+			result.FilesSkipped += g.Files
 			continue
 		}
 		tx, err := db.Begin()
@@ -58,8 +63,8 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 			return nil, err
 		}
 		t := importTx{tx: tx, inputID: inputID}
-		for i, s := range g.States {
-			current, e := getImportState(tx, inputID, s.JSONLPath)
+		for i, path := range paths {
+			current, e := getImportState(tx, inputID, path)
 			if e != nil {
 				err = e
 				break
@@ -73,7 +78,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 		if err == nil {
 			err = t.ReplaceSession(ingest.SourceCodex, g.Session.SessionID)
 		}
-		if err == nil {
+		if err == nil && len(g.States) > 0 {
 			err = persistCodexGroup(t, g, importedAt)
 		}
 		for _, s := range g.States {
@@ -82,21 +87,27 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 			}
 			err = t.UpsertImportState(s)
 		}
+		for _, path := range g.EmptyPaths {
+			if err != nil {
+				break
+			}
+			_, err = tx.Exec("DELETE FROM import_state WHERE input_id=? AND jsonl_path=?", inputID, path)
+		}
 		if err == nil {
 			err = tx.Commit()
 		}
 		tx.Rollback()
 		if err != nil {
 			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", g.Session.SessionID, err))
-			result.FilesFailed += len(g.States)
+			result.FilesFailed += g.Files
 			continue
 		}
-		result.FilesImported += len(g.States)
+		result.FilesImported += g.Files
 		addCodexMembershipDiagnostics(result, g.Messages)
 		for _, report := range g.Reports {
 			var old *ImportState
-			for i, s := range g.States {
-				if s.JSONLPath == report.Path {
+			for i, path := range paths {
+				if path == report.Path {
 					old = oldStates[i]
 					break
 				}

@@ -36,9 +36,11 @@ type Group struct {
 	Session  ingest.SessionMeta
 	Messages []ingest.NormalizedMessage
 	States   []ingest.ImportState
-	Reports  []FileReport
-	Err      error
-	Files    int
+	// EmptyPaths retain valid owner evidence without advancing bodyless cursors.
+	EmptyPaths []string
+	Reports    []FileReport
+	Err        error
+	Files      int
 }
 
 type collector struct {
@@ -132,7 +134,7 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 		if strict && len(h.failures) > 0 && strictErr == nil {
 			strictErr = h.failures[0].Diagnostic
 		}
-		if c.meta == nil || (!strict && c.state.JSONLPath == "") {
+		if c.meta == nil || (!strict && c.state.JSONLPath == "" && len(h.failures) > 0) {
 			groups = append(groups, Group{Files: 1, Err: strictErr, Reports: []FileReport{{Path: path, Data: data, Failures: h.failures, Lines: lines}}})
 			continue
 		}
@@ -164,6 +166,8 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 		c.state.ContentHash = hex.EncodeToString(sum[:])
 		if c.state.JSONLPath != "" {
 			g.States = append(g.States, c.state)
+		} else {
+			g.EmptyPaths = append(g.EmptyPaths, path)
 		}
 		g.Reports = append(g.Reports, FileReport{Path: path, Data: data, Failures: h.failures, Lines: lines})
 		for _, m := range c.messages {
