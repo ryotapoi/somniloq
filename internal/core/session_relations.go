@@ -3,7 +3,6 @@ package core
 import (
 	"fmt"
 	"sort"
-	"strings"
 )
 
 // SessionResolution separates grouping membership from confirmed descendants.
@@ -177,19 +176,4 @@ func resolveSessionGroups(sessions []SessionRow) []*SessionResolution {
 		}
 	}
 	return results
-}
-
-// sessionScopeCondition preserves the full namespace, including legacy snapshots.
-func sessionScopeCondition(sessions []SessionRow) (string, []any) {
-	conditions := make([]string, 0, len(sessions))
-	args := []any{}
-	for _, s := range sessions {
-		key, _, _, _ := parseREF(s.REF)
-		conditions = append(conditions, "(m.input_key=? AND m.source=? AND m.identity=?)")
-		args = append(args, key, s.Source, s.Identity)
-	}
-	if len(conditions) == 0 {
-		return "0", args
-	}
-	return "(" + strings.Join(conditions, " OR ") + ")", args
 }

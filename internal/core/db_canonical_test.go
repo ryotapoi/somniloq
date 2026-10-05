@@ -51,7 +51,9 @@ func TestCanonicalStorageParentAndBodyBoundary(t *testing.T) {
 	if got := readChild(); got.MessageCount != 2 || got.BodySize != len("first")+len(" a \n\n b ") {
 		t.Fatalf("body summary: %+v", got)
 	}
-	search, err := db.SearchMessages(SessionFilter{}, "inherited", SearchPagination{})
+	matcher, err := CompilePatterns([]string{"inherited"}, false)
+	must(t, err)
+	search, err := db.SearchOccurrences(readChild().REF, SessionFilter{}, matcher, false, SearchCandidates{})
 	must(t, err)
 	if len(search) != 0 {
 		t.Fatalf("context matched search: %+v", search)

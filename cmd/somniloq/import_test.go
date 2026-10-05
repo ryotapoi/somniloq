@@ -12,7 +12,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-func TestImportCmd_ConfirmationIOErrorDoesNotOpenDB(t *testing.T) {
+func TestImportConfiguredCmd_ConfirmationIOErrorDoesNotOpenDB(t *testing.T) {
 	readErr := errors.New("read failed")
 	tests := []struct {
 		name string
@@ -31,7 +31,7 @@ func TestImportCmd_ConfirmationIOErrorDoesNotOpenDB(t *testing.T) {
 				opened = true
 				return nil, errors.New("openDB must not be called after confirmation I/O error")
 			}
-			code, err := importCmd([]string{"--full"}, open, "", "", "", tt.in, &bytes.Buffer{}, tt.err, true)
+			code, err := importConfiguredCmd([]string{"--full"}, open, config{}, tt.in, &bytes.Buffer{}, tt.err, true)
 			if code != 1 {
 				t.Errorf("exit code = %d, want 1", code)
 			}
@@ -45,7 +45,7 @@ func TestImportCmd_ConfirmationIOErrorDoesNotOpenDB(t *testing.T) {
 	}
 }
 
-func TestImportCmd_FullConfirmation(t *testing.T) {
+func TestImportConfiguredCmd_FullConfirmation(t *testing.T) {
 	const prompt = "This will rebuild selected inputs and re-import. Continue? [y/N] "
 	const summary = "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)\n"
 
@@ -87,11 +87,12 @@ func TestImportCmd_FullConfirmation(t *testing.T) {
 			writeSession("kept", "kept content")
 			dbPath := filepath.Join(dir, "somniloq.db")
 			open := func() (*core.DB, error) { return core.OpenDB(dbPath) }
+			cfg := config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: projectsDir}}}
 
 			var seedOut, seedErrOut bytes.Buffer
-			code, err := importCmd([]string{"--source", "claude-code"}, open, projectsDir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &seedOut, &seedErrOut, false)
+			code, err := importConfiguredCmd([]string{"--source", "claude-code"}, open, cfg, strings.NewReader(""), &seedOut, &seedErrOut, false)
 			if code != 0 || err != nil {
-				t.Fatalf("seed importCmd = (%d, %v), stdout = %q, stderr = %q", code, err, seedOut.String(), seedErrOut.String())
+				t.Fatalf("seed importConfiguredCmd = (%d, %v), stdout = %q, stderr = %q", code, err, seedOut.String(), seedErrOut.String())
 			}
 			if got, want := seedOut.String(), "Imported 2 files (2 scanned, 0 skipped, 0 failed, 0 unparsed lines)\n"; got != want {
 				t.Fatalf("seed stdout = %q, want %q", got, want)
@@ -106,7 +107,7 @@ func TestImportCmd_FullConfirmation(t *testing.T) {
 				return open()
 			}
 			var out, errOut bytes.Buffer
-			code, err = importCmd(append(tt.args, "--source", "claude-code"), countedOpen, projectsDir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(tt.input), &out, &errOut, tt.isTTY)
+			code, err = importConfiguredCmd(append(tt.args, "--source", "claude-code"), countedOpen, cfg, strings.NewReader(tt.input), &out, &errOut, tt.isTTY)
 			if code != tt.wantCode {
 				t.Errorf("exit code = %d, want %d", code, tt.wantCode)
 			}
@@ -171,7 +172,7 @@ func TestImportCmd_FullConfirmation(t *testing.T) {
 }
 
 // Pins the summary line scripts parse, including the unparsed-lines counter.
-func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
+func TestImportConfiguredCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	db, err := core.OpenDB(":memory:")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -191,9 +192,9 @@ func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), dir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &out, &errOut, false)
+	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: dir}}}, strings.NewReader(""), &out, &errOut, false)
 	if err != nil {
-		t.Fatalf("importCmd: %v", err)
+		t.Fatalf("importConfiguredCmd: %v", err)
 	}
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
@@ -215,7 +216,7 @@ func TestImportCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	}
 }
 
-func TestImportCmd_ErrorStderrWriteFailure(t *testing.T) {
+func TestImportConfiguredCmd_ErrorStderrWriteFailure(t *testing.T) {
 	db, err := core.OpenDB(":memory:")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -229,7 +230,7 @@ func TestImportCmd_ErrorStderrWriteFailure(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), projectsPath, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &out, failWriter{}, false)
+	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: projectsPath}}}, strings.NewReader(""), &out, failWriter{}, false)
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
@@ -241,7 +242,7 @@ func TestImportCmd_ErrorStderrWriteFailure(t *testing.T) {
 	}
 }
 
-func TestImportCmd_UnparsedStderrWriteFailure(t *testing.T) {
+func TestImportConfiguredCmd_UnparsedStderrWriteFailure(t *testing.T) {
 	db, err := core.OpenDB(":memory:")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -258,7 +259,7 @@ func TestImportCmd_UnparsedStderrWriteFailure(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), dir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &out, failWriter{}, false)
+	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: dir}}}, strings.NewReader(""), &out, failWriter{}, false)
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
@@ -270,7 +271,7 @@ func TestImportCmd_UnparsedStderrWriteFailure(t *testing.T) {
 	}
 }
 
-func TestImportCmd_CursorAgentRootWiring(t *testing.T) {
+func TestImportConfiguredCmd_CursorAgentRootWiring(t *testing.T) {
 	db, err := core.OpenDB(":memory:")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -288,9 +289,9 @@ func TestImportCmd_CursorAgentRootWiring(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := importCmd([]string{"--source", "cursor-agent"}, staticDB(db), filepath.Join(dir, "claude"), filepath.Join(dir, "codex"), cursorRoot, strings.NewReader(""), &out, &errOut, false)
+	code, err := importConfiguredCmd([]string{"--source", "cursor-agent"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceCursorAgent, Root: cursorRoot}}}, strings.NewReader(""), &out, &errOut, false)
 	if err != nil || code != 0 {
-		t.Fatalf("importCmd = %d, %v (stderr: %q)", code, err, errOut.String())
+		t.Fatalf("importConfiguredCmd = %d, %v (stderr: %q)", code, err, errOut.String())
 	}
 	if got, want := out.String(), "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)\n"; got != want {
 		t.Errorf("stdout = %q, want %q", got, want)
@@ -299,7 +300,7 @@ func TestImportCmd_CursorAgentRootWiring(t *testing.T) {
 
 // Incomplete Claude snapshots preserve their input; errors remain non-fatal
 // to the command, appear on stderr, and produce exit code 1.
-func TestImportCmd_ScanErrorExitsNonZero(t *testing.T) {
+func TestImportConfiguredCmd_ScanErrorExitsNonZero(t *testing.T) {
 	if os.Geteuid() == 0 {
 		t.Skip("permission checks do not apply to root")
 	}
@@ -329,9 +330,9 @@ func TestImportCmd_ScanErrorExitsNonZero(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(badDir, 0o755) })
 
 	var out, errOut bytes.Buffer
-	code, err := importCmd([]string{"--source", "claude-code"}, staticDB(db), dir, filepath.Join(dir, "codex"), filepath.Join(dir, "cursor"), strings.NewReader(""), &out, &errOut, false)
+	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: dir}}}, strings.NewReader(""), &out, &errOut, false)
 	if err != nil {
-		t.Fatalf("importCmd: %v", err)
+		t.Fatalf("importConfiguredCmd: %v", err)
 	}
 	if code != 1 {
 		t.Fatalf("exit code = %d, want 1 (stderr: %q)", code, errOut.String())
@@ -345,7 +346,7 @@ func TestImportCmd_ScanErrorExitsNonZero(t *testing.T) {
 	}
 }
 
-func TestImportCmd_RejectsUnexpectedArgumentsBeforeSideEffects(t *testing.T) {
+func TestImportConfiguredCmd_RejectsUnexpectedArgumentsBeforeSideEffects(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
@@ -364,9 +365,9 @@ func TestImportCmd_RejectsUnexpectedArgumentsBeforeSideEffects(t *testing.T) {
 			}
 			in := strings.NewReader("y\n")
 			var out, errOut bytes.Buffer
-			code, err := importCmd(tt.args, open, "", "", "", in, &out, &errOut, true)
+			code, err := importConfiguredCmd(tt.args, open, config{}, in, &out, &errOut, true)
 			if code != 2 || err != nil {
-				t.Fatalf("importCmd = (%d, %v), want (1, nil)", code, err)
+				t.Fatalf("importConfiguredCmd = (%d, %v), want (1, nil)", code, err)
 			}
 			if out.Len() != 0 {
 				t.Errorf("stdout = %q, want empty", out.String())
@@ -379,19 +380,6 @@ func TestImportCmd_RejectsUnexpectedArgumentsBeforeSideEffects(t *testing.T) {
 			}
 		})
 	}
-}
-
-// importCmd runs the import subcommand without calling os.Exit, so it can be
-// tested directly. openDB is invoked only after argument parsing and
-// confirmation succeed.
-func importCmd(args []string, openDB func() (*core.DB, error), projectsDir, codexSessionsDir, cursorProjectsDir string, in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
-	inputs := []core.Input{}
-	for _, input := range []core.Input{{Source: core.SourceClaudeCode, Root: projectsDir}, {Source: core.SourceCodex, Root: codexSessionsDir}, {Source: core.SourceCursorAgent, Root: cursorProjectsDir}} {
-		if input.Root != "" {
-			inputs = append(inputs, input)
-		}
-	}
-	return importConfiguredCmd(args, openDB, config{Inputs: inputs}, in, out, errOut, isTTY)
 }
 
 func TestImportConfiguredCmdRejectsInvalidSelectorsBeforeOpeningDB(t *testing.T) {

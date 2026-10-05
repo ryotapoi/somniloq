@@ -60,13 +60,10 @@ func TestImport_InputIsolationAndSelectedFull(t *testing.T) {
 		if len(messages) != 1 || messages[0].Content != []string{"needle first", "needle second"}[i] {
 			t.Fatalf("messages=%+v", messages)
 		}
-		turns, err := db.GetTurnMessages(ids[i], input.Source, "same-id")
-		must(t, err)
-		if len(turns) != 1 {
-			t.Fatalf("turns=%+v", turns)
-		}
 	}
-	search, err := db.SearchMessages(SessionFilter{}, "needle", SearchPagination{})
+	matcher, err := CompilePatterns([]string{"needle"}, false)
+	must(t, err)
+	search, err := db.SearchGroups(SearchCandidates{}, SessionFilter{}, matcher, false, "active")
 	must(t, err)
 	if len(search) != 2 || search[0].REF == search[1].REF {
 		t.Fatalf("search=%+v", search)

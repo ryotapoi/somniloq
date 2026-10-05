@@ -5,14 +5,14 @@ import (
 	"testing"
 )
 
-func TestExtractTextRejectsNonStringTextWithoutPartialContent(t *testing.T) {
+func TestExtractTextBlocksRejectsNonStringTextWithoutPartialContent(t *testing.T) {
 	for _, content := range []json.RawMessage{
 		json.RawMessage(`[{"type":"text","text":"kept?"},{"type":"text","text":42}]`),
 		json.RawMessage(`[{"type":"text","text":null}]`),
 		json.RawMessage(`null`),
 	} {
-		if got, err := extractText(content); err == nil || got != "" {
-			t.Errorf("extractText(%s) = %q, %v; want empty content and error", content, got, err)
+		if got, err := extractTextBlocks(content); err == nil || len(got) != 0 {
+			t.Errorf("extractTextBlocks(%s) = %v, %v; want no blocks and error", content, got, err)
 		}
 	}
 }

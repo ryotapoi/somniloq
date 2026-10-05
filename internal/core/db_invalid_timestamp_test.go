@@ -49,14 +49,14 @@ func TestInvalidSavedTimestampsRemainReadable(t *testing.T) {
 	if !reflect.DeepEqual(messages, want) {
 		t.Fatalf("messages = %+v, want %+v", messages, want)
 	}
-	hits, err := db.SearchMessages(SessionFilter{}, "needle", SearchPagination{})
+	matcher, err := CompilePatterns([]string{"needle"}, false)
 	must(t, err)
-	var ids []string
-	for _, hit := range hits {
-		ids = append(ids, hit.UUID)
-	}
-	if !reflect.DeepEqual(ids, []string{"valid", "early", "bad-2", "bad-1"}) || hits[3].Timestamp != "bad-message" || hits[3].Content != "needle bad one" {
-		t.Fatalf("hits = %+v", hits)
+	invalid, err := db.GetSession(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "invalid")
+	must(t, err)
+	hits, err := db.SearchOccurrences(invalid.REF, SessionFilter{}, matcher, false, SearchCandidates{})
+	must(t, err)
+	if len(hits) != 3 || hits[0].Timestamp == nil || *hits[0].Timestamp != "bad-message" {
+		t.Fatalf("unfiltered occurrences = %+v", hits)
 	}
 	for _, filter := range []SessionFilter{
 		{Since: "2026-03-28T09:00:00.500000000Z"},
@@ -73,18 +73,14 @@ func TestInvalidSavedTimestampsRemainReadable(t *testing.T) {
 		if !reflect.DeepEqual(projects, []ProjectRow{{RepoPath: "/valid", SessionCount: 1}}) {
 			t.Fatalf("filter %+v projects = %+v", filter, projects)
 		}
-		hits, err = db.SearchMessages(filter, "needle", SearchPagination{})
+		hits, err = db.SearchOccurrences(invalid.REF, filter, matcher, false, SearchCandidates{})
 		must(t, err)
-		expected := []string{"valid"}
+		expected := 0
 		if filter.Since == "" {
-			expected = []string{"valid", "early"}
+			expected = 1
 		}
-		ids = nil
-		for _, hit := range hits {
-			ids = append(ids, hit.UUID)
-		}
-		if !reflect.DeepEqual(ids, expected) {
-			t.Fatalf("filter %+v hits = %+v", filter, hits)
+		if len(hits) != expected {
+			t.Fatalf("filter %+v occurrences = %+v", filter, hits)
 		}
 	}
 }

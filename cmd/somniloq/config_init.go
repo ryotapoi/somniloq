@@ -90,10 +90,6 @@ Flags:`)
 	if dbPath == "" {
 		dbPath = "~/.somniloq/" + name + ".db"
 	}
-	if dbPath == "" {
-		fmt.Fprintln(errOut, "db must not be empty")
-		return 2, nil
-	}
 	// Keep the final DB component intact so dangling symlinks are also refused.
 	resolvedDB := dbPath
 	if !filepath.IsAbs(resolvedDB) && resolvedDB != "~" && !strings.HasPrefix(resolvedDB, "~/") {

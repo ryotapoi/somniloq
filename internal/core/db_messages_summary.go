@@ -57,46 +57,6 @@ func (d *DB) GetIdentityMessages(inputID int64, source Source, identity string) 
 	return scanMessages(rows, "get messages")
 }
 
-// GetTurnMessages returns only UUID and role in the same order as GetMessages.
-func (d *DB) GetTurnMessages(inputID int64, source Source, sessionID string) ([]MessageRow, error) {
-	if inputID == LegacyInputID {
-		return d.GetIdentityTurnMessages(inputID, source, sessionID)
-	}
-	return d.GetIdentityTurnMessages(inputID, source, rootIdentity(sessionID))
-}
-
-func (d *DB) GetIdentityTurnMessages(inputID int64, source Source, identity string) ([]MessageRow, error) {
-	if inputID == LegacyInputID {
-		return d.GetIdentityMessages(inputID, source, identity)
-	}
-	rows, err := d.execer().Query(`
-		SELECT uuid, role
-		FROM messages
-		WHERE input_id = ? AND source = ? AND identity = ?
-		  AND membership = 'body'
-		  AND (source IN ('codex','claude_code') OR is_sidechain = 0)
-		ORDER BY CASE WHEN number > 0 THEN 0 ELSE 1 END, number, rowid`,
-		inputID, string(source), identity,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("get turn messages: query: %w", err)
-	}
-	defer rows.Close()
-
-	result := []MessageRow{}
-	for rows.Next() {
-		var m MessageRow
-		if err := rows.Scan(&m.UUID, &m.Role); err != nil {
-			return nil, fmt.Errorf("get turn messages: scan row: %w", err)
-		}
-		result = append(result, m)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("get turn messages: iterate rows: %w", err)
-	}
-	return result, nil
-}
-
 func scanMessages(rows *sql.Rows, operation string) ([]MessageRow, error) {
 	defer rows.Close()
 

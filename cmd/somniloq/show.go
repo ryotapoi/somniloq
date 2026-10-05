@@ -163,26 +163,16 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	if err != nil {
 		return selectionCode, err
 	}
-	page := showJSON{Items: []showMessageJSON{}, Total: len(items), Offset: *f.offset}
+	var limit *int
 	if flagWasProvided(fs, "limit") {
-		page.Limit = f.limit
+		limit = f.limit
 	}
+	offset := *f.offset
 	if tailSet {
-		page.Limit = f.tail
-		page.Offset = max(len(items)-*f.tail, 0)
+		limit = f.tail
+		offset = max(len(items)-*f.tail, 0)
 	}
-	start := min(page.Offset, len(items))
-	end := len(items)
-	if page.Limit != nil {
-		end = start + min(*page.Limit, end-start)
-	}
-	page.Items = append(page.Items, items[start:end]...)
-	page.Count = len(page.Items)
-	page.HasMore = page.Offset < page.Total && page.Count < page.Total-page.Offset
-	if page.HasMore && page.Count > 0 {
-		next := page.Offset + page.Count
-		page.NextOffset = &next
-	}
+	page := paginate(items, limit, offset)
 	if *f.oneLine {
 		for i := range page.Items {
 			page.Items[i].Text = showFirstLine(page.Items[i].Text)

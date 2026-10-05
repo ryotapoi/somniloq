@@ -39,14 +39,32 @@ type showMessageJSON struct {
 	RootREF       *string  `json:"rootRef"`
 	Provenance    string   `json:"provenance"`
 }
-type showJSON struct {
-	Items      []showMessageJSON `json:"items"`
-	Total      int               `json:"total"`
-	Count      int               `json:"count"`
-	Limit      *int              `json:"limit"`
-	Offset     int               `json:"offset"`
-	HasMore    bool              `json:"hasMore"`
-	NextOffset *int              `json:"nextOffset"`
+type page[T any] struct {
+	Items      []T  `json:"items"`
+	Total      int  `json:"total"`
+	Count      int  `json:"count"`
+	Limit      *int `json:"limit"`
+	Offset     int  `json:"offset"`
+	HasMore    bool `json:"hasMore"`
+	NextOffset *int `json:"nextOffset"`
+}
+type showJSON = page[showMessageJSON]
+
+func paginate[T any](items []T, limit *int, offset int) page[T] {
+	result := page[T]{Items: []T{}, Total: len(items), Limit: limit, Offset: offset}
+	start := min(offset, len(items))
+	end := len(items)
+	if limit != nil {
+		end = start + min(*limit, end-start)
+	}
+	result.Items = append(result.Items, items[start:end]...)
+	result.Count = len(result.Items)
+	result.HasMore = offset < result.Total && result.Count < result.Total-offset
+	if result.HasMore && result.Count > 0 {
+		next := offset + result.Count
+		result.NextOffset = &next
+	}
+	return result
 }
 
 func nullableString(value string) *string {

@@ -11,15 +11,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-type searchDetailJSON struct {
-	Items      []core.SearchOccurrence `json:"items"`
-	Total      int                     `json:"total"`
-	Count      int                     `json:"count"`
-	Limit      *int                    `json:"limit"`
-	Offset     int                     `json:"offset"`
-	HasMore    bool                    `json:"hasMore"`
-	NextOffset *int                    `json:"nextOffset"`
-}
+type searchDetailJSON = page[core.SearchOccurrence]
 
 func searchDetailCmd(fs *flag.FlagSet, f searchFlags, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	patterns := append([]string(nil), *f.patterns...)
@@ -56,7 +48,7 @@ func searchDetailCmd(fs *flag.FlagSet, f searchFlags, openDB func() (*core.DB, e
 	var items []core.SearchOccurrence
 	code := 0
 	err = db.ReadSnapshot(func(snapshot *core.DB) error {
-		if _, c, e := resolveSessionREF(snapshot, *f.session, nil, errOut); c != 0 {
+		if c, e := resolveSessionREF(snapshot, *f.session, errOut); c != 0 {
 			code = c
 			return e
 		}
@@ -70,22 +62,11 @@ func searchDetailCmd(fs *flag.FlagSet, f searchFlags, openDB func() (*core.DB, e
 	if err != nil {
 		return 1, err
 	}
-	page := searchDetailJSON{Items: []core.SearchOccurrence{}, Total: len(items), Offset: *f.offset}
+	var limit *int
 	if flagWasProvided(fs, "limit") {
-		page.Limit = f.limit
+		limit = f.limit
 	}
-	start := min(page.Offset, len(items))
-	end := len(items)
-	if page.Limit != nil {
-		end = start + min(*page.Limit, end-start)
-	}
-	page.Items = append(page.Items, items[start:end]...)
-	page.Count = len(page.Items)
-	page.HasMore = page.Offset < page.Total && page.Count < page.Total-page.Offset
-	if page.HasMore && page.Count > 0 {
-		next := page.Offset + page.Count
-		page.NextOffset = &next
-	}
+	page := paginate(items, limit, *f.offset)
 	if *f.format == "json" {
 		err = writeJSON(out, page)
 	} else {
@@ -97,19 +78,7 @@ func searchDetailCmd(fs *flag.FlagSet, f searchFlags, openDB func() (*core.DB, e
 	return 0, nil
 }
 func writeSearchDetailTSV(out io.Writer, page searchDetailJSON) error {
-	metadata := struct {
-		Total      int  `json:"total"`
-		Count      int  `json:"count"`
-		Limit      *int `json:"limit"`
-		Offset     int  `json:"offset"`
-		HasMore    bool `json:"hasMore"`
-		NextOffset *int `json:"nextOffset"`
-	}{page.Total, page.Count, page.Limit, page.Offset, page.HasMore, page.NextOffset}
-	data, err := json.Marshal(metadata)
-	if err != nil {
-		return err
-	}
-	if _, err = fmt.Fprintf(out, "# page\t%s\nref\tmessageNumber\toccurrenceNumber\trole\ttimestamp\tstartByte\tendByte\tpatternIndexes\tmatchText\tlineText\n", data); err != nil {
+	if err := writePageTSVHeader(out, page, "ref\tmessageNumber\toccurrenceNumber\trole\ttimestamp\tstartByte\tendByte\tpatternIndexes\tmatchText\tlineText"); err != nil {
 		return err
 	}
 	for _, m := range page.Items {

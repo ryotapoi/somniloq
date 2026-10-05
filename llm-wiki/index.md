@@ -24,6 +24,6 @@ sources:
 | [Command map](command-map.md) | full | CLI コマンドから入口関数・core クエリ・代表テストへ行く索引 | cmd/somniloq, internal/core |
 | [Import pipeline](import-pipeline.md) | compiled | Claude Code / Codex / Cursor Agent JSONL が DB 行になるまでの読む順序 | internal/core/import.go, internal/ingest |
 | [Storage and query map](storage-query-map.md) | compiled | schema 管理、書き込み、query helper の変更入口 | internal/core/db*.go |
-| [Display and turns](display-and-turns.md) | compiled | show の発言選択と search の一覧・詳細・ページ・TSV/JSON の導線 | cmd/somniloq, internal/core/db_sessions_projects.go, internal/core/db_messages_summary.go, internal/core/db_search.go |
+| [Display and turns](display-and-turns.md) | compiled | show の発言選択と search の一覧・詳細・ページ・TSV/JSON の導線 | cmd/somniloq, internal/core/session_relations.go, internal/core/db_messages_summary.go, internal/core/search_groups.go |
 | [Configuration and projects](configuration-and-projects.md) | compiled | repo_path 解決、project alias、project filter の波及先 | cmd/somniloq/config.go, internal/core/repo_path.go |
 | [SQLite driver notes](sqlite-driver-notes.md) | none | modernc.org/sqlite / SQLite の外部由来の罠 | internal/core/db.go, internal/core/db_schema.go, internal/core/db_sessions_projects.go |

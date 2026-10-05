@@ -77,7 +77,7 @@ func parseSessionMeta(rec *RawRecord, resolveRepoPath ingest.RepoResolver) (*ing
 }
 
 func normalizeMessage(rec *RawRecord, payload *ResponseItemPayload, meta ingest.SessionMeta, rolloutPath string, lineNumber int) (*ingest.NormalizedRecord, error) {
-	content, err := ExtractText(payload.Content)
+	blocks, err := extractTextBlocks(payload.Content)
 	if err != nil {
 		return nil, err
 	}
@@ -90,7 +90,7 @@ func normalizeMessage(rec *RawRecord, payload *ResponseItemPayload, meta ingest.
 		Session: meta,
 		Message: ingest.NormalizedMessage{
 			UUID:       messageUUID(rolloutPath, lineNumber),
-			Blocks:     textBlocks(payload.Content),
+			Blocks:     blocks,
 			PayloadID:  payload.ID,
 			OriginPath: rolloutPath,
 			OriginLine: lineNumber,
@@ -98,7 +98,7 @@ func normalizeMessage(rec *RawRecord, payload *ResponseItemPayload, meta ingest.
 			Source:     ingest.SourceCodex,
 			SessionID:  meta.SessionID,
 			Role:       payload.Role,
-			Content:    content,
+			Content:    strings.Join(blocks, "\n\n"),
 			Timestamp:  timestamp,
 		},
 	}, nil
@@ -117,9 +117,17 @@ func isConversationMessage(payload *ResponseItemPayload) bool {
 }
 
 func ExtractText(raw json.RawMessage) (string, error) {
+	texts, err := extractTextBlocks(raw)
+	if err != nil {
+		return "", err
+	}
+	return strings.Join(texts, "\n\n"), nil
+}
+
+func extractTextBlocks(raw json.RawMessage) ([]string, error) {
 	var blocks []ContentBlock
 	if err := json.Unmarshal(raw, &blocks); err != nil {
-		return "", err
+		return nil, err
 	}
 
 	var texts []string
@@ -129,25 +137,12 @@ func ExtractText(raw json.RawMessage) (string, error) {
 			texts = append(texts, b.Text)
 		}
 	}
-	return strings.Join(texts, "\n\n"), nil
+	return texts, nil
 }
 
 func messageUUID(rolloutPath string, lineNumber int) string {
 	sum := sha256.Sum256([]byte(rolloutPath + "\x00" + strconv.Itoa(lineNumber)))
 	return "codex:" + hex.EncodeToString(sum[:])
-}
-
-func textBlocks(raw json.RawMessage) []string {
-	var blocks []ContentBlock
-	_ = json.Unmarshal(raw, &blocks)
-	var texts []string
-	for _, b := range blocks {
-		switch b.Type {
-		case "input_text", "output_text", "text":
-			texts = append(texts, b.Text)
-		}
-	}
-	return texts
 }
 
 // source is a union: ordinary roots use strings, while thread_spawn parent

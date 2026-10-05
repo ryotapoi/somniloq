@@ -63,11 +63,6 @@ func normalizeRecord(record *rawRecord, sessionID, path string, lineNumber int) 
 	}, nil
 }
 
-func extractText(raw json.RawMessage) (string, error) {
-	blocks, err := extractTextBlocks(raw)
-	return strings.Join(blocks, "\n\n"), err
-}
-
 func extractTextBlocks(raw json.RawMessage) ([]string, error) {
 	if len(raw) == 0 || bytes.Equal(bytes.TrimSpace(raw), []byte("null")) {
 		return nil, fmt.Errorf("content must be an array")

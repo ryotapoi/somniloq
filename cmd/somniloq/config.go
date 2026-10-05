@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -190,21 +189,14 @@ func parseDayBoundary(value string) (dayBoundary, error) {
 	if value == "" {
 		return dayBoundary{}, nil
 	}
-	parts := strings.Split(value, ":")
-	if len(parts) != 2 || len(parts[0]) != 2 || len(parts[1]) != 2 ||
-		parts[0][0] < '0' || parts[0][0] > '9' || parts[0][1] < '0' || parts[0][1] > '9' ||
-		parts[1][0] < '0' || parts[1][0] > '9' || parts[1][1] < '0' || parts[1][1] > '9' {
+	if len(value) != 5 || value[2] != ':' ||
+		value[0] < '0' || value[0] > '9' || value[1] < '0' || value[1] > '9' ||
+		value[3] < '0' || value[3] > '9' || value[4] < '0' || value[4] > '9' {
 		return dayBoundary{}, fmt.Errorf("invalid dayBoundary %q (use HH:MM)", value)
 	}
-	hour, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return dayBoundary{}, fmt.Errorf("invalid dayBoundary %q (use HH:MM)", value)
-	}
-	minute, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return dayBoundary{}, fmt.Errorf("invalid dayBoundary %q (use HH:MM)", value)
-	}
-	if hour < 0 || hour > 23 || minute < 0 || minute > 59 {
+	hour := int(value[0]-'0')*10 + int(value[1]-'0')
+	minute := int(value[3]-'0')*10 + int(value[4]-'0')
+	if hour > 23 || minute > 59 {
 		return dayBoundary{}, fmt.Errorf("invalid dayBoundary %q (use HH:MM)", value)
 	}
 	return dayBoundary{offset: time.Duration(hour)*time.Hour + time.Duration(minute)*time.Minute}, nil

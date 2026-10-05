@@ -121,15 +121,7 @@ func searchCandidateFilter(f searchFlags, cfg config) (core.SearchCandidates, er
 	return c, nil
 }
 
-type searchGroupJSON struct {
-	Items      []core.SearchGroup `json:"items"`
-	Total      int                `json:"total"`
-	Count      int                `json:"count"`
-	Limit      *int               `json:"limit"`
-	Offset     int                `json:"offset"`
-	HasMore    bool               `json:"hasMore"`
-	NextOffset *int               `json:"nextOffset"`
-}
+type searchGroupJSON = page[core.SearchGroup]
 
 func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs, f := newSearchFlagSet()
@@ -196,19 +188,7 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	if flagWasProvided(fs, "limit") {
 		limit = f.limit
 	}
-	page := searchGroupJSON{Items: []core.SearchGroup{}, Total: len(items), Limit: limit, Offset: *f.offset}
-	start := min(page.Offset, len(items))
-	end := len(items)
-	if limit != nil {
-		end = start + min(*limit, end-start)
-	}
-	page.Items = append(page.Items, items[start:end]...)
-	page.Count = len(page.Items)
-	page.HasMore = page.Offset < page.Total && page.Count < page.Total-page.Offset
-	if page.HasMore && page.Count > 0 {
-		next := page.Offset + page.Count
-		page.NextOffset = &next
-	}
+	page := paginate(items, limit, *f.offset)
 	if *f.format == "json" {
 		err = writeJSON(out, page)
 	} else {
@@ -220,26 +200,14 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	return 0, nil
 }
 func writeSearchGroupTSV(out io.Writer, page searchGroupJSON) error {
-	metadata := struct {
-		Total      int  `json:"total"`
-		Count      int  `json:"count"`
-		Limit      *int `json:"limit"`
-		Offset     int  `json:"offset"`
-		HasMore    bool `json:"hasMore"`
-		NextOffset *int `json:"nextOffset"`
-	}{page.Total, page.Count, page.Limit, page.Offset, page.HasMore, page.NextOffset}
-	data, err := json.Marshal(metadata)
-	if err != nil {
-		return err
-	}
-	if _, err = fmt.Fprintf(out, "# page\t%s\nref\tinput\tsource\tproject\ttitle\tstartedAt\tlastAt\timportedAt\tmembers\tmatchedMembers\tmemberCount\n", data); err != nil {
+	if err := writePageTSVHeader(out, page, "ref\tinput\tsource\tproject\ttitle\tstartedAt\tlastAt\timportedAt\tmembers\tmatchedMembers\tmemberCount"); err != nil {
 		return err
 	}
 	for _, s := range page.Items {
 		members, _ := json.Marshal(s.Members)
 		matched, _ := json.Marshal(s.MatchedMembers)
 		fields := []string{showTSVString(s.REF), showTSVNullable(s.Input), showTSVString(string(s.Source)), showTSVNullable(s.Project), showTSVNullable(s.Title), showTSVNullable(s.StartedAt), showTSVNullable(s.LastAt), showTSVNullable(s.ImportedAt), string(members), string(matched), strconv.Itoa(s.MemberCount)}
-		if _, err = fmt.Fprintln(out, strings.Join(fields, "\t")); err != nil {
+		if _, err := fmt.Fprintln(out, strings.Join(fields, "\t")); err != nil {
 			return err
 		}
 	}

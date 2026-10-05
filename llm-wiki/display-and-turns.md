@@ -8,12 +8,10 @@ sources:
   - cmd/somniloq/search.go
   - cmd/somniloq/show.go
   - cmd/somniloq/show_tsv.go
-  - cmd/somniloq/sessions.go
   - cmd/somniloq/config.go
   - cmd/somniloq/jsonout.go
   - internal/core/session_relations.go
   - internal/core/db_messages_summary.go
-  - internal/core/db_search.go
 ---
 
 # Display and turns
@@ -30,6 +28,4 @@ sources:
 
 一覧は `cmd/somniloq/search.go` の `searchCmd` → `internal/core/search_groups.go` の `SearchGroups`。候補選択・照合・group metadata は core、ページ/envelope と TSV は cmd。`resolveSessionGroups` は共通の関係 graph を namespace ごとに一度構築する。回帰入口は `internal/core/search_groups_test.go` と `cmd/somniloq/search_test.go`。
 
-全一致詳細は `cmd/somniloq/search_detail.go` → `SearchOccurrences`。保存済み番号を返し、show と一致する。候補本文取得は一覧と共通の `candidateBodies`、pattern は `PatternMatcher`。一覧は turn/snippet を返さない。旧一覧専用の turn helper は撤去済み。
-
-`sessions` は `ListSessions` の行メタデータだけを出す。本人本文の取得や発言 filter は show 側で行う。
+全一致詳細は `cmd/somniloq/search_detail.go` → `SearchOccurrences`。保存済み番号を返し、show と一致する。候補本文取得は一覧と共通の `candidateBodies`、pattern は `PatternMatcher`。一覧は本文抜粋を返さない。

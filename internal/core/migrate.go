@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/ryotapoi/somniloq/internal/ingest"
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
 
@@ -237,18 +236,8 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, inputIndex, group
 	if err = t.ReplaceSession(SourceCodex, g.Session.SessionID); err != nil {
 		return 0, err
 	}
-	if err = t.UpsertSession(g.Session, importedAt); err != nil {
+	if err = persistCodexGroup(t, g, importedAt); err != nil {
 		return 0, err
-	}
-	for _, m := range g.Messages {
-		meta := g.Session
-		if m.Membership == "body" {
-			meta.StartedAt = m.Timestamp
-			meta.EndedAt = m.Timestamp
-		}
-		if err = ingest.PersistMessage(t, &ingest.NormalizedRecord{Session: meta, Message: m}, importedAt); err != nil {
-			return 0, err
-		}
 	}
 	for _, s := range g.States {
 		if err = t.UpsertImportState(s); err != nil {

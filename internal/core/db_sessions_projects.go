@@ -27,8 +27,7 @@ type SessionRow struct {
 	CustomTitle     string
 	MessageCount    int
 	// BodySize is the total content size in bytes (UTF-8, not runes) of the
-	// session's body messages: approximately what `show` would
-	// print, excluding the Markdown headers show adds.
+	// session's body messages, excluding output framing and metadata.
 	BodySize int
 }
 

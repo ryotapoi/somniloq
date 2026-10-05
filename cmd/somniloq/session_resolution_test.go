@@ -45,16 +45,16 @@ func TestCommandsRejectBareSessionIDs(t *testing.T) {
 
 }
 
-func TestResolveSessionREFSelectsExactInputAndSource(t *testing.T) {
+func TestResolveSessionREFAcceptsCrossSourceRefs(t *testing.T) {
 	db := newCrossSourceSessionTestDB(t)
 	for _, source := range []core.Source{core.SourceClaudeCode, core.SourceCodex} {
 		ref := testREF(t, db, source, "same-id")
-		session, code, err := resolveSessionREF(db, ref, &source, nil)
-		if code != 0 || err != nil || session.Source != source {
-			t.Fatalf("resolve: %d %v %+v", code, err, session)
+		code, err := resolveSessionREF(db, ref, nil)
+		if code != 0 || err != nil {
+			t.Fatalf("resolve: %d %v", code, err)
 		}
 	}
-	_, code, err := resolveSessionREF(db, fixtureREF(core.SourceCodex, "absent"), nil, nil)
+	code, err := resolveSessionREF(db, fixtureREF(core.SourceCodex, "absent"), nil)
 	if code != 2 || err == nil {
 		t.Fatalf("missing REF: %d %v", code, err)
 	}

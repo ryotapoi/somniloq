@@ -28,7 +28,7 @@ type pausedImportAdapter struct {
 
 func (a pausedImportAdapter) ScanFiles(root string) ([]string, []error) {
 	if a.phase == "full" {
-		a.wait() // Import has already committed DeleteAll.
+		a.wait() // Import has already committed DeleteInputs.
 	}
 	return a.Adapter.ScanFiles(root)
 }

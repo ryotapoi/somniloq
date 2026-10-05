@@ -26,7 +26,7 @@ cmd/somniloq → internal/core → internal/ingest/...
 
 | モジュール | 責務 | やらないこと |
 |-----------|------|-------------|
-| `cmd/somniloq` | CLI 入出力、フラグ解析、TOML 設定生成・検証・path 正規化、出力フォーマット（text/Markdown）、エラーメッセージ表示 | DB 操作、JSONL パース |
+| `cmd/somniloq` | CLI 入出力、フラグ解析、TOML 設定生成・検証・path 正規化、TSV/JSON 出力、エラーメッセージ表示 | DB 操作、JSONL パース |
 | `internal/core` | DB スキーマ・revision 検査、入力 identity・root REF、入力ごとのインポート制御、クエリ、adapter から呼ばれる SQLite 書き込み実装 | CLI フラグ解析、出力フォーマット、`os.Exit`、source 固有 JSONL パース |
 | `internal/ingest` | 共通正規化型、adapter interface、source 固有のファイル走査・JSONL パース・正規化 | CLI フラグ解析、出力フォーマット、SQLite SQL、`os.Exit` |
 

@@ -45,32 +45,6 @@ func TestExpandProject(t *testing.T) {
 	}
 }
 
-func TestResolveProjectDisplayName_ProjectAlias(t *testing.T) {
-	cfg := config{ProjectAliases: map[string][]string{
-		"somniloq": {"Brimday", "/archive/old-somniloq"},
-	}}
-
-	tests := []struct {
-		name     string
-		repoPath string
-		short    bool
-		want     string
-	}{
-		{"old basename displays canonical", "/Users/test/Brimday", false, "somniloq"},
-		{"canonical basename displays canonical", "/Users/test/somniloq", false, "somniloq"},
-		{"full alias path displays canonical", "/archive/old-somniloq", false, "somniloq"},
-		{"unaliased raw path keeps existing default", "/Users/test/other", false, "/Users/test/other"},
-		{"unaliased short path keeps basename", "/Users/test/other", true, "other"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := resolveProjectDisplayName(tt.repoPath, tt.short, cfg); got != tt.want {
-				t.Errorf("resolveProjectDisplayName(%q, %v) = %q, want %q", tt.repoPath, tt.short, got, tt.want)
-			}
-		})
-	}
-}
-
 func newProjectAliasDisplayDB(t *testing.T) *core.DB {
 	t.Helper()
 	db, err := core.OpenDB(":memory:")

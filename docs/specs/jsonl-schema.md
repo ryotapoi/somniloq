@@ -6,7 +6,7 @@ Claude Code / Codex / Cursor Agent のセッション履歴ファイルの構造
 
 ## source 値
 
-`import` の CLI `--source` はユーザー向け表記として `all|claude-code|codex|cursor-agent` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex|cursor_agent` を保存する。TOML inputs.source も CLI 表記3種を使う。`show` / `outline` は完全 REF で本人を選び、`--source` を付ける場合は REF の source に一致する DB 内部値または CLI 表記を指定する。`all` は受け取らない。
+`import` の CLI `--source` はユーザー向け表記として `all|claude-code|codex|cursor-agent` を受け取る。DB 内部の `sessions.source` / `messages.source` / `import_state.source` は `claude_code|codex|cursor_agent` を保存する。TOML inputs.source も CLI 表記3種を使う。`search` の `--source` は3種だけを受け取り、`all` は受け取らない。`show` は完全 REF で本人を選び、`--source` を持たない。
 
 標準 path は config init が生成する既定 root。追加 root も同じ source adapter で走査する。source と canonical root で入力を識別し、同名 session/UUID と差分状態を入力間で混同しない。root 会話 identity と REF は [scope](../rules/scope.md#sqlite-と入力会話の識別) を参照する。
 

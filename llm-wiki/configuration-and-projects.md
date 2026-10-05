@@ -4,8 +4,8 @@ sources:
   - docs/rules/scope.md
   - docs/decisions/0014-project-alias-config.md
   - cmd/somniloq/config.go
+  - cmd/somniloq/config_init.go
   - cmd/somniloq/filter.go
-  - cmd/somniloq/sessions.go
   - cmd/somniloq/show.go
   - cmd/somniloq/shorten.go
   - cmd/somniloq/projects.go
@@ -14,7 +14,6 @@ sources:
   - internal/core/repo_path.go
   - internal/core/db_sessions_projects.go
   - internal/core/search_groups.go
-  - internal/core/db_search.go
 ---
 
 # Configuration and projects
@@ -30,29 +29,27 @@ sources:
 
 設定形式と alias の契約は `docs/rules/scope.md` の「設定ファイル（config）」、filter の対象は各コマンド節を読む。
 
-- 設定の読み込みは `cmd/somniloq/config.go` の `loadConfig`。filter への受け渡しは `cmd/somniloq/filter.go` の `buildSessionFilter` / `buildSessionFilterAt` から `config.expandProject` を辿る。
-- sessions で展開後の `core.SessionFilter.Projects` は `internal/core/db_sessions_projects.go` の `sessionFilterConditions` → `projectsCondition` → `escapeLikeLiteral` へ進む。search は `searchCandidateFilter` から `SearchCandidates.accepts` へ進む別経路。候補と root 表示の回帰は `search_groups_test.go` を確認する。
+- 設定生成は `cmd/somniloq/config_init.go`、読み込みと alias 展開は `cmd/somniloq/config.go`。search の `--project` は `cmd/somniloq/search.go` の `searchCandidateFilter` から `SearchCandidates.accepts` へ進む。候補と root 表示の回帰は `internal/core/search_groups_test.go` を確認する。
 - alias の表示への波及は下の「集約と表示」を読む。filter の展開と表示名の解決は別の入口を持つ。
 
 ## dayBoundary
 
-境界時刻・DST の契約は `docs/rules/scope.md` の「設定ファイル（config）」、filter と表示への適用は「セッション一覧（sessions）」「検索（search）」「内容表示（show）」を読む。
+境界時刻・DST の契約は `docs/rules/scope.md` の「設定ファイル（config）」、検索と表示への適用は「検索（search）」「内容表示（show）」を読む。
 
-- `cmd/somniloq/config.go` の `resolveDayBoundary` / `parseDayBoundary` から、sessions / search の filter 構築と show の日時選択へ値が渡る。show の `parseShowTime` は日付と zone 付き RFC3339 の受理を持ち、他コマンドの相対時刻・zone なし日時の経路とは分けて確認する。projects は論理日境界を適用しない。
-- 日付 filter は `cmd/somniloq/filter.go` の `resolveTimeFlag`、論理日表示は同ファイルの `sessionLogicalDay` が入口。両者はローカル暦日の境界を作る `dayBoundary.onDate` を共有するため、境界の変更は両経路を併せて確認する。
-- DST を含む境界の検証入口は `cmd/somniloq/resolve_test.go`。表示への受け渡しは `cmd/somniloq/sessions.go` の TSV / JSON 両経路を読む。
+- `cmd/somniloq/config.go` の `resolveDayBoundary` / `parseDayBoundary` から search と show に境界を渡す。日時入力は search の `buildSearchFilter` と show の `parseShowTime` を追う。両者は `dayBoundary.onDate` を共有する。projects の `--since` / `--until` は `cmd/somniloq/filter.go` の `resolveTimeFlag` を使い、設定の dayBoundary を適用しない。
+- DST を含む境界の検証入口は `cmd/somniloq/resolve_test.go`、search と show の回帰入口は各コマンドのテストを確認する。
 
 ## 集約と表示
 
-- `sessions`, `search` は `--project` filter の対象。show は完全 REF と発言 filter で選択する。
+- `search` は `--project` filter の対象。show は完全 REF と発言 filter で選択する。
 - `internal/core.DB.ListProjects` は raw `repo_path` ごとの行を返す。`--project` filter は受けず、DB の保存事実は書き換えない。時刻条件があると NULL / 空 started_at は対象外、条件なしでは空 repo_path も 1 グループとして残る。
-- 表示名は `cmd/somniloq/shorten.go` の `resolveProjectDisplayName`。alias の canonical / old names が `repo_path` 全体または basename に一致したら canonical 名のみを出す。
+- alias の表示判定は `cmd/somniloq/shorten.go` の `config.canonicalProjectName`。canonical / old names が `repo_path` 全体または basename に一致したら canonical 名を出す。
 - alias 非一致時だけ、`--short` は従来どおり `resolveDisplayName` で basename にする。
 - `projects` は `cmd/somniloq/projects.go` で表示名ごとに session count を合算する。alias で同じ canonical 名になる raw `repo_path` 行を重複表示しない。
-- `search` の候補は `searchCandidateFilter` → `SearchCandidates.accepts`。project は basename substring、表示は root の保存値。sessions の SQL substring/alias display と分けて確認する。
+- `search` の候補は `searchCandidateFilter` → `SearchCandidates.accepts`。project は basename substring、表示は root の保存値。projects の alias 表示とは別経路。
 
 ## 変更時のテスト入口
 
 - config と alias: `cmd/somniloq/config_test.go`
-- time/project filter: `cmd/somniloq/resolve_test.go`, `internal/core/db_sessions_projects_test.go`, `internal/core/db_search_test.go`
+- time/project filter: `cmd/somniloq/resolve_test.go`, `cmd/somniloq/search_test.go`, `internal/core/search_groups_test.go`, `internal/core/db_sessions_projects_test.go`
 - repo path: `internal/core/repo_path_test.go`

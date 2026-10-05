@@ -322,20 +322,21 @@ func TestGetImportState_NotFound(t *testing.T) {
 	}
 }
 
-func TestDeleteAll_RollsBackOnDeleteFailure(t *testing.T) {
+func TestDeleteInputs_RollsBackOnDeleteFailure(t *testing.T) {
 	db := testDB(t)
-	if err := db.DeleteAll(); err != nil {
-		t.Fatalf("DeleteAll on empty database: %v", err)
+	inputID := testInput(t, db, SourceClaudeCode)
+	if err := db.DeleteInputs([]int64{inputID}); err != nil {
+		t.Fatalf("DeleteInputs on empty input: %v", err)
 	}
-	must(t, db.UpsertSession(testInput(t, db, SourceClaudeCode), SessionMeta{Source: SourceClaudeCode, SessionID: "session-before"}, "imported-before"))
-	must(t, db.InsertMessage(testInput(t, db, SourceClaudeCode), NormalizedMessage{Source: SourceClaudeCode, UUID: "message-before", SessionID: "session-before", Role: "user", Content: "content-before", Timestamp: "timestamp-before"}))
-	must(t, db.UpsertImportState(testOnlyInput(t, db), ImportState{JSONLPath: "path-before", Source: SourceClaudeCode, FileSize: 42, LastOffset: 21, ImportedAt: "state-before"}))
+	must(t, db.UpsertSession(inputID, SessionMeta{Source: SourceClaudeCode, SessionID: "session-before"}, "imported-before"))
+	must(t, db.InsertMessage(inputID, NormalizedMessage{Source: SourceClaudeCode, UUID: "message-before", SessionID: "session-before", Role: "user", Content: "content-before", Timestamp: "timestamp-before"}))
+	must(t, db.UpsertImportState(inputID, ImportState{JSONLPath: "path-before", Source: SourceClaudeCode, FileSize: 42, LastOffset: 21, ImportedAt: "state-before"}))
 	if _, err := db.db.Exec(`CREATE TRIGGER fail_import_state_delete BEFORE DELETE ON import_state BEGIN SELECT RAISE(ABORT, 'delete failed'); END`); err != nil {
 		t.Fatalf("create trigger: %v", err)
 	}
 
-	if err := db.DeleteAll(); err == nil {
-		t.Fatal("DeleteAll succeeded despite the import_state trigger")
+	if err := db.DeleteInputs([]int64{inputID}); err == nil {
+		t.Fatal("DeleteInputs succeeded despite the import_state trigger")
 	}
 
 	var sessionID, importedAt string
@@ -365,8 +366,8 @@ func TestDeleteAll_RollsBackOnDeleteFailure(t *testing.T) {
 		t.Fatalf("drop trigger: %v", err)
 	}
 	for attempt := 1; attempt <= 2; attempt++ {
-		if err := db.DeleteAll(); err != nil {
-			t.Fatalf("DeleteAll attempt %d: %v", attempt, err)
+		if err := db.DeleteInputs([]int64{inputID}); err != nil {
+			t.Fatalf("DeleteInputs attempt %d: %v", attempt, err)
 		}
 		for _, table := range []string{"messages", "sessions", "import_state"} {
 			var count int

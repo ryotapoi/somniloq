@@ -191,21 +191,6 @@ func upsertImportState(e execer, inputID int64, state ImportState) error {
 	return err
 }
 
-func (d *DB) DeleteAll() error {
-	tx, err := d.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	for _, table := range []string{"messages", "sessions", "import_state"} {
-		if _, err := tx.Exec("DELETE FROM " + table); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
-}
-
 // DeleteInputs rebuilds only the selected inputs, retaining their stable IDs.
 func (d *DB) DeleteInputs(inputIDs []int64) error {
 	if len(inputIDs) == 0 {

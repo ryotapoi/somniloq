@@ -74,18 +74,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 			err = t.ReplaceSession(ingest.SourceCodex, g.Session.SessionID)
 		}
 		if err == nil {
-			err = t.UpsertSession(g.Session, importedAt)
-		}
-		for _, m := range g.Messages {
-			if err != nil {
-				break
-			}
-			meta := g.Session
-			if m.Membership == "body" {
-				meta.StartedAt = m.Timestamp
-				meta.EndedAt = m.Timestamp
-			}
-			err = ingest.PersistMessage(t, &ingest.NormalizedRecord{Session: meta, Message: m}, importedAt)
+			err = persistCodexGroup(t, g, importedAt)
 		}
 		for _, s := range g.States {
 			if err != nil {
@@ -152,20 +141,7 @@ func replaceCodexInput(db *DB, inputID int64, groups []codex.Group, result *Impo
 		if len(g.States) == 0 {
 			continue
 		}
-		if err = t.UpsertSession(g.Session, importedAt); err != nil {
-			break
-		}
-		for _, m := range g.Messages {
-			meta := g.Session
-			if m.Membership == "body" {
-				meta.StartedAt = m.Timestamp
-				meta.EndedAt = m.Timestamp
-			}
-			if err = ingest.PersistMessage(t, &ingest.NormalizedRecord{Session: meta, Message: m}, importedAt); err != nil {
-				break
-			}
-		}
-		if err != nil {
+		if err = persistCodexGroup(t, g, importedAt); err != nil {
 			break
 		}
 		for _, s := range g.States {
@@ -190,6 +166,23 @@ func replaceCodexInput(db *DB, inputID int64, groups []codex.Group, result *Impo
 	}
 	result.FilesImported = result.FilesScanned
 	return result, nil
+}
+
+func persistCodexGroup(t importTx, g codex.Group, importedAt string) error {
+	if err := t.UpsertSession(g.Session, importedAt); err != nil {
+		return err
+	}
+	for _, m := range g.Messages {
+		meta := g.Session
+		if m.Membership == "body" {
+			meta.StartedAt = m.Timestamp
+			meta.EndedAt = m.Timestamp
+		}
+		if err := ingest.PersistMessage(t, &ingest.NormalizedRecord{Session: meta, Message: m}, importedAt); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func addCodexMembershipDiagnostics(result *ImportResult, messages []ingest.NormalizedMessage) {

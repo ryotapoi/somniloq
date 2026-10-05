@@ -64,17 +64,19 @@ func TestResolutionCodexParentArrivalAndScope(t *testing.T) {
 			t.Fatalf("arrival changed original: %+v", after)
 		}
 	}
-	hits, err := db.SearchMessages(SessionFilter{}, "Inherited question", SearchPagination{SessionREF: child, Limit: 1})
+	matcher, err := CompilePatterns([]string{"Inherited question"}, false)
+	must(t, err)
+	hits, err := db.SearchOccurrences(child, SessionFilter{}, matcher, false, SearchCandidates{})
 	must(t, err)
 	if len(hits) != 0 {
 		t.Fatalf("ancestor/context hit: %+v", hits)
 	}
-	hits, err = db.SearchMessages(SessionFilter{}, "answer", SearchPagination{SessionREF: child, Limit: 1, Offset: 1})
+	matcher, err = CompilePatterns([]string{"answer"}, false)
 	must(t, err)
-	all, err := db.SearchMessages(SessionFilter{}, "answer", SearchPagination{SessionREF: child})
+	hits, err = db.SearchOccurrences(child, SessionFilter{}, matcher, false, SearchCandidates{})
 	must(t, err)
-	if len(all) < 2 || len(hits) != 1 || hits[0].REF != all[1].REF {
-		t.Fatalf("scope pagination: %+v %+v", all, hits)
+	if len(hits) < 2 || hits[0].REF != child || hits[1].REF != grand {
+		t.Fatalf("scope order: %+v", hits)
 	}
 	// The stored explicit cycle is unconfirmed, not repaired in storage.
 	_, err = db.db.Exec(`UPDATE sessions SET parent_identity='["grandchild"]' WHERE input_id=? AND identity='["root"]'`, r.Self.InputID)
