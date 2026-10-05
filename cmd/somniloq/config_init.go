@@ -15,6 +15,18 @@ import (
 func configInitCmd(args []string, out, errOut io.Writer) (int, error) {
 	fs := flag.NewFlagSet("config init", flag.ContinueOnError)
 	fs.SetOutput(errOut)
+	fs.Usage = func() {
+		fmt.Fprintln(errOut, `Create a TOML configuration only when both the config and database paths are absent.
+
+Usage:
+  somniloq config init [NAME] [--output PATH] [--db PATH]
+
+NAME defaults to default. Existing files, directories, and symlinks are refused.
+Only the configuration is created; the database is not opened.
+
+Flags:`)
+		fs.PrintDefaults()
+	}
 	output := fs.String("output", "", "configuration destination")
 	db := fs.String("db", "", "database path")
 	// flag accepts options before positional arguments; init also accepts NAME first.
@@ -81,6 +93,26 @@ func configInitCmd(args []string, out, errOut io.Writer) (int, error) {
 	if dbPath == "" {
 		fmt.Fprintln(errOut, "db must not be empty")
 		return 2, nil
+	}
+	// Keep the final DB component intact so dangling symlinks are also refused.
+	resolvedDB := dbPath
+	if !filepath.IsAbs(resolvedDB) && resolvedDB != "~" && !strings.HasPrefix(resolvedDB, "~/") {
+		resolvedDB = filepath.Join(parent, resolvedDB)
+	}
+	resolvedDB, err = absoluteConfigPath(resolvedDB)
+	if err != nil {
+		return 1, err
+	}
+	dbParent, err := core.CanonicalPath(filepath.Dir(resolvedDB), "")
+	if err != nil {
+		return 1, fmt.Errorf("resolve database directory: %w", err)
+	}
+	resolvedDB = filepath.Join(dbParent, filepath.Base(resolvedDB))
+	if _, err := os.Lstat(resolvedDB); err == nil {
+		fmt.Fprintf(errOut, "database destination already exists: %s\n", resolvedDB)
+		return 2, nil
+	} else if !os.IsNotExist(err) {
+		return 1, fmt.Errorf("check database destination: %w", err)
 	}
 	boundary := "00:00"
 	data, err := toml.Marshal(tomlConfig{

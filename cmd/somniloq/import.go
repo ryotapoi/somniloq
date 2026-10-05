@@ -48,7 +48,7 @@ func importConfiguredCmd(args []string, openDB func() (*core.DB, error), cfg con
 	var inputs stringListFlag
 	fs.Var(&inputs, "input", "input root path to import (repeatable; OR, intersected with --source)")
 	sourceValue := fs.String("source", string(core.ImportSourceAll), "source to import: "+importSourceCommaList())
-	setUsage(fs, "Import Claude Code, Codex, and Cursor Agent session logs from JSONL files", "somniloq import --config default [--source "+importSourcePipeList()+"] [flags]", importHelpDetails)
+	setUsage(fs, "Import Claude Code, Codex, and Cursor Agent session logs from JSONL files", "somniloq import [--config NAME_OR_PATH] [--source "+importSourcePipeList()+"] [flags]", importHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		if code != 0 {
 			code = 2
@@ -57,7 +57,7 @@ func importConfiguredCmd(args []string, openDB func() (*core.DB, error), cfg con
 	}
 	if fs.NArg() != 0 {
 		writeUsageError(errOut, "unexpected arguments")
-		fmt.Fprintln(errOut, "usage: somniloq import --config default [flags]")
+		fmt.Fprintln(errOut, "usage: somniloq import [--config NAME_OR_PATH] [flags]")
 		return 2, nil
 	}
 

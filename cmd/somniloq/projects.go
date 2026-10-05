@@ -32,7 +32,7 @@ Examples:
 // be tested directly.
 func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs, flags := newProjectsFlagSet()
-	setUsage(fs, "List projects", "somniloq projects --config default [flags]", projectsHelpDetails)
+	setUsage(fs, "List projects", "somniloq projects [--config NAME_OR_PATH] [flags]", projectsHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		return code, nil
 	}
@@ -43,7 +43,7 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 
 	if fs.NArg() != 0 {
 		writeUsageError(errOut, "unexpected arguments")
-		fmt.Fprintln(errOut, "usage: somniloq projects --config default [--since <time>] [--until <time>] [--short] [--format <fmt>]")
+		fmt.Fprintln(errOut, "usage: somniloq projects [--config NAME_OR_PATH] [--since <time>] [--until <time>] [--short] [--format <fmt>]")
 		return 1, nil
 	}
 

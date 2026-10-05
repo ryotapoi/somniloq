@@ -17,7 +17,7 @@ somniloq は Claude Code / Codex / Cursor Agent のセッションログを SQLi
 somniloq import --config default
 ```
 
-全 DB コマンドで明示 `--config NAME_OR_PATH` が必要です。設定がなければ `somniloq config init` で default TOML を生成します（DB は作成しません）。既存の設定名・path を確認して選び、旧 JSON や旧 DB を自動移行するものと考えないでください。DB は import 時点のスナップショットです。自動更新ではありません。
+全 DB コマンドで `--config NAME_OR_PATH` 省略時は `default` を使います。設定欠落は import もエラーと作成案内を返し、自動生成しません。`somniloq config init [NAME]` は名前省略時 default。設定宛先と参照 DB の両方が未存在の場合だけ TOML を生成し、DB は作成しません。いずれかに既存ファイル・directory・symlink（dangling を含む）があれば拒否し、内容を保持します。名前の既定 DB と明示 `--db` に同じ存在判定を適用し、相対 DB は設定の実体親を基準に解決します。既存の設定名・path を確認して選び、旧 JSON や旧 DB を自動移行するものと考えないでください。DB は import 時点のスナップショットです。自動更新ではありません。
 
 既知の旧 DB の履歴保持には `somniloq migrate --config NAME_OR_PATH --from PATH` を使います。元は sidecar のない固定 standalone snapshot、設定の `db` は別の未存在または空 DB、inputs は残存 Codex ログの全 root にします。所属不明・ログ欠落・他 source の旧履歴は保持され、legacy REF で読めます。同じ snapshot と完了 receipt がある移行先に再実行できます。詳細な受理条件と部分失敗の扱いは `somniloq migrate --help` を確認してください。
 

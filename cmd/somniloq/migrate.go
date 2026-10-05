@@ -20,7 +20,7 @@ func (e *migrationIOError) Unwrap() error { return e.err }
 func migrateCmd(args []string, cfg config, out, errOut io.Writer) (int, error) {
 	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
 	from := fs.String("from", "", "fixed standalone legacy SQLite snapshot (required)")
-	setUsage(fs, "Migrate a legacy snapshot without changing it", "somniloq migrate --config NAME_OR_PATH --from PATH", `The configured database must be new, empty, or a completed copy of the same snapshot.
+	setUsage(fs, "Migrate a legacy snapshot without changing it", "somniloq migrate [--config NAME_OR_PATH] --from PATH", `The configured database must be new, empty, or a completed copy of the same snapshot.
 All configured Codex inputs are processed; missing logs and other sources retain their saved history.
 Output is one JSON summary. Failed groups retain their previous history and cursors.`)
 	if code, ok := parseFlags(fs, errOut, args); !ok {

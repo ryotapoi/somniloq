@@ -13,7 +13,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const searchUsageLine = "somniloq search --config default [--session <REF>] [--input PATH...] [--source SOURCE...] [--project TEXT] [--since <time>] [--until <time>] [--time-mode active|started|last|overlap] [--imported-since <RFC3339>] [--day-boundary <HH:MM>] [--limit <n>] [--offset <n>] [--format tsv|json] [-e PATTERN...] [-F] [--all] [PATTERN]"
+const searchUsageLine = "somniloq search [--config NAME_OR_PATH] [--session <REF>] [--input PATH...] [--source SOURCE...] [--project TEXT] [--since <time>] [--until <time>] [--time-mode active|started|last|overlap] [--imported-since <RFC3339>] [--day-boundary <HH:MM>] [--limit <n>] [--offset <n>] [--format tsv|json] [-e PATTERN...] [-F] [--all] [PATTERN]"
 const searchHelpDetails = `Search lists saved work groups, without body snippets. Omit patterns to list all candidates.
   Go regexp is case sensitive; positional PATTERN comes first, then repeated -e.
   -F treats every pattern literally; --all requires all patterns across candidate members.

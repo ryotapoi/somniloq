@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -152,6 +153,7 @@ func TestConfigInitNamedArbitraryOutputAndNoDatabase(t *testing.T) {
 }
 
 func TestConfigInitExclusiveDestinations(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
 	for _, kind := range []string{"file", "directory", "symlink", "dangling symlink"} {
 		t.Run(kind, func(t *testing.T) {
 			dir := t.TempDir()
@@ -301,5 +303,148 @@ func TestLoadConfigIOErrorClassification(t *testing.T) {
 	_, err = loadConfig(filepath.Join(dir, "missing.toml"))
 	if errors.As(err, &ioErr) {
 		t.Fatalf("missing config should be input error: %v", err)
+	}
+}
+
+func TestConfigInitDefaultNameEquivalence(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	var first, second, errOut bytes.Buffer
+	code, err := configInitCmd(nil, &first, &errOut)
+	if code != 0 || err != nil {
+		t.Fatalf("omitted: %d %v %s", code, err, &errOut)
+	}
+	path := strings.TrimSpace(first.String())
+	data, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Remove(path); err != nil {
+		t.Fatal(err)
+	}
+	code, err = configInitCmd([]string{"default"}, &second, &errOut)
+	explicit, readErr := os.ReadFile(path)
+	if code != 0 || err != nil || readErr != nil || first.String() != second.String() || !bytes.Equal(data, explicit) {
+		t.Fatalf("explicit: %d %v %v stdout=%q", code, err, readErr, second.String())
+	}
+	if _, err := os.Stat(filepath.Join(home, ".somniloq", "default.db")); !os.IsNotExist(err) {
+		t.Fatalf("init created DB: %v", err)
+	}
+}
+
+func TestConfigInitPreservesExistingConfigAndDatabase(t *testing.T) {
+	for _, explicitDB := range []bool{false, true} {
+		for _, existing := range []string{"config", "database", "both"} {
+			t.Run(fmt.Sprintf("explicit=%t/%s", explicitDB, existing), func(t *testing.T) {
+				home := t.TempDir()
+				t.Setenv("HOME", home)
+				dir := filepath.Join(home, ".somniloq", "config")
+				if err := os.MkdirAll(dir, 0o700); err != nil {
+					t.Fatal(err)
+				}
+				configPath := filepath.Join(dir, "work.toml")
+				dbPath := filepath.Join(home, ".somniloq", "work.db")
+				args := []string{"work"}
+				if explicitDB {
+					dbPath = filepath.Join(dir, "custom.db")
+					args = append(args, "--db", "custom.db")
+				}
+				paths := []string{}
+				if existing != "database" {
+					paths = append(paths, configPath)
+				}
+				if existing != "config" {
+					paths = append(paths, dbPath)
+				}
+				for _, path := range paths {
+					if err := os.WriteFile(path, []byte("keep "+path), 0o600); err != nil {
+						t.Fatal(err)
+					}
+				}
+				var out, errOut bytes.Buffer
+				code, err := configInitCmd(args, &out, &errOut)
+				if code != 2 || err != nil || out.Len() != 0 || !strings.Contains(errOut.String(), "already exists") {
+					t.Fatalf("init: %d %v %q %q", code, err, out.String(), errOut.String())
+				}
+				for _, path := range paths {
+					data, err := os.ReadFile(path)
+					if err != nil || string(data) != "keep "+path {
+						t.Fatalf("modified %s: %q %v", path, data, err)
+					}
+				}
+				if existing == "database" {
+					if _, err := os.Lstat(configPath); !os.IsNotExist(err) {
+						t.Fatalf("created config: %v", err)
+					}
+				}
+			})
+		}
+	}
+}
+
+func TestConfigInitDatabaseEntriesAndPathBase(t *testing.T) {
+	for _, kind := range []string{"file", "directory", "symlink", "dangling symlink", "home"} {
+		t.Run(kind, func(t *testing.T) {
+			home := t.TempDir()
+			t.Setenv("HOME", home)
+			// The command cwd differs from the output parent, which itself is a symlink.
+			t.Chdir(t.TempDir())
+			real := filepath.Join(home, "real")
+			if err := os.Mkdir(real, 0o700); err != nil {
+				t.Fatal(err)
+			}
+			alias := filepath.Join(home, "alias")
+			if err := os.Symlink(real, alias); err != nil {
+				t.Fatal(err)
+			}
+			dbPath := filepath.Join(real, "history.db")
+			argument := "history.db"
+			target := filepath.Join(real, "target")
+			switch kind {
+			case "home":
+				argument = "~/real/history.db"
+				fallthrough
+			case "file":
+				if err := os.WriteFile(dbPath, []byte("keep"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			case "directory":
+				if err := os.Mkdir(dbPath, 0o700); err != nil {
+					t.Fatal(err)
+				}
+			case "symlink":
+				if err := os.WriteFile(target, []byte("keep"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				fallthrough
+			case "dangling symlink":
+				if err := os.Symlink(target, dbPath); err != nil {
+					t.Fatal(err)
+				}
+			}
+			destination := filepath.Join(alias, "profile.toml")
+			var out, errOut bytes.Buffer
+			code, err := configInitCmd([]string{"--output", destination, "--db", argument}, &out, &errOut)
+			if code != 2 || err != nil || out.Len() != 0 || !strings.Contains(errOut.String(), "database destination already exists") {
+				t.Fatalf("init: %d %v %q %q", code, err, out.String(), errOut.String())
+			}
+			if _, err := os.Lstat(destination); !os.IsNotExist(err) {
+				t.Fatalf("created config: %v", err)
+			}
+			if kind == "file" || kind == "symlink" || kind == "home" {
+				data, err := os.ReadFile(dbPath)
+				if err != nil || string(data) != "keep" {
+					t.Fatalf("changed database: %q %v", data, err)
+				}
+			}
+			if kind == "dangling symlink" {
+				if link, err := os.Readlink(dbPath); err != nil || link != target {
+					t.Fatalf("changed symlink: %q %v", link, err)
+				}
+				if _, err := os.Stat(target); !os.IsNotExist(err) {
+					t.Fatalf("created target: %v", err)
+				}
+			}
+		})
 	}
 }

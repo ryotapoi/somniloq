@@ -22,7 +22,7 @@ somniloq search --config default "auth bug"        # 本文の語からまとま
 somniloq show --config default <REF> --messages 12:18 # 発言番号で読む
 ```
 
-Every database command requires `--config NAME_OR_PATH`, before or after the command name. Put search flags before the query. `search` returns full `slq1:...` references that distinguish conversations with the same session ID in different inputs. Copy the complete REF into `show`; bare IDs and shortened references are rejected.
+Every database command uses `default` when `--config NAME_OR_PATH` is omitted. An explicit config can appear before or after the command name. Put search flags before the query. `search` returns full `slq1:...` references that distinguish conversations with the same session ID in different inputs. Copy the complete REF into `show`; bare IDs and shortened references are rejected.
 
 ## Commands
 
@@ -71,7 +71,7 @@ POSIX sh で実行する例です（対話 zsh でも `sh` が実行します）
 
 ## Configuration
 
-`somniloq config init [NAME] [--output PATH] [--db PATH]` defaults to name `default`, output `~/.somniloq/config/NAME.toml`, and database `~/.somniloq/NAME.db`. It creates parent directories, refuses existing destinations including symlinks, and prints the config's absolute path. `--db` is available only for init.
+`somniloq config init [NAME] [--output PATH] [--db PATH]` defaults to name `default`, output `~/.somniloq/config/NAME.toml`, and database `~/.somniloq/NAME.db`. It creates only the config, and only when both its destination and referenced database are absent. Existing files, directories, and symlinks (including dangling symlinks) at either path are refused and preserved. This applies to both the default database and explicit `--db`; relative database paths resolve against the config's real parent directory. It creates config parent directories and prints the config's absolute path. `--db` is available only for init.
 
 The generated config includes these three inputs:
 
@@ -99,7 +99,7 @@ Add more `[[inputs]]` entries for additional roots. The same source and resolved
 
 `projectAliases` optionally groups renamed projects (`[projectAliases]` followed by `new-name = ["old-name"]`). Overlapping groups are rejected. `dayBoundary` optionally sets the logical day boundary in local time. Unknown keys and invalid values are errors. Legacy JSON is not discovered or converted; `excludeUserMessagePatterns` is no longer a config key. show の表示除外フラグも提供しません。
 
-`--config default` selects the named config; `--config ./archive.toml` selects a path. Missing or omitted configs exit 2 with setup instructions and create neither a database nor a config.
+`--config default` selects the named config; `--config ./archive.toml` selects a path. Omitting `--config` selects `default`. Missing configs exit 2 with setup instructions and create neither a database nor a config, including for import.
 
 ## More information
 

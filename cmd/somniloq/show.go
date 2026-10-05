@@ -12,7 +12,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const showUsageLine = "somniloq show --config default REF... [--descendants] [--role user|assistant] [--messages A:B] [--since VALUE] [--until VALUE] [--day-boundary HH:MM] [--limit N] [--offset N] [--tail N] [--one-line] [--format tsv|json]"
+const showUsageLine = "somniloq show [--config NAME_OR_PATH] REF... [--descendants] [--role user|assistant] [--messages A:B] [--since VALUE] [--until VALUE] [--day-boundary HH:MM] [--limit N] [--offset N] [--tail N] [--one-line] [--format tsv|json]"
 const showHelpDetails = `Output (TSV/JSON):
   Envelope: items, total, count, limit, offset, hasMore, nextOffset.
   Each item: ref, messageNumber, role, timestamp, text, blocks, parentRef, rootRef, provenance.

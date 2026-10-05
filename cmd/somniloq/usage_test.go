@@ -27,6 +27,9 @@ func TestSetUsage(t *testing.T) {
 	if !strings.Contains(out, "somniloq search [flags]") {
 		t.Errorf("expected usage line in output, got:\n%s", out)
 	}
+	if !strings.Contains(out, "TOML configuration name or path (default: default)") {
+		t.Errorf("expected default configuration guidance, got:\n%s", out)
+	}
 	if !strings.Contains(out, "Flags:") {
 		t.Errorf("expected Flags section in output, got:\n%s", out)
 	}
@@ -59,7 +62,7 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return importCmd([]string{"--help"}, openDB, "/claude", "/codex", "/cursor", strings.NewReader(""), &bytes.Buffer{}, errOut, false)
 			},
-			want: []string{"Examples:", "Output:", "Imported <imported> files", "Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.", "somniloq import --config default --source cursor-agent", "somniloq import --config default [--source all|claude-code|codex|cursor-agent] [flags]", "source to import: all, claude-code, codex, cursor-agent"},
+			want: []string{"Examples:", "Output:", "Imported <imported> files", "Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.", "somniloq import --config default --source cursor-agent", "somniloq import [--config NAME_OR_PATH] [--source all|claude-code|codex|cursor-agent] [flags]", "source to import: all, claude-code, codex, cursor-agent"},
 		},
 		{
 			name: "show",

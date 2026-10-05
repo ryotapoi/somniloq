@@ -10,7 +10,7 @@ v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定
 
 source（DB 内部値は `claude_code` / `codex` / `cursor_agent`）ごとに専用の adapter で取り込む。共通の正規化スキーマ（`sessions` / `messages`）に保存する点は共通だが、ファイル配置・レコード形式・差分検出キーは source ごとに異なる。
 
-`somniloq import --config NAME_OR_PATH` は設定の全入力を同じ SQLite DB に取り込む。`--input PATH` は繰り返し指定でき、その OR 条件と `--source all|claude-code|codex|cursor-agent` の交差で対象を選ぶ。input path は設定の root と同じ基準で正規化する。同じ source と実体 root の重複設定は一回だけ走査し、未存在 root は0件とする。
+`somniloq import [--config NAME_OR_PATH]` は設定の全入力を同じ SQLite DB に取り込む。`--input PATH` は繰り返し指定でき、その OR 条件と `--source all|claude-code|codex|cursor-agent` の交差で対象を選ぶ。input path は設定の root と同じ基準で正規化する。同じ source と実体 root の重複設定は一回だけ走査し、未存在 root は0件とする。
 
 #### エラー処理と取り込みサマリ（source 共通）
 
@@ -68,7 +68,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 旧履歴の移行（migrate）
 
-`somniloq migrate --config NAME_OR_PATH --from PATH` で、既知の旧形式 `legacy-v013` の固定 standalone snapshot を設定の `db` へコピーする。両フラグ必須、位置引数なし。移行先は未存在または revision 0 のユーザー object のない空 DB とし、設定には移行先 DB と残存 Codex ログの全入力を指定する。元と先の同一実体、元の sidecar、未知形状は拒否する。元 snapshot は変更しない。
+`somniloq migrate [--config NAME_OR_PATH] --from PATH` で、既知の旧形式 `legacy-v013` の固定 standalone snapshot を設定の `db` へコピーする。`--from` は必須、`--config` 省略時は default、位置引数なし。移行先は未存在または revision 0 のユーザー object のない空 DB とし、設定には移行先 DB と残存 Codex ログの全入力を指定する。元と先の同一実体、元の sidecar、未知形状は拒否する。元 snapshot は変更しない。
 
 初回コピーを一つの transaction で確定し、入力不明の旧履歴を legacy namespace で保持する。その後、設定の全 Codex 入力から物理行の UUID 出自と本人帰属を別々に確認し、本人 group の全文保存と同じ transaction で証明できた旧行だけを除く。未解析・競合・読み取りや保存失敗では旧行・前回正常会話・cursor を保持し、独立 group は続行する。ログ欠落、所属不明、Claude Code / Cursor Agent の旧履歴を保持する。
 
@@ -93,7 +93,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 内容表示（show）
 
-`show --config NAME_OR_PATH REF... [--descendants] [--role user|assistant] [--messages A:B] [--since VALUE] [--until VALUE] [--day-boundary HH:MM] [--limit N] [--offset N] [--tail N] [--one-line] [--format tsv|json]`。フラグは REF の前後に置ける。
+`show [--config NAME_OR_PATH] REF... [--descendants] [--role user|assistant] [--messages A:B] [--since VALUE] [--until VALUE] [--day-boundary HH:MM] [--limit N] [--offset N] [--tail N] [--one-line] [--format tsv|json]`。フラグは REF の前後に置ける。
 
 - 完全 REF は最低一つ必要。全 REF を同じ read snapshot で先に検証し、一件でも不正・不存在なら stdout 空の exit 2。裸 ID・短縮 REF は受理しない。
 - REF の指定順に本人会話を選び、`--descendants` は確定子孫だけを親先行 DFS・兄弟 REF 辞書順で展開する。会話は初出だけを採用し、root 所属だけで直接親不明の子や祖先は含めない。各会話の保存済み発言番号順の列を連結する。
@@ -109,11 +109,11 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 検索（search）
 
-- `search --config NAME_OR_PATH` は session 指定の有無で全一致詳細とまとまり一覧を選ぶ。デフォルトは `tsv`。フラグは位置 pattern/query より前に置く
+- `search [--config NAME_OR_PATH]` は session 指定の有無で全一致詳細とまとまり一覧を選ぶ。デフォルトは `tsv`。フラグは位置 pattern/query より前に置く
 
 #### 詳細検索（--session REF）
 
-`search --config NAME_OR_PATH --session REF [-e PATTERN]... [-F] [--all] [--limit N] [--offset N] [--format tsv|json] [PATTERN]`。位置 PATTERN が先頭、その後は -e の指定順で pattern 列を作る。フラグは位置 PATTERN より前に置く。
+`search [--config NAME_OR_PATH] --session REF [-e PATTERN]... [-F] [--all] [--limit N] [--offset N] [--format tsv|json] [PATTERN]`。位置 PATTERN が先頭、その後は -e の指定順で pattern 列を作る。フラグは位置 PATTERN より前に置く。
 
 - Go regexp の大小文字区別が既定、`(?i)` を受理し、`-F` は全 pattern を固定文字列にする。既定 OR、`--all` は対象本文集合全体で各 pattern が一度以上一致する AND。不成立は0箇所、成立時は全 pattern の一致を返す。空・無効・欠落 pattern は DB query 前に exit 2。
 - `--session REF` は指定本人と確定直接親を辿る子孫だけを対象とする。祖先・兄弟・root 所属だけの子は含めない。完全 REF の不正・不存在は exit 2、stdout 空。入力・source を跨いで接続せず、ページ化前に絞る。本人 show と core の関係 resolver を共有する。
@@ -125,7 +125,7 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 #### まとまり一覧（--session なし）
 
-`search --config NAME_OR_PATH [PATTERN] [-e PATTERN...] [-F] [--all] [--input PATH...] [--source SOURCE...] [--project TEXT] [--since VALUE] [--until VALUE] [--time-mode active|started|last|overlap] [--imported-since RFC3339] [--day-boundary HH:MM] [--limit N] [--offset N] [--format tsv|json]`。フラグは位置 PATTERN より前に置く。pattern は省略でき、全候補を一覧にする。空・無効 pattern は exit 2。照合器と OR/AND の意味は詳細と共通で、親子に別 pattern があっても同じまとまり内の候補で AND を満たせる。
+`search [--config NAME_OR_PATH] [PATTERN] [-e PATTERN...] [-F] [--all] [--input PATH...] [--source SOURCE...] [--project TEXT] [--since VALUE] [--until VALUE] [--time-mode active|started|last|overlap] [--imported-since RFC3339] [--day-boundary HH:MM] [--limit N] [--offset N] [--format tsv|json]`。フラグは位置 PATTERN より前に置く。pattern は省略でき、全候補を一覧にする。空・無効 pattern は exit 2。照合器と OR/AND の意味は詳細と共通で、親子に別 pattern があっても同じまとまり内の候補で AND を満たせる。
 
 - input/source/project で候補本人を選び、その本文だけを照合して保存関係でまとまりに集約する。input/source は各 OR、条件種間は AND。source は `claude-code|codex|cursor-agent` の3種のみ、all は拒否。input は設定の実体親を基準に path を正規化し、DB の canonical root と照合する。
 - project は repo_path の末尾名への大小文字区別 substring。alias 完全一致時だけ canonical と aliases へ OR 展開する。未知 project は不一致。親を候補から除くとその本文で AND を満たさない。
@@ -155,9 +155,9 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 設定ファイル（config）
 
-全 DB コマンド（import / migrate / projects / search / show）は `--config NAME_OR_PATH` が必須。コマンド名の前でも後でも指定できる。help / version / config init は設定不要。通常コマンドの `--db` は廃止。未指定・欠落時は exit 2、stderr に不足項目と `Run somniloq config init, then use --config default.` を表示し、DB・設定を自動生成しない。旧 JSON 設定は探索・変換しない。
+全 DB コマンド（import / migrate / projects / search / show）は `--config NAME_OR_PATH` の省略を `--config default` と同じ扱いにする。コマンド名の前でも後でも指定できる。help / version / config init は設定不要。通常コマンドの `--db` は廃止。設定欠落時は exit 2、stderr に不足項目と `Run somniloq config init, then use --config default.` を表示し、DB・設定を自動生成しない。旧 JSON 設定は探索・変換しない。
 
-`config init [NAME] [--output PATH] [--db PATH]` は設定だけを作り、DB は開かない。NAME 省略時は default、名前は `[A-Za-z0-9_-]+`。既定出力は `~/.somniloq/config/NAME.toml`、既定 DB は `~/.somniloq/NAME.db`。任意出力でも NAME が既定 DB を決める。parent directory は作成し、通常ファイル・directory・symlink（dangling を含む）への上書きは exit 2 で拒否する。stdout は作成した設定の絶対 path 一行。
+`config init [NAME] [--output PATH] [--db PATH]` は設定だけを作り、DB は開かない。NAME 省略時は default、名前は `[A-Za-z0-9_-]+`。既定出力は `~/.somniloq/config/NAME.toml`、既定 DB は `~/.somniloq/NAME.db`。任意出力でも NAME が既定 DB を決める。設定宛先と参照 DB の両方が未存在の場合だけ設定を生成する。いずれかに通常ファイル・directory・symlink（dangling を含む）があれば exit 2 で拒否し、既存内容を保持する。DB の存在検査は名前の既定 DB と明示 `--db` に同じ規則を適用し、相対 DB は設定の実体親を基準に解決する。設定の parent directory は作成する。stdout は作成した設定の絶対 path 一行。
 
 ```toml
 db = "~/.somniloq/default.db"

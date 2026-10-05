@@ -22,7 +22,7 @@ somniloq search --config default "auth bug"        # 本文の語からまとま
 somniloq show --config default <REF> --messages 12:18 # 発言番号で読む
 ```
 
-全 DB コマンドで `--config NAME_OR_PATH` が必須。コマンド名の前でも後でも指定できる。search のフラグは検索語より前に置く。`search` の完全 `slq1:...` REF は、別入力にある同名セッション ID も区別する。そのまま `show` に渡す。裸 ID・短縮 REF は受理しない。
+全 DB コマンドで `--config NAME_OR_PATH` 省略時は `default` を使う。コマンド名の前でも後でも指定できる。search のフラグは検索語より前に置く。`search` の完全 `slq1:...` REF は、別入力にある同名セッション ID も区別する。そのまま `show` に渡す。裸 ID・短縮 REF は受理しない。
 
 ## コマンド
 
@@ -71,7 +71,7 @@ POSIX sh で実行する例です（対話 zsh でも `sh` が実行します）
 
 ## 設定
 
-`somniloq config init [NAME] [--output PATH] [--db PATH]` の既定名は `default`、出力は `~/.somniloq/config/NAME.toml`、DB は `~/.somniloq/NAME.db`。parent directory を作成し、symlink を含む既存宛先への上書きを拒否する。stdout は設定の絶対 path 一行。`--db` は init だけで利用できる。
+`somniloq config init [NAME] [--output PATH] [--db PATH]` の既定名は `default`、出力は `~/.somniloq/config/NAME.toml`、DB は `~/.somniloq/NAME.db`。設定宛先と参照 DB の両方が未存在の場合だけ設定を生成する。いずれかに通常ファイル・directory・symlink（dangling を含む）があれば拒否し、既存内容を保持する。名前の既定 DB と明示 `--db` に同じ存在判定を適用し、相対 DB は設定の実体親を基準に解決する。設定の parent directory を作成し、DB は作成しない。stdout は設定の絶対 path 一行。`--db` は init だけで利用できる。
 
 生成する設定には次の3入力がある。
 
@@ -99,7 +99,7 @@ root = "~/.cursor/projects"
 
 任意の `projectAliases` は改名したプロジェクトをまとめる（`[projectAliases]` の下に `new-name = ["old-name"]`）。グループの重複は拒否する。任意の `dayBoundary` はローカル時刻で論理日の開始を指定する。未知キー・不正値はエラー。旧 JSON は探索・変換せず、`excludeUserMessagePatterns` は設定キーとして受理しない。show の表示除外フラグも提供しない。
 
-`--config default` は設定名、`--config ./archive.toml` は path 指定。設定の未指定・欠落は exit 2 と作成案内を返し、DB・設定を自動生成しない。
+`--config default` は設定名、`--config ./archive.toml` は path 指定。`--config` 省略時は `default` を選ぶ。設定欠落は import を含め exit 2 と作成案内を返し、DB・設定を自動生成しない。
 
 ## 詳細
 

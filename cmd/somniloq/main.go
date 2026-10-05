@@ -54,7 +54,7 @@ func runCommand(args []string, in io.Reader, out, errOut io.Writer, isTTY bool) 
 		}
 	}()
 	fs := flag.NewFlagSet("somniloq", flag.ContinueOnError)
-	cfgValue := fs.String("config", "", "TOML configuration name or path (required for DB commands)")
+	cfgValue := fs.String("config", "default", "TOML configuration name or path")
 	version := fs.Bool("version", false, "print version and exit")
 	fs.SetOutput(errOut)
 	fs.Usage = func() { fmt.Fprint(errOut, topLevelUsage); fs.PrintDefaults() }

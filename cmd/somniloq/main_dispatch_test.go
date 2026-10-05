@@ -10,12 +10,13 @@ import (
 	"testing"
 )
 
-func TestMainDispatchRequiresExplicitConfig(t *testing.T) {
+func TestMainDispatchMissingDefaultConfig(t *testing.T) {
 	home := t.TempDir()
-	for _, command := range []string{"import", "search", "show", "projects"} {
+	for _, command := range []string{"import", "migrate", "search", "show", "projects"} {
 		code, stdout, stderr := runSomniloqMain(t, home, command)
-		if code != 2 || stdout != "" || !strings.Contains(stderr, "Run somniloq config init, then use --config default.") {
-			t.Fatalf("%s: %d %q %q", command, code, stdout, stderr)
+		explicitCode, explicitOut, explicitErr := runSomniloqMain(t, home, command, "--config", "default")
+		if code != 2 || stdout != "" || !strings.Contains(stderr, "missing config") || !strings.Contains(stderr, configSetupHint) || code != explicitCode || stdout != explicitOut || stderr != explicitErr {
+			t.Fatalf("%s: omitted=%d %q %q explicit=%d %q %q", command, code, stdout, stderr, explicitCode, explicitOut, explicitErr)
 		}
 	}
 	if _, err := os.Stat(filepath.Join(home, ".somniloq")); !os.IsNotExist(err) {
@@ -24,7 +25,7 @@ func TestMainDispatchRequiresExplicitConfig(t *testing.T) {
 }
 
 func TestMainDispatchHelpAndVersionWithoutConfig(t *testing.T) {
-	for _, command := range []string{"import", "show", "search", "projects"} {
+	for _, command := range []string{"import", "migrate", "show", "search", "projects"} {
 		code, _, stderr := runSomniloqMain(t, t.TempDir(), command, "--help")
 		if code != 0 || !strings.Contains(stderr, "Usage:") {
 			t.Fatalf("%s help: %d %q", command, code, stderr)
@@ -46,7 +47,7 @@ func TestMainDispatchConfigInitAndPlacement(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(home, ".somniloq", "default.db")); !os.IsNotExist(err) {
 		t.Fatalf("init created DB: %v", err)
 	}
-	for _, args := range [][]string{{"import", "--config", "default"}, {"--config", configPath, "import"}} {
+	for _, args := range [][]string{{"import"}, {"import", "--config", "default"}, {"--config", configPath, "import"}} {
 		code, stdout, stderr = runSomniloqMain(t, home, args...)
 		if code != 0 || !strings.Contains(stdout, "Imported 0 files") {
 			t.Fatalf("%v: %d %q %q", args, code, stdout, stderr)
@@ -149,5 +150,34 @@ func TestMainDispatchRejectsSessions(t *testing.T) {
 	code, _, stderr := runSomniloqMain(t, t.TempDir(), "--help")
 	if code != 0 || strings.Contains(stderr, "  sessions ") || !strings.Contains(stderr, "  search ") {
 		t.Fatalf("top-level help: %d %q", code, stderr)
+	}
+}
+
+func TestMainDispatchDefaultEquivalence(t *testing.T) {
+	home := t.TempDir()
+	code, _, stderr := runSomniloqMain(t, home, "config", "init")
+	if code != 0 {
+		t.Fatal(stderr)
+	}
+	code, _, stderr = runSomniloqMain(t, home, "import")
+	if code != 0 {
+		t.Fatal(stderr)
+	}
+	for _, args := range [][]string{{"import"}, {"projects"}, {"search", "--format", "json"}, {"show", "bare"}, {"migrate"}} {
+		code, stdout, stderr := runSomniloqMain(t, home, args...)
+		explicit := append([]string{"--config", "default"}, args...)
+		explicitCode, explicitOut, explicitErr := runSomniloqMain(t, home, explicit...)
+		if code != explicitCode || stdout != explicitOut || stderr != explicitErr || strings.Contains(stderr, "missing config") {
+			t.Fatalf("%v: omitted=%d %q %q explicit=%d %q %q", args, code, stdout, stderr, explicitCode, explicitOut, explicitErr)
+		}
+		if args[0] == "migrate" && !strings.Contains(stderr, "missing --from") {
+			t.Fatalf("migrate did not reach argument validation: %q", stderr)
+		}
+	}
+	for _, args := range [][]string{{"search", "--config="}, {"--config=", "search"}, {"search", "--config"}} {
+		code, stdout, _ := runSomniloqMain(t, home, args...)
+		if code != 2 || stdout != "" {
+			t.Fatalf("%v: code=%d stdout=%q", args, code, stdout)
+		}
 	}
 }

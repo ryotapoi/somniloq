@@ -10,7 +10,7 @@ import (
 func setUsage(fs *flag.FlagSet, description, usage, details string) {
 	fs.Usage = func() {
 		fmt.Fprintf(fs.Output(), "%s\n\nUsage:\n  %s\n\nFlags:\n", description, usage)
-		fmt.Fprintln(fs.Output(), "  -config NAME_OR_PATH\n    \tTOML configuration name or path (required for DB commands)")
+		fmt.Fprintln(fs.Output(), "  -config NAME_OR_PATH\n    \tTOML configuration name or path (default: default)")
 		fs.PrintDefaults()
 		fmt.Fprintf(fs.Output(), "\n%s\n", details)
 	}
