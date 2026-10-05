@@ -113,6 +113,8 @@ func TestSearchDetailFixture(t *testing.T) {
 		total int
 	}{
 		{[]string{"--source", "cursor-agent"}, 0},
+		{[]string{"--imported-since", "9999-01-01T00:00:00Z"}, 0},
+		{[]string{"--time-mode", "active", "--since", "2026-10-02"}, 0},
 		{[]string{"--input", filepath.Join(base, "codex/input-b")}, 0},
 		{[]string{"--project", "fixtures"}, 0},
 		{[]string{"--source", "codex", "--input", root, "--project", "project"}, 2},

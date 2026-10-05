@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
@@ -39,6 +40,7 @@ func TestSearchListPages(t *testing.T) {
 		next                        *int
 	}{
 		{nil, 25, 20, 20, 0, true, newInt(20)}, {[]string{"--limit", "2", "--offset", "20"}, 25, 2, 2, 20, true, newInt(22)}, {[]string{"--limit", "0"}, 25, 0, 0, 0, true, nil}, {[]string{"--offset", "25"}, 25, 0, 20, 25, false, nil}, {[]string{"--offset", "99"}, 25, 0, 20, 99, false, nil}, {[]string{"--project", "missing"}, 0, 0, 20, 0, false, nil},
+		{[]string{"--time-mode", "last", "--since", "2026-10-01T00:20:00Z", "--limit", "2", "--offset", "1"}, 5, 2, 2, 1, true, newInt(3)},
 	} {
 		t.Run(fmt.Sprint(c.flags), func(t *testing.T) {
 			var out, diag bytes.Buffer
@@ -81,7 +83,7 @@ func TestSearchListPages(t *testing.T) {
 	}
 }
 func TestSearchListValidationBeforeDB(t *testing.T) {
-	for _, args := range [][]string{{""}, {"(?=foo)"}, {"--limit", "-1"}, {"--offset", "-1"}, {"--format", "xml"}, {"--source", "all"}, {"--source", "claude_code"}, {"--input", ""}, {"--day-boundary", "25:00"}, {"--since", "bad"}, {"--all", "-e", ""}, {"one", "two"}, {"--unknown"}} {
+	for _, args := range [][]string{{""}, {"(?=foo)"}, {"--limit", "-1"}, {"--offset", "-1"}, {"--format", "xml"}, {"--source", "all"}, {"--source", "claude_code"}, {"--input", ""}, {"--day-boundary", "25:00"}, {"--since", "bad"}, {"--all", "-e", ""}, {"one", "two"}, {"--unknown"}, {"--time-mode", "bad"}, {"--time-mode", "active"}, {"--time-mode", ""}, {"--since", ""}, {"--until", ""}, {"--day-boundary", ""}, {"--imported-since", ""}, {"--since", "7d"}, {"--since", "2026-10-01T12:00"}, {"--imported-since", "2026-10-01"}, {"--imported-since", "bad"}, {"--since", "2026-10-02", "--until", "2026-10-01"}, {"--since", "2026-10-01T00:00:00Z", "--until", "2026-10-01T00:00:00Z"}, {"--session", "REF", "--time-mode", "last", "--since", "2026-10-01", "needle"}} {
 		var out, diag bytes.Buffer
 		code, _ := searchCmd(args, func() (*core.DB, error) { t.Fatal("DB opened", args); return nil, nil }, config{}, &out, &diag)
 		if code != 2 || out.Len() != 0 {
@@ -97,5 +99,32 @@ func TestSearchListTSVNullAndArrays(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "r\t\\N\tcodex\t\\N\t\\N\t\\N\t\\N\t\\N\t[\"r\"]\t[\"r\"]\t1\n") {
 		t.Fatal(out.String())
+	}
+}
+
+func TestSearchTimeParsingAndBoundaryOverride(t *testing.T) {
+	old := time.Local
+	time.Local = time.FixedZone("fixture", 9*60*60)
+	defer func() { time.Local = old }()
+	for _, c := range []struct {
+		args         []string
+		since, until string
+	}{
+		{[]string{"--since", "2026-10-01", "--until", "2026-10-01"}, "2026-09-30T19:00:00Z", "2026-10-01T19:00:00Z"},
+		{[]string{"--since", "2026-10-01", "--until", "2026-10-01", "--day-boundary", "06:00"}, "2026-09-30T21:00:00Z", "2026-10-01T21:00:00Z"},
+		{[]string{"--since", "2026-10-01T09:00:00.000000001+09:00", "--until", "2026-10-01T00:00:00.000000002Z"}, "2026-10-01T00:00:00.000000001Z", "2026-10-01T00:00:00.000000002Z"},
+	} {
+		fs, f := newSearchFlagSet()
+		if err := fs.Parse(c.args); err != nil {
+			t.Fatal(err)
+		}
+		boundary, err := resolveDayBoundary(*f.dayBoundary, config{DayBoundary: "04:00"})
+		if err != nil {
+			t.Fatal(err)
+		}
+		filter, err := buildSearchFilter(fs, f, boundary, false)
+		if err != nil || filter.Since != c.since || filter.Until != c.until {
+			t.Fatal(filter, err)
+		}
 	}
 }

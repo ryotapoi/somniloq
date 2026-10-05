@@ -11,9 +11,10 @@ import (
 
 // SearchCandidates selects saved owners before their bodies are read or matched.
 type SearchCandidates struct {
-	Inputs   []string
-	Sources  []Source
-	Projects []string
+	Inputs        []string
+	Sources       []Source
+	Projects      []string
+	ImportedSince string
 }
 
 type SearchGroup struct {
@@ -37,6 +38,16 @@ type searchOwner struct {
 }
 
 func (c SearchCandidates) accepts(s searchOwner) bool {
+	if c.ImportedSince != "" {
+		if s.imported == nil {
+			return false
+		}
+		imported, err := time.Parse(time.RFC3339Nano, *s.imported)
+		lower, lowerErr := time.Parse(time.RFC3339Nano, c.ImportedSince)
+		if err != nil || lowerErr != nil || imported.Before(lower) {
+			return false
+		}
+	}
 	if len(c.Inputs) > 0 {
 		found := false
 		for _, p := range c.Inputs {
@@ -190,7 +201,7 @@ func (d *DB) candidateBodies(owners []searchOwner, filter SessionFilter) ([]sear
 
 // SearchGroups returns the complete filtered group set. The caller pages only
 // after this read, within the same ReadSnapshot used for all related data.
-func (d *DB) SearchGroups(candidates SearchCandidates, filter SessionFilter, matcher *PatternMatcher, all bool) ([]SearchGroup, error) {
+func (d *DB) SearchGroups(candidates SearchCandidates, filter SessionFilter, matcher *PatternMatcher, all bool, mode string) ([]SearchGroup, error) {
 	owners, err := d.searchOwners()
 	if err != nil {
 		return nil, err
@@ -212,7 +223,11 @@ func (d *DB) SearchGroups(candidates SearchCandidates, filter SessionFilter, mat
 	}
 	bodies := []searchBody{}
 	if matcher != nil || filter.Since != "" || filter.Until != "" {
-		bodies, err = d.candidateBodies(selected, filter)
+		bodyFilter := filter
+		if mode != "active" {
+			bodyFilter = SessionFilter{}
+		}
+		bodies, err = d.candidateBodies(selected, bodyFilter)
 		if err != nil {
 			return nil, err
 		}
@@ -268,11 +283,14 @@ func (d *DB) SearchGroups(candidates SearchCandidates, filter SessionFilter, mat
 				}
 			}
 		}
+		if !searchGroupInPeriod(item, filter, mode) {
+			continue
+		}
 		if len(item.MatchedMembers) == 0 {
 			continue
 		}
 		if matcher == nil {
-			if (filter.Since != "" || filter.Until != "") && !hasBody {
+			if mode == "active" && (filter.Since != "" || filter.Until != "") && !hasBody {
 				continue
 			}
 		} else {
@@ -316,4 +334,38 @@ func (d *DB) SearchGroups(candidates SearchCandidates, filter SessionFilter, mat
 		result = append(result, g.item)
 	}
 	return result, nil
+}
+
+func searchGroupInPeriod(item SearchGroup, filter SessionFilter, mode string) bool {
+	if mode == "active" || filter.Since == "" && filter.Until == "" {
+		return true
+	}
+	if item.StartedAt == nil || item.LastAt == nil {
+		return false
+	}
+	start, _ := time.Parse(time.RFC3339Nano, *item.StartedAt)
+	last, _ := time.Parse(time.RFC3339Nano, *item.LastAt)
+	lowerTime, upperTime := start, start
+	switch mode {
+	case "started":
+	case "last":
+		lowerTime, upperTime = last, last
+	case "overlap":
+		lowerTime, upperTime = last, start
+	default:
+		return false
+	}
+	if filter.Since != "" {
+		lower, _ := time.Parse(time.RFC3339Nano, filter.Since)
+		if lowerTime.Before(lower) {
+			return false
+		}
+	}
+	if filter.Until != "" {
+		upper, _ := time.Parse(time.RFC3339Nano, filter.Until)
+		if !upperTime.Before(upper) {
+			return false
+		}
+	}
+	return true
 }

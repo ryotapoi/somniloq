@@ -1,6 +1,7 @@
 package core
 
 import (
+	"fmt"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -53,7 +54,7 @@ func TestSearchGroupsCandidatesAndMetadata(t *testing.T) {
 			must(t, err)
 		}
 		var items []SearchGroup
-		must(t, db.ReadSnapshot(func(s *DB) error { items, err = s.SearchGroups(c, filter, matcher, all); return err }))
+		must(t, db.ReadSnapshot(func(s *DB) error { items, err = s.SearchGroups(c, filter, matcher, all, "active"); return err }))
 		return items
 	}
 	items := query(SearchCandidates{}, SessionFilter{}, nil, false)
@@ -120,7 +121,7 @@ func TestSearchGroupsSnapshotConsistentWithWriter(t *testing.T) {
 	must(t, err)
 	defer writer.Close()
 	must(t, db.ReadSnapshot(func(snapshot *DB) error {
-		before, e := snapshot.SearchGroups(SearchCandidates{}, SessionFilter{}, nil, false)
+		before, e := snapshot.SearchGroups(SearchCandidates{}, SessionFilter{}, nil, false, "active")
 		if e != nil {
 			return e
 		}
@@ -128,7 +129,7 @@ func TestSearchGroupsSnapshotConsistentWithWriter(t *testing.T) {
 		if e != nil {
 			return e
 		}
-		after, e := snapshot.SearchGroups(SearchCandidates{}, SessionFilter{}, nil, false)
+		after, e := snapshot.SearchGroups(SearchCandidates{}, SessionFilter{}, nil, false, "active")
 		if e != nil {
 			return e
 		}
@@ -137,9 +138,92 @@ func TestSearchGroupsSnapshotConsistentWithWriter(t *testing.T) {
 		}
 		return nil
 	}))
-	after, err := db.SearchGroups(SearchCandidates{}, SessionFilter{}, nil, false)
+	after, err := db.SearchGroups(SearchCandidates{}, SessionFilter{}, nil, false, "active")
 	must(t, err)
 	if len(after) != 1 {
 		t.Fatal(after)
+	}
+}
+
+func TestSearchGroupsActivityModesAndImportCandidates(t *testing.T) {
+	db := testDB(t)
+	key := strings.Repeat("e", 64)
+	_, err := db.db.Exec(`INSERT INTO inputs(id,input_key,source,root) VALUES(1,?,'codex','/fixture')`, key)
+	must(t, err)
+	for _, s := range []struct{ id, parent, project, imported string }{
+		{"root", "", "/work/Parent", "2026-10-01T00:00:00Z"},
+		{"child", "root", "/work/Child", "2026-10-02T00:00:00.000000001Z"},
+		{"grand", "child", "/work/Child", "2026-10-02T09:00:00.000000001+09:00"},
+		{"unknown", "", "/work/Child", "bad"}, {"empty", "", "/work/Child", "2026-10-02T00:00:00Z"},
+	} {
+		identity := `["` + s.id + `"]`
+		parent := ""
+		if s.parent != "" {
+			parent = `["` + s.parent + `"]`
+		}
+		_, err = db.db.Exec(`INSERT INTO sessions(input_id,source,identity,session_id,parent_identity,repo_path,imported_at) VALUES(1,'codex',?,?,?,?,?)`, identity, s.id, parent, s.project, s.imported)
+		must(t, err)
+	}
+	for i, m := range []struct{ id, content, stamp string }{
+		{"root", "alpha", "2026-10-01T09:00:00+09:00"},
+		{"child", "beta", "2026-10-03T00:00:00.000000001Z"},
+		{"child", "unknown needle", ""},
+		{"grand", "gamma", "2026-10-05T00:00:00Z"},
+		{"unknown", "alpha beta", "bad"},
+	} {
+		identity := `["` + m.id + `"]`
+		_, err = db.db.Exec(`INSERT INTO messages(input_id,source,identity,session_id,uuid,role,content,timestamp,number) VALUES(1,'codex',?,?,?,'user',?,?,?)`, identity, m.id, fmt.Sprint(i), m.content, m.stamp, i+1)
+		must(t, err)
+	}
+	for _, c := range []struct {
+		name, mode, since, until string
+		candidates               SearchCandidates
+		patterns                 []string
+		all                      bool
+		want                     int
+	}{
+		{name: "unbounded retains empty and unknown", mode: "active", want: 3},
+		{name: "active gap", mode: "active", since: "2026-10-02T00:00:00Z", until: "2026-10-03T00:00:00Z", want: 0},
+		{name: "overlap gap", mode: "overlap", since: "2026-10-02T00:00:00Z", until: "2026-10-03T00:00:00Z", want: 1},
+		{name: "started lower included", mode: "started", since: "2026-10-01T00:00:00Z", until: "2026-10-02T00:00:00Z", want: 1},
+		{name: "started upper excluded", mode: "started", until: "2026-10-01T00:00:00Z", want: 0},
+		{name: "last grandchild lower included", mode: "last", since: "2026-10-05T00:00:00Z", want: 1},
+		{name: "last upper excluded", mode: "last", until: "2026-10-05T00:00:00Z", want: 0},
+		{name: "active nanos excluded", mode: "active", since: "2026-10-03T00:00:00Z", until: "2026-10-03T00:00:00.000000001Z", want: 0},
+		{name: "active nanos included", mode: "active", since: "2026-10-03T00:00:00.000000001Z", until: "2026-10-03T00:00:00.000000002Z", want: 1},
+		{name: "active AND outside period", mode: "active", since: "2026-10-03T00:00:00Z", patterns: []string{"alpha", "beta"}, all: true, want: 0},
+		{name: "started AND across members", mode: "started", until: "2026-10-02T00:00:00Z", patterns: []string{"alpha", "beta"}, all: true, want: 1},
+		{name: "nonactive unknown body", mode: "overlap", since: "2026-10-02T00:00:00Z", patterns: []string{"unknown needle"}, want: 1},
+		{name: "active unknown body", mode: "active", since: "2026-10-02T00:00:00Z", patterns: []string{"unknown needle"}, want: 0},
+		{name: "child only project uses whole dates", mode: "started", until: "2026-10-02T00:00:00Z", candidates: SearchCandidates{Projects: []string{"Child"}}, want: 1},
+		{name: "import boundary child only", mode: "active", candidates: SearchCandidates{ImportedSince: "2026-10-02T00:00:00.000000001Z"}, want: 1},
+		{name: "import excludes parent AND", mode: "active", candidates: SearchCandidates{ImportedSince: "2026-10-02T00:00:00.000000001Z"}, patterns: []string{"alpha", "beta"}, all: true, want: 0},
+		{name: "import and project intersect", mode: "active", candidates: SearchCandidates{ImportedSince: "2026-10-02T00:00:00.000000001Z", Projects: []string{"Parent"}}, want: 0},
+		{name: "overlap lower touching", mode: "overlap", since: "2026-10-05T00:00:00Z", want: 1},
+		{name: "overlap upper touching", mode: "overlap", until: "2026-10-01T00:00:00Z", want: 0},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			var matcher *PatternMatcher
+			if len(c.patterns) > 0 {
+				matcher, err = CompilePatterns(c.patterns, false)
+				must(t, err)
+			}
+			items, e := db.SearchGroups(c.candidates, SessionFilter{Since: c.since, Until: c.until}, matcher, c.all, c.mode)
+			must(t, e)
+			if len(items) != c.want {
+				t.Fatalf("got %+v, want %d groups", items, c.want)
+			}
+			if len(items) == 1 {
+				g := items[0]
+				if g.MemberCount != 3 || *g.StartedAt != "2026-10-01T09:00:00+09:00" || *g.LastAt != "2026-10-05T00:00:00Z" || *g.ImportedAt != "2026-10-02T00:00:00.000000001Z" {
+					t.Fatal(g)
+				}
+				if c.candidates.ImportedSince != "" || len(c.candidates.Projects) > 0 {
+					if len(g.MatchedMembers) != 2 {
+						t.Fatal(g)
+					}
+				}
+			}
+		})
 	}
 }

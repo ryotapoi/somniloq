@@ -40,7 +40,7 @@ func searchDetailCmd(fs *flag.FlagSet, f searchFlags, openDB func() (*core.DB, e
 	if err != nil {
 		return 2, err
 	}
-	filter, err := buildSessionFilter(*f.since, *f.until, "", cfg, boundary)
+	filter, err := buildSearchFilter(fs, f, boundary, true)
 	if err != nil {
 		return 2, err
 	}

@@ -2,7 +2,7 @@
 
 本書が CLI 仕様・コマンド挙動・スキーマの正。README.md / README.ja.md は本書の派生ビューなので、本書のこれらの記述を変更したら README 両方を同期する。
 
-v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF と専用 migrate は利用できる。共通 resolver による関係解決と、複数 REF・確定子孫・発言フィルタ・ページ・TSV/JSON による show 原文取得は利用できる。まとまり一覧と共通 regexp の全一致詳細 search は利用できる。新日時 mode は後続実装。以下は現在利用できる CLI の仕様。
+v0.14.0 の [確定契約](../specs/v0.14.0-contract.md) のうち、TOML 設定・複数入力・Codex・Claude Code の本人と直接親の保存・各本人会話の完全 REF と専用 migrate は利用できる。共通 resolver による関係解決と、複数 REF・確定子孫・発言フィルタ・ページ・TSV/JSON による show 原文取得は利用できる。まとまり一覧と共通 regexp の全一致詳細 search は利用できる。活動日4 mode と取り込み日時による候補選択を利用できる。以下は現在利用できる CLI の仕様。
 
 ## 主要機能
 
@@ -138,11 +138,11 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - matchText は一致原文、lineText は一致の先頭・末尾を含む行全体。LF は直前の行に属し、非空一致の末尾は endByte-1 の行まで含む。ゼロ幅は startByte の行、本文末尾は末尾行（末尾 LF の後なら空行）。行末 LF 自体は lineText に含めないが複数行の途中 LF は保持する。
 - JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`。item は `ref,messageNumber,occurrenceNumber,role,timestamp,startByte,endByte,patternIndexes,matchText,lineText` を常に返す。日時は raw 値、未知は null。TSV は同じ列順、先頭 `# page` metadata、可逆 escape を show と共有する。
 - 既定は全件（limit=null/offset=0）。明示 limit/offset だけ箇所単位で page 化する。limit=0 の hasMore は offset<total、nextOffset=null。末尾超過も page 前 total を返す。REF 解決・本文・件数は同じ read snapshot。
-- 負の limit/offset、不正・不存在 REF、pattern エラーは stdout 空の exit 2。下記と同じ input/source/project 候補条件、発言 timestamp 条件を先に適用して AND を判定する。期間なしでは未知日時を保持する。新日時 mode は後続実装。
+- 負の limit/offset、不正・不存在 REF、pattern エラーは stdout 空の exit 2。下記と同じ input/source/project 候補条件、発言 timestamp 条件を先に適用して AND を判定する。期間なしでは未知日時を保持する。日時入力は下記と共通で、詳細の --time-mode は active のみ受理する。started/last/overlap は一覧専用として exit 2 で拒否する。明示 active も期間指定を必要とする。
 
 #### まとまり一覧（--session なし）
 
-`search --config NAME_OR_PATH [PATTERN] [-e PATTERN...] [-F] [--all] [--input PATH...] [--source SOURCE...] [--project TEXT] [--since VALUE] [--until VALUE] [--day-boundary HH:MM] [--limit N] [--offset N] [--format tsv|json]`。フラグは位置 PATTERN より前に置く。pattern は省略でき、全候補を一覧にする。空・無効 pattern は exit 2。照合器と OR/AND の意味は詳細と共通で、親子に別 pattern があっても同じまとまり内の候補で AND を満たせる。
+`search --config NAME_OR_PATH [PATTERN] [-e PATTERN...] [-F] [--all] [--input PATH...] [--source SOURCE...] [--project TEXT] [--since VALUE] [--until VALUE] [--time-mode active|started|last|overlap] [--imported-since RFC3339] [--day-boundary HH:MM] [--limit N] [--offset N] [--format tsv|json]`。フラグは位置 PATTERN より前に置く。pattern は省略でき、全候補を一覧にする。空・無効 pattern は exit 2。照合器と OR/AND の意味は詳細と共通で、親子に別 pattern があっても同じまとまり内の候補で AND を満たせる。
 
 - input/source/project で候補本人を選び、その本文だけを照合して保存関係でまとまりに集約する。input/source は各 OR、条件種間は AND。source は `claude-code|codex|cursor-agent` の3種のみ、all は拒否。input は設定の実体親を基準に path を正規化し、DB の canonical root と照合する。
 - project は repo_path の末尾名への大小文字区別 substring。alias 完全一致時だけ canonical と aliases へ OR 展開する。未知 project は不一致。親を候補から除くとその本文で AND を満たさない。
@@ -152,7 +152,9 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`、既定 limit=20。全 filter 後・page 前のまとまり数が total、items 数が count。明示 limit=0 は空ページ、hasMore は offset<total、nextOffset は null。offset は0以上、末尾超過も total を返す。結果0件も items=[] で成功 exit 0。入力エラーは stdout 空で exit 2。
 - TSV は先頭 `# page\t` の後に items を除く compact JSON、一行 header、item ごと一行。列順は上記 field 順。null は `\N`、配列は compact JSON、文字列は show/詳細と同じ可逆 escape。
 - 件数・項目・関係・metadata は同じ read snapshot。照合前に limit を適用しない。DB 変更を跨ぐ別ページの固定は保証しない。
-- 暫定日時条件は一覧・詳細とも従来の発言 timestamp filter。relative/local date/datetime/RFC3339 を受理し、date-only は dayBoundary で解釈する。until の日付は翌日の境界が上限。不正/未知時刻は期間に一致しない。pattern なしの期間一覧も対象発言が必要。表示日時と整列は期間外も含む全 group の本人原文日時を使う。time-mode と新日時入力は後続タスク。
+- `--since` / `--until` は日付または zone 付き RFC3339 / RFC3339Nano。相対時刻・zone なし日時・空値は exit 2。日付は設定 dayBoundary（既定00:00、CLI --day-boundary が上書き）を起点にし、until 日付は翌日の境界へ進める。下限包含・上限排他で、小数秒と offset の instant を保つ。since >= until、不正 mode、不正 dayBoundary を拒否する。
+- `--time-mode` は active（既定）/started/last/overlap。明示 mode は期間指定を必要とする。active は候補の期間内実発言だけで OR/AND を判定し、pattern なしでも対象発言が必要。started/last は全 members の既知本人原文日時の最小/最大で期間選択し、候補全文を照合する。overlap は last >= since && start < until（未指定側は無限）で選び、期間内実発言なしでも跨ぐまとまりを含める。他 mode の照合では未知日時本文も含め、全日時未知のまとまりは期間に一致しない。期間なしでは未知日時本文・本文なし候補も落とさない。表示日時と整列は全 group で決める。
+- `--imported-since` は zone 付き RFC3339 / RFC3339Nano の包含下限。各候補本人の importedAt >= 下限を input/source/project と AND で先に判定し、その候補本文だけを照合する。members・表示日時・importedAt は全まとまりのまま。子だけ一致しても一覧を返すが、除外された親本文で AND を満たさない。詳細にも同じ候補条件を適用する。
 
 ### JSON 出力（--format json）
 
