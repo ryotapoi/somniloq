@@ -21,20 +21,7 @@ func validateFormat(format string, supported ...string) error {
 
 // JSON output is the machine-readable counterpart of the TSV/Markdown views
 // (ADR 0012). Timestamps stay in the stored RFC3339 UTC form, strings are
-// raw (no TSV sanitizing), and show/search detail emit envelopes. Other commands emit JSON arrays.
-
-type sessionJSON struct {
-	REF          string `json:"ref"`
-	Source       string `json:"source"`
-	SessionID    string `json:"sessionId"`
-	Project      string `json:"project"`
-	Title        string `json:"title"`
-	StartedAt    string `json:"startedAt"`
-	EndedAt      string `json:"endedAt"`
-	LogicalDay   string `json:"logicalDay"`
-	MessageCount int    `json:"messageCount"`
-	BodySize     int    `json:"bodySize"`
-}
+// raw (no TSV sanitizing), and show/search emit envelopes. Projects emits a JSON array.
 
 type projectJSON struct {
 	Project      string `json:"project"`
@@ -72,21 +59,6 @@ func newShowMessageJSON(session core.SessionRow, message core.MessageRow) showMe
 	return showMessageJSON{REF: session.REF, MessageNumber: message.Number, Role: message.Role,
 		Timestamp: nullableString(message.Timestamp), Text: message.Content, Blocks: message.Blocks,
 		ParentREF: nullableString(session.ParentREF), RootREF: nullableString(session.RootREF), Provenance: message.Provenance}
-}
-
-func newSessionJSON(r core.SessionRow, project, logicalDay string) sessionJSON {
-	return sessionJSON{
-		REF:          r.REF,
-		Source:       string(r.Source),
-		SessionID:    r.SessionID,
-		Project:      project,
-		Title:        r.CustomTitle,
-		StartedAt:    r.StartedAt,
-		EndedAt:      r.EndedAt,
-		LogicalDay:   logicalDay,
-		MessageCount: r.MessageCount,
-		BodySize:     r.BodySize,
-	}
 }
 
 // writeJSON encodes v as indented JSON. HTML escaping is disabled so message

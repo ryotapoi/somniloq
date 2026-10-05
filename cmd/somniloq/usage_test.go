@@ -16,15 +16,15 @@ func TestSetUsage(t *testing.T) {
 	fs.SetOutput(&buf)
 	fs.String("since", "", "filter by start time")
 
-	setUsage(fs, "List sessions", "somniloq sessions [flags]", "Examples:\n  somniloq sessions --since 7d")
+	setUsage(fs, "List work groups", "somniloq search [flags]", "Examples:\n  somniloq search --since 2026-10-01")
 	fs.Usage()
 
 	out := buf.String()
 
-	if !strings.Contains(out, "List sessions") {
+	if !strings.Contains(out, "List work groups") {
 		t.Errorf("expected description in output, got:\n%s", out)
 	}
-	if !strings.Contains(out, "somniloq sessions [flags]") {
+	if !strings.Contains(out, "somniloq search [flags]") {
 		t.Errorf("expected usage line in output, got:\n%s", out)
 	}
 	if !strings.Contains(out, "Flags:") {
@@ -60,13 +60,6 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 				return importCmd([]string{"--help"}, openDB, "/claude", "/codex", "/cursor", strings.NewReader(""), &bytes.Buffer{}, errOut, false)
 			},
 			want: []string{"Examples:", "Output:", "Imported <imported> files", "Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.", "somniloq import --config default --source cursor-agent", "somniloq import --config default [--source all|claude-code|codex|cursor-agent] [flags]", "source to import: all, claude-code, codex, cursor-agent"},
-		},
-		{
-			name: "sessions",
-			run: func(errOut *bytes.Buffer) (int, error) {
-				return sessionsCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
-			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "logical_day", "body_size", "source: internal source identifier", "-imported-since", "show --config default <REF>"},
 		},
 		{
 			name: "show",

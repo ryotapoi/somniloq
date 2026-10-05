@@ -25,12 +25,12 @@ somniloq import --config default
 
 ```bash
 # セッションを眺める
-somniloq sessions --config default --short
+somniloq search --config default
 
 # キーワードで見つける
 somniloq search --config default --format json "keyword"
 
-# search または sessions が出した完全 REF を位置引数に渡す（裸 ID・短縮は不可）
+# search が出した完全 REF を位置引数に渡す（裸 ID・短縮は不可）
 # user 発言の一行一覧から、必要な発言番号範囲を読む
 somniloq show --config default <REF> --role user --one-line
 somniloq show --config default <REF> --messages 12:18
@@ -40,18 +40,18 @@ somniloq search --config default --limit 50 --offset 0 "keyword"
 somniloq search --config default --limit 50 --offset 50 "keyword"
 
 # 機械処理するときは JSON を優先する
-somniloq sessions --config default --format json
+somniloq search --config default --format json
 somniloq show --config default --format json <REF>
 ```
 
-Cursor Agent の履歴には時刻がないことがあり、`--since` / `--until` を付けると対象外になります。時刻不明でも直近に取り込んだ履歴は、`somniloq sessions --config default --imported-since 24h` で探せます。日時で絞り込む必要がある場合は CLI help を確認してください。search の pattern は大小文字区別の Go regexp、固定文字列は -F。search の project は末尾名の大小文字区別 substring と完全一致 alias 展開。sessions の project は従来の repo_path literal substring。sessions の `--since`、`--until`、`--imported-since` は相対時刻・ローカル日付・分単位日時・zone 付き RFC3339 を受け付ける。search/show は日付または zone 付き RFC3339 だけを受け付け、search --imported-since は zone 付き RFC3339 のみ。
+Cursor Agent の履歴には時刻がないことがあり、`--since` / `--until` を付けると対象外になります。時刻不明でも直近に取り込んだ履歴は、`somniloq search --config default --imported-since 2026-10-01T00:00:00+09:00` のように zone 付き RFC3339 で探せます。search の pattern は大小文字区別の Go regexp、固定文字列は -F。project は末尾名の大小文字区別 substring と完全一致 alias 展開です。search/show の日時は日付または zone 付き RFC3339 を指定し、相対時刻は受理しません。
 
 追加 root は TOML の inputs に設定します。`import --config default --input PATH` を繰り返して入力を選べ、`--source` とは交差条件です。`--full` は選択入力だけを再構築し、他入力を保持します。Codex の子本人は継承文脈と分けて保存され、完全 REF で本人会話を選べます。Claude Code の子孫も別の本人 REF で保持します。`search --session REF PATTERN` は本人と確定子孫だけを検索し、祖先・兄弟・root 所属だけの子は含めません。pattern 必須の Go regexp 全一致検索です。一覧は本文抜粋なしのまとまり metadata と REF を返します。
 
 複数の完全 REF を一回の呼び出しで渡し、指定日の実発言だけを Daily Note の材料として取得できます。REF の指定順・各会話の元の発言番号順を保ち、`--descendants` は確定子孫だけを展開して重複会話を除きます。role・発言番号・日時で絞った後に、発言単位で limit / offset / tail を適用します。`--one-line` は text だけを最初の一行へ短縮し、blocks は原文を保ちます。既定 TSV、JSON は `{items,total,count,limit,offset,hasMore,nextOffset}` envelope です。show の日時は日付または zone 付き RFC3339 で指定し、相対時刻は受理しません。旧 outline・summary・turn・表示除外・Markdown・REF なし期間入口は廃止しました。一覧は turn/snippet を返しません。search --session の `messageNumber` は show と共通の原文番号です。詳細は `somniloq show --help` を参照してください。
 
 ```sh
-# REF1 / REF2 は sessions / search からコピーした完全 REF
+# REF1 / REF2 は search からコピーした完全 REF
 somniloq show --config default REF1 REF2 --since 2026-10-01 --until 2026-10-01 --format json
 somniloq show --config default REF --role user --one-line
 somniloq show --config default REF --messages 12:18 --limit 50 --format json
@@ -60,13 +60,15 @@ somniloq show --config default REF --messages 12:18 --limit 50 --format json
 一覧の既定20件から REF を選ぶ例です。全件が必要なら hasMore/nextOffset で続きのページを取得します。
 
 ```sh
+sh <<'SH'
 set -- $(somniloq search --config default --since 2026-10-01 --until 2026-10-01 --format json | jq -r '.items[].members[]' | sort -u)
 if [ "$#" -gt 0 ]; then
   somniloq show --config default "$@" --since 2026-10-01 --until 2026-10-01 --format json
 fi
+SH
 ```
 
-完全 REF は空白や glob 文字を含まず、この sort 順が show の会話順になります。
+POSIX sh で実行する例です（対話 zsh でも `sh` が実行します）。members は root 所属だけの子を含むまとまり全体、matchedMembers は検索条件で選んだ候補本人です。完全 REF は空白や glob 文字を含まず、この sort 順が show の会話順になります。空の選択では show を呼びません。
 
 ## 詳細は CLI help を見る
 
@@ -77,7 +79,6 @@ somniloq --help
 somniloq config init --help
 somniloq import --help
 somniloq migrate --help
-somniloq sessions --help
 somniloq search --help
 somniloq show --help
 somniloq projects --help

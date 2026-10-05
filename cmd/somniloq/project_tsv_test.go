@@ -22,7 +22,6 @@ func TestProjectOutput_ControlCharacters(t *testing.T) {
 		columns int
 		project int
 	}{
-		{"sessions", sessionsCmd, 8, 3},
 		{"projects", projectsCmd, 2, 0},
 	}
 	for _, command := range commands {
@@ -58,11 +57,7 @@ func TestProjectOutput_ControlCharacters(t *testing.T) {
 					if short {
 						wantRaw, wantCollision, wantNormal = "raw\twith\nline\rend", "raw with line end", "normal"
 					}
-					wantRows := 5
-					aliasRows := 2
-					if command.name == "projects" {
-						wantRows, aliasRows = 4, 1
-					}
+					wantRows, aliasRows := 4, 1
 					gotNames := map[string]int{}
 					if format == "json" {
 						rows := decodeJSONArray(t, out.Bytes())

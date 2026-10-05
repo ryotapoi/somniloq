@@ -21,9 +21,8 @@ Usage:
 Commands:
   import    Import Claude Code, Codex, and Cursor Agent session logs from JSONL files
   migrate   Copy a fixed legacy snapshot and replace proven Codex conversations
-  sessions  List sessions
   show      Show original messages with filters and pagination
-  search    Search message content across sessions with turn numbers
+  search    List work groups or search original message occurrences
   projects  List projects
   config init Create a TOML configuration
 
@@ -109,8 +108,6 @@ func runCommand(args []string, in io.Reader, out, errOut io.Writer, isTTY bool) 
 		return migrateCmd(commandArgs, cfg, out, errOut)
 	case "import":
 		return importConfiguredCmd(commandArgs, func() (*core.DB, error) { return openDB(cfg.DB) }, cfg, in, out, errOut, isTTY)
-	case "sessions":
-		return sessionsCmd(commandArgs, open, cfg, out, errOut)
 	case "show":
 		return showCmd(commandArgs, open, cfg, out, errOut)
 	case "search":
@@ -213,9 +210,6 @@ func configCommandFlagSet(command string) *flag.FlagSet {
 		fs.Bool("yes", false, "")
 		fs.String("source", "all", "")
 		fs.String("input", "", "")
-		return fs
-	case "sessions":
-		fs, _ := newSessionsFlagSet()
 		return fs
 	case "show":
 		fs, _ := newShowFlagSet()

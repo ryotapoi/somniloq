@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
@@ -19,55 +18,6 @@ func decodeJSONArray(t *testing.T, data []byte) []map[string]any {
 		t.Fatalf("invalid JSON output: %v\n%s", err, data)
 	}
 	return got
-}
-
-func TestSessionsCmd_FormatJSON(t *testing.T) {
-	oldLocal := time.Local
-	time.Local = time.UTC
-	defer func() { time.Local = oldLocal }()
-	db := newOutlineTestDB(t)
-	if err := db.UpsertSession(testInputID(t, db, core.SourceClaudeCode), core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "sess-1", EndedAt: "2026-03-28T16:00:00Z"}, "2026-03-28T16:00:00Z"); err != nil {
-		t.Fatalf("UpsertSession: %v", err)
-	}
-	if err := db.UpdateSessionTitle(testInputID(t, db, core.SourceClaudeCode), core.SourceClaudeCode, "sess-1", "Title\twith\nline", "2026-03-28T16:00:00Z"); err != nil {
-		t.Fatalf("UpdateSessionTitle: %v", err)
-	}
-
-	insertOutlineMessage(t, db, "sess-1", "raw-first", "user", "first\tline\nmore", "2026-03-28T14:59:00Z", false)
-
-	var out, errOut bytes.Buffer
-	code, err := sessionsCmd([]string{"--format", "json"}, staticDB(db), config{}, &out, &errOut)
-	if err != nil {
-		t.Fatalf("sessionsCmd: %v", err)
-	}
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
-	}
-
-	got := decodeJSONArray(t, out.Bytes())
-	if len(got) != 1 {
-		t.Fatalf("entries = %d, want 1", len(got))
-	}
-	want := map[string]any{
-		"source":       "claude_code",
-		"sessionId":    "sess-1",
-		"ref":          fixtureREF(core.SourceClaudeCode, "sess-1"),
-		"project":      "/Users/test/proj",
-		"title":        "Title\twith\nline",
-		"startedAt":    "2026-03-28T15:00:00Z",
-		"endedAt":      "2026-03-28T16:00:00Z",
-		"logicalDay":   "2026-03-28",
-		"messageCount": float64(5),
-		"bodySize":     float64(102),
-	}
-	for k, v := range want {
-		if got[0][k] != v {
-			t.Errorf("%s = %#v, want %#v", k, got[0][k], v)
-		}
-	}
-	if len(got[0]) != len(want) {
-		t.Errorf("fields = %d, want %d: %v", len(got[0]), len(want), got[0])
-	}
 }
 
 func TestProjectsCmd_FormatJSON(t *testing.T) {
@@ -167,10 +117,6 @@ func TestFormatFlag_Unknown(t *testing.T) {
 		name string
 		run  func() (int, error)
 	}{
-		{"sessions", func() (int, error) {
-			var out, errOut bytes.Buffer
-			return sessionsCmd([]string{"--format", "xml"}, openDB, config{}, &out, &errOut)
-		}},
 		{"projects", func() (int, error) {
 			var out, errOut bytes.Buffer
 			return projectsCmd([]string{"--format", "xml"}, openDB, config{}, &out, &errOut)

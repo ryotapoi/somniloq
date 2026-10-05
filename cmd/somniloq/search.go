@@ -51,7 +51,19 @@ Examples:
   somniloq search --config default --format json
   somniloq search --config default -e 'auth' -e 'bug' --all --project somniloq
   somniloq search --config default --limit 20 --offset 20 'migration'
-  somniloq search --config default --session <REF> -F 'auth bug'`
+  somniloq search --config default --session <REF> -F 'auth bug'
+
+Selected day's original messages (POSIX sh; requires jq):
+  Selects the default 20 groups; use hasMore/nextOffset to fetch further pages.
+  members includes the full group, including root-only members; matchedMembers contains candidates.
+  Full REFs contain no whitespace/glob characters. sort order becomes show's conversation order.
+  An empty selection skips show; the same period filters original messages.
+sh <<'SH'
+set -- $(somniloq search --config default --since 2026-10-01 --until 2026-10-01 --format json | jq -r '.items[].members[]' | sort -u)
+if [ "$#" -gt 0 ]; then
+  somniloq show --config default "$@" --since 2026-10-01 --until 2026-10-01 --format json
+fi
+SH`
 
 type searchFlags struct {
 	since, until, dayBoundary, project, format, session, timeMode, importedSince *string

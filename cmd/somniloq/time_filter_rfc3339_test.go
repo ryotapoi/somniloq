@@ -56,12 +56,6 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 		run  func([]string, string, *bytes.Buffer, *bytes.Buffer) (int, error)
 	}{
 		{
-			name: "sessions",
-			run: func(args []string, timestamp string, out, errOut *bytes.Buffer) (int, error) {
-				return sessionsCmd(args, staticDB(newRFC3339FilterDB(t, timestamp)), config{}, out, errOut)
-			},
-		},
-		{
 			name: "projects",
 			run: func(args []string, timestamp string, out, errOut *bytes.Buffer) (int, error) {
 				return projectsCmd(args, staticDB(newRFC3339FilterDB(t, timestamp)), config{}, out, errOut)
@@ -106,7 +100,7 @@ func TestRFC3339TimeFiltersAcrossCommands(t *testing.T) {
 					t.Fatalf("--until %q included equal boundary: %q", until, out.String())
 				}
 			}
-			if tt.name != "sessions" {
+			if tt.name != "projects" {
 				return
 			}
 

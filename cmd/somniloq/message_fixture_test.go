@@ -49,3 +49,7 @@ func newOutlineTestDB(t *testing.T) *core.DB {
 	insertOutlineMessage(t, db, "sess-1", "u2", "user", "\n\nsecond\tquestion after blank lines", "2026-03-28T15:03:00Z", false)
 	return db
 }
+
+func staticDB(db *core.DB) func() (*core.DB, error) {
+	return func() (*core.DB, error) { return db, nil }
+}

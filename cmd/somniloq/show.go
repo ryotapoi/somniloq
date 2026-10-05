@@ -27,7 +27,19 @@ Notes:
 Examples:
   somniloq show --config default <REF> <REF> --since 2026-10-01 --until 2026-10-01 --format json
   somniloq show --config default <REF> --role user --one-line
-  somniloq show --config default <REF> --messages 40:60 --limit 10`
+  somniloq show --config default <REF> --messages 40:60 --limit 10
+
+Selected day's original messages (POSIX sh; requires jq):
+  Selects the default 20 groups; use hasMore/nextOffset to fetch further pages.
+  members includes the full group, including root-only members; matchedMembers contains candidates.
+  Full REFs contain no whitespace/glob characters. sort order becomes show's conversation order.
+  An empty selection skips show; the same period filters original messages.
+sh <<'SH'
+set -- $(somniloq search --config default --since 2026-10-01 --until 2026-10-01 --format json | jq -r '.items[].members[]' | sort -u)
+if [ "$#" -gt 0 ]; then
+  somniloq show --config default "$@" --since 2026-10-01 --until 2026-10-01 --format json
+fi
+SH`
 
 func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, errOut io.Writer) (int, error) {
 	fs, f := newShowFlagSet()

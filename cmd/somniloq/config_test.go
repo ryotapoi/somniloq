@@ -102,33 +102,6 @@ func newProjectAliasDisplayDB(t *testing.T) *core.DB {
 	return db
 }
 
-func TestSessionsCmd_ProjectAliasDisplayUsesCanonical(t *testing.T) {
-	db := newProjectAliasDisplayDB(t)
-	cfg := config{ProjectAliases: map[string][]string{
-		"somniloq": {"Brimday"},
-	}}
-
-	var out, errOut bytes.Buffer
-	code, err := sessionsCmd(nil, staticDB(db), cfg, &out, &errOut)
-	if err != nil {
-		t.Fatalf("sessionsCmd: %v", err)
-	}
-	if code != 0 {
-		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
-	}
-
-	got := out.String()
-	if !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "new-1")) || !strings.Contains(got, fixtureREF(core.SourceClaudeCode, "old-1")) {
-		t.Fatalf("output missing alias sessions:\n%s", got)
-	}
-	if strings.Contains(got, "Brimday") || strings.Contains(got, "/Users/test/somniloq") {
-		t.Errorf("alias project output should use only the canonical name:\n%s", got)
-	}
-	if count := strings.Count(got, "\tsomniloq\t"); count != 2 {
-		t.Errorf("canonical project column count = %d, want 2:\n%s", count, got)
-	}
-}
-
 func TestProjectsCmd_ProjectAliasDisplayAggregatesCanonical(t *testing.T) {
 	db := newProjectAliasDisplayDB(t)
 	cfg := config{ProjectAliases: map[string][]string{
@@ -209,7 +182,7 @@ func TestSearchCmd_ProjectAliasFilterPreservesRootValue(t *testing.T) {
 
 // End-to-end: --project with an old name must list sessions stored under both
 // the old and the new repo path.
-func TestSessionsCmd_ProjectAliasExpansion(t *testing.T) {
+func TestSearchList_ProjectAliasExpansion(t *testing.T) {
 	db, err := core.OpenDB(":memory:")
 	if err != nil {
 		t.Fatalf("OpenDB: %v", err)
@@ -231,9 +204,9 @@ func TestSessionsCmd_ProjectAliasExpansion(t *testing.T) {
 	}}
 
 	var out, errOut bytes.Buffer
-	code, err := sessionsCmd([]string{"--project", "Brimday"}, staticDB(db), cfg, &out, &errOut)
+	code, err := searchCmd([]string{"--project", "Brimday"}, staticDB(db), cfg, &out, &errOut)
 	if err != nil {
-		t.Fatalf("sessionsCmd: %v", err)
+		t.Fatalf("searchCmd: %v", err)
 	}
 	if code != 0 {
 		t.Fatalf("exit code = %d, want 0 (stderr: %q)", code, errOut.String())
@@ -263,8 +236,8 @@ func TestProjectAliasLiteralConditionsAcrossCommands(t *testing.T) {
 				name string
 				run  func(*core.DB, *bytes.Buffer, *bytes.Buffer) (int, error)
 			}{
-				{"sessions", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
-					return sessionsCmd([]string{"--project", input}, staticDB(db), cfg, out, errOut)
+				{"search list", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
+					return searchCmd([]string{"--project", input}, staticDB(db), cfg, out, errOut)
 				}},
 				{"search", func(db *core.DB, out, errOut *bytes.Buffer) (int, error) {
 					return searchCmd([]string{"--project", input, "literal alias hit"}, staticDB(db), cfg, out, errOut)

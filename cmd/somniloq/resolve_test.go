@@ -3,8 +3,6 @@ package main
 import (
 	"testing"
 	"time"
-
-	"github.com/ryotapoi/somniloq/internal/core"
 )
 
 func TestResolveTimeFlag(t *testing.T) {
@@ -75,74 +73,6 @@ func TestResolveTimeFlag_DayBoundaryAppliesOnlyToDateOnly(t *testing.T) {
 	}
 }
 
-func TestResolveImportedSince(t *testing.T) {
-	now := time.Date(2026, 3, 29, 12, 0, 0, 500_000_000, time.UTC)
-	jst := time.FixedZone("JST", 9*60*60)
-
-	tests := []struct {
-		name, value, want string
-	}{
-		{"relative rounds up to stored second", "0m", "2026-03-29T12:00:01.000Z"},
-		{"date starts at local midnight", "2026-03-28", "2026-03-27T15:00:00.000Z"},
-		{"datetime ignores day boundary", "2026-03-28T15:00", "2026-03-28T06:00:00.000Z"},
-		{"RFC3339 offset resolves exact instant", "2026-03-29T00:00:37+09:00", "2026-03-28T15:00:37.000Z"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := resolveImportedSince(tt.value, now, jst)
-			if err != nil {
-				t.Fatalf("resolveImportedSince(%q): %v", tt.value, err)
-			}
-			if got != tt.want {
-				t.Errorf("resolveImportedSince(%q) = %q, want %q", tt.value, got, tt.want)
-			}
-		})
-	}
-}
-
-func TestSessionLogicalDay_UsesEndedAtThenStartedAt(t *testing.T) {
-	jst := time.FixedZone("JST", 9*60*60)
-	boundary := dayBoundary{offset: 4 * time.Hour}
-
-	tests := []struct {
-		name    string
-		session core.SessionRow
-		want    string
-	}{
-		{
-			name: "ended before boundary belongs to previous day",
-			session: core.SessionRow{
-				StartedAt: "2026-03-28T10:00:00Z",
-				EndedAt:   "2026-03-28T18:30:00Z", // 2026-03-29 03:30 JST
-			},
-			want: "2026-03-28",
-		},
-		{
-			name: "ended after boundary belongs to local day",
-			session: core.SessionRow{
-				StartedAt: "2026-03-28T10:00:00Z",
-				EndedAt:   "2026-03-28T19:00:00Z", // 2026-03-29 04:00 JST
-			},
-			want: "2026-03-29",
-		},
-		{
-			name: "started fallback",
-			session: core.SessionRow{
-				StartedAt: "2026-03-28T18:30:00Z",
-			},
-			want: "2026-03-28",
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := sessionLogicalDay(tt.session, boundary, jst); got != tt.want {
-				t.Errorf("sessionLogicalDay = %q, want %q", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestBuildSessionFilter_SinceAfterUntil(t *testing.T) {
 	// Use dates far apart so TZ offset cannot invert the ordering.
 	_, err := buildSessionFilter("2027-01-01", "2026-01-01", "", config{}, dayBoundary{})
@@ -196,23 +126,6 @@ func TestDayBoundaryDST(t *testing.T) {
 					t.Errorf("date %s until=%v: got %s, want %s", filter.day, filter.until, got, filter.want)
 				}
 			}
-			instant, err := time.Parse(time.RFC3339, tt.boundaryInstant)
-			if err != nil {
-				t.Fatal(err)
-			}
-			for _, logical := range []struct {
-				instant time.Time
-				want    string
-			}{
-				{instant.Add(-time.Nanosecond), tt.previousDay},
-				{instant, tt.day},
-				{instant.Add(time.Hour), tt.day},
-			} {
-				session := core.SessionRow{EndedAt: logical.instant.Format(time.RFC3339Nano)}
-				if got := sessionLogicalDay(session, boundary, loc); got != logical.want {
-					t.Errorf("logical day at %s: got %s, want %s", session.EndedAt, got, logical.want)
-				}
-			}
 		})
 	}
 }
@@ -251,15 +164,6 @@ func TestDayBoundaryDSTTransitionTimeSharesInstant(t *testing.T) {
 				}
 				if got != wantInstant {
 					t.Errorf("date %s until=%v: got %s, want shared instant %s", filter.day, filter.until, got, wantInstant)
-				}
-			}
-			for _, logical := range []struct {
-				instant time.Time
-				want    string
-			}{{instant.Add(-time.Nanosecond), tt.previousDay}, {instant, tt.day}} {
-				session := core.SessionRow{EndedAt: logical.instant.Format(time.RFC3339Nano)}
-				if got := sessionLogicalDay(session, boundary, loc); got != logical.want {
-					t.Errorf("logical day at %s: got %s, want %s", session.EndedAt, got, logical.want)
 				}
 			}
 		})

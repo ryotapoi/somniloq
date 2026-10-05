@@ -26,7 +26,7 @@ Notes:
 Examples:
   somniloq projects --config default --since 30d --short
   somniloq projects --config default --format json
-  somniloq sessions --config default --project somniloq --since 7d`
+  somniloq search --config default --project somniloq --since 2026-10-01`
 
 // projectsCmd runs the projects subcommand without calling os.Exit, so it can
 // be tested directly.

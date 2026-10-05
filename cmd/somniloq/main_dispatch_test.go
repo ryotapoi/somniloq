@@ -12,7 +12,7 @@ import (
 
 func TestMainDispatchRequiresExplicitConfig(t *testing.T) {
 	home := t.TempDir()
-	for _, command := range []string{"import", "sessions", "search", "show", "projects"} {
+	for _, command := range []string{"import", "search", "show", "projects"} {
 		code, stdout, stderr := runSomniloqMain(t, home, command)
 		if code != 2 || stdout != "" || !strings.Contains(stderr, "Run somniloq config init, then use --config default.") {
 			t.Fatalf("%s: %d %q %q", command, code, stdout, stderr)
@@ -24,7 +24,7 @@ func TestMainDispatchRequiresExplicitConfig(t *testing.T) {
 }
 
 func TestMainDispatchHelpAndVersionWithoutConfig(t *testing.T) {
-	for _, command := range []string{"import", "sessions", "show", "search", "projects"} {
+	for _, command := range []string{"import", "show", "search", "projects"} {
 		code, _, stderr := runSomniloqMain(t, t.TempDir(), command, "--help")
 		if code != 0 || !strings.Contains(stderr, "Usage:") {
 			t.Fatalf("%s help: %d %q", command, code, stderr)
@@ -52,11 +52,11 @@ func TestMainDispatchConfigInitAndPlacement(t *testing.T) {
 			t.Fatalf("%v: %d %q %q", args, code, stdout, stderr)
 		}
 	}
-	code, _, stderr = runSomniloqMain(t, home, "sessions", "--config", "missing")
+	code, _, stderr = runSomniloqMain(t, home, "search", "--config", "missing")
 	if code != 2 || !strings.Contains(stderr, "Run somniloq config init, then use --config default.") {
 		t.Fatalf("missing config: %d %q", code, stderr)
 	}
-	code, _, _ = runSomniloqMain(t, home, "--db", "x", "sessions")
+	code, _, _ = runSomniloqMain(t, home, "--db", "x", "search")
 	if code != 2 {
 		t.Fatalf("--db accepted: %d", code)
 	}
@@ -68,7 +68,7 @@ func TestMainDispatchReadMissingDBDoesNotCreate(t *testing.T) {
 	if code != 0 {
 		t.Fatal(stderr)
 	}
-	code, _, stderr = runSomniloqMain(t, home, "sessions", "--config", "default")
+	code, _, stderr = runSomniloqMain(t, home, "search", "--config", "default")
 	if code != 2 {
 		t.Fatalf("read missing: %d %q", code, stderr)
 	}
@@ -79,7 +79,7 @@ func TestMainDispatchReadMissingDBDoesNotCreate(t *testing.T) {
 
 func TestExtractCommandConfigPreservesFlagValues(t *testing.T) {
 	value := ""
-	args, err := extractCommandConfig("sessions", []string{"--project", "--config", "--config", "chosen"}, &value)
+	args, err := extractCommandConfig("search", []string{"--project", "--config", "--config", "chosen"}, &value)
 	if err != nil || value != "chosen" || len(args) != 2 || args[1] != "--config" {
 		t.Fatalf("%v %q %v", args, value, err)
 	}
@@ -136,5 +136,18 @@ func TestRemovedOutlineAndShowHelpAfterREF(t *testing.T) {
 	code, stdout, stderr = runSomniloqMain(t, t.TempDir(), "show", "bare", "--help")
 	if code != 0 || stdout != "" || !strings.Contains(stderr, "--messages") {
 		t.Fatalf("show help: %d %q %q", code, stdout, stderr)
+	}
+}
+
+func TestMainDispatchRejectsSessions(t *testing.T) {
+	for _, args := range [][]string{{"sessions"}, {"sessions", "--help"}, {"sessions", "--config", "missing"}} {
+		code, stdout, stderr := runSomniloqMain(t, t.TempDir(), args...)
+		if code != 1 || stdout != "" || !strings.Contains(stderr, "unknown command: sessions") {
+			t.Fatalf("%v: %d %q %q", args, code, stdout, stderr)
+		}
+	}
+	code, _, stderr := runSomniloqMain(t, t.TempDir(), "--help")
+	if code != 0 || strings.Contains(stderr, "  sessions ") || !strings.Contains(stderr, "  search ") {
+		t.Fatalf("top-level help: %d %q", code, stderr)
 	}
 }

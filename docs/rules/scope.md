@@ -76,25 +76,8 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 時刻フィルタの共通規則
 
-- 保存済み timestamp の NULL・空文字列・RFC3339 として解釈できない値は、比較上は時点不明として扱う。範囲 filter には一致せず、filter なしでは行・本文を保持する。本人の本文取得順は発言番号であり、timestamp の有無や SQLite rowid で変えない。時刻を基準とする一覧・検索の並びは各コマンド節に従う。不正な非空文字列は保存・JSON 出力・時刻表示にそのまま残し、時刻を補完しない。ただし sessions TSV の時刻欄はタブ・改行を空白化する。CLI の不正な時刻引数はエラーとする。
+- 保存済み timestamp の NULL・空文字列・RFC3339 として解釈できない値は、比較上は時点不明として扱う。範囲 filter には一致せず、filter なしでは行・本文を保持する。本人の本文取得順は発言番号であり、timestamp の有無や SQLite rowid で変えない。時刻を基準とする一覧・検索の並びは各コマンド節に従う。不正な非空文字列は保存・JSON 出力・時刻表示にそのまま残し、時刻を補完しない。search/show TSV は時刻欄も可逆 escape する。CLI の不正な時刻引数はエラーとする。
 - RFC3339 instant 入力の小数秒はミリ秒へ切り捨てず、ナノ秒精度で保持して時点として比較し、offset 表現が異なっても同じ時点なら等しい。`--since` は包含下限、`--until` は排他上限
-
-### セッション一覧（sessions）
-
-- セッション一覧を表示
-- `--since`/`--until` で時刻フィルタ（相対: `24h`, `7d`、ローカル絶対値: `2026-03-28`, `2026-03-28T15:00`、RFC3339 instant: `2026-03-28T15:00:00Z`, `2026-03-29T00:00:00+09:00`）。絶対日付と分精度日時はローカルタイム。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と日時は `dayBoundary` の影響を受けない。出力のタイムスタンプもローカルタイム（`2006-01-02 15:04` 形式）
-- `--imported-since` は session の `imported_at` を基準にした包含下限。相対時刻、ローカル日付、分精度日時、RFC3339 instant は `--since` と同じ形式で指定できるが、date-only はローカル時刻の 00:00 とし `dayBoundary` を適用しない。`--since` / `--until` / `--project` と併用した場合は AND。`imported_at` はその session を最後に保存更新した import 実行の開始時刻（UTC・秒精度）で、同じ実行の成功保存会話は共通の値を使う。本文差分時刻・commit 完了時刻・無重複消費を保証する watermark ではない。変更なしとしてスキップしたファイルは `imported_at` を更新しない。出力された完全 `ref` は `show` に渡して会話全体を再参照できる
-- 時刻は `started_at ~ ended_at` の範囲形式で表示。ended_at がない場合は `started_at ~`。両方未知なら空欄
-- `--since` または `--until` を指定した時は、NULL / 空 / 不正な started_at を一致させない。指定しない一覧では未知 timestamp も表示する
-- `--project` は空でない `repo_path` への literal substring マッチ。`%`、`_`、`\` も文字列として扱う。値が config の alias グループに完全一致する場合はグループ全名に展開する（「設定ファイル」節参照）。NULL / 空の repository は条件に一致させない
-- `repo_path` は絶対パスのため、`/` セグメントを跨いだ部分一致（例: `--project Sources/ryot`）も可能
-- 表示は config の `projectAliases` に一致する場合は canonical 名のみ。一致しない場合、デフォルト表示は `repo_path` をそのまま
-- `--short` は alias 非一致時に `filepath.Base(repo_path)`（ハイフン保持）
-- 出力 TSV の列: `ref`, `time_range`, `logical_day`, `project`, `custom_title`, `message_count`, `body_size`, `source`。source は `claude_code` / `codex` / `cursor_agent`
-- TSV の `time_range`、`project`、`custom_title` はタブ・改行を空白に置換し、列と行の境界を保つ。JSON は生の文字列を出す
-- `logical_day` は `ended_at`（無ければ `started_at`）をローカルタイムに変換し、その暦日の `dayBoundary` の境界時点より前なら前暦日、境界以降なら当暦日（`YYYY-MM-DD`）として出す。セッションを途中で分割せず、表示時に計算する
-- `body_size` は show 対象となる本人本文の合計サイズ（UTF-8 バイト数）。Claude Code・Codex は本人 sidechain を含み、Cursor Agent は従来の sidechain 除外に従う。show 前に大きいセッションかを判定する用途で、文字数でなくバイト数なのはコンテキスト量の感覚と一致させるため。`message_count` は本人本文の保存行数
-- `--format tsv|json`（デフォルト `tsv`）。JSON のフィールドは `ref`, `source`, `sessionId`, `project`, `title`, `startedAt`, `endedAt`, `logicalDay`, `messageCount`, `bodySize`（共通仕様は「JSON 出力」節参照）
 
 ### プロジェクト一覧（projects）
 
@@ -160,19 +143,19 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 機械消費（スクリプト・skill からの利用）向けの構造化出力。判断の経緯は `docs/decisions/0012-json-output-schema.md` 参照。
 
-- 対象コマンド: `sessions` / `projects` / `search` / `show`（`--format tsv|json`、デフォルト `tsv`）
-- show と search は envelope object、sessions/projects は JSON 配列。結果0件は envelope の items=[]、配列入口は `[]`。show と search の関係・本文・件数は同じ read transaction から取得する。
+- 対象コマンド: `projects` / `search` / `show`（`--format tsv|json`、デフォルト `tsv`）
+- show と search は envelope object、projects は JSON 配列。結果0件は envelope の items=[]、配列入口は `[]`。show と search の関係・本文・件数は同じ read transaction から取得する。
 - フィールド名は camelCase
-- タイムスタンプは DB 保存値をそのまま出す。show は元の offset・精度・不正な非空 raw 値も保持する。ローカルタイム整形は sessions / projects の TSV 側だけの表示都合とする（タイムゾーン情報を失わないため）
+- タイムスタンプは DB 保存値をそのまま出す。show は元の offset・精度・不正な非空 raw 値も保持する。search/show の TSV でも元値を保持する（タイムゾーン情報を失わないため）
 - 文字列は生値（TSV のタブ・改行置換はしない。エスケープは JSON 側で担保される）
 - `title` は `custom_title` の生値（session_id フォールバックはしない）
-- sessions/projects の `project` は alias canonical 表示と `--short` を反映した表示名（alias 一致時は canonical 名のみ、alias 非一致時のデフォルトは `repo_path` の生値）
+- projects の `project` は alias canonical 表示と `--short` を反映した表示名（alias 一致時は canonical 名のみ、alias 非一致時のデフォルトは `repo_path` の生値）
 - 不正な `--format` 値はエラー（`unknown format: ...`）。DB を開く前に検証する
 - インデント 2 スペース、HTML エスケープ（`<` `>` `&` の `\uXXXX` 化）は無効
 
 ### 設定ファイル（config）
 
-全 DB コマンド（import / migrate / sessions / projects / search / show）は `--config NAME_OR_PATH` が必須。コマンド名の前でも後でも指定できる。help / version / config init は設定不要。通常コマンドの `--db` は廃止。未指定・欠落時は exit 2、stderr に不足項目と `Run somniloq config init, then use --config default.` を表示し、DB・設定を自動生成しない。旧 JSON 設定は探索・変換しない。
+全 DB コマンド（import / migrate / projects / search / show）は `--config NAME_OR_PATH` が必須。コマンド名の前でも後でも指定できる。help / version / config init は設定不要。通常コマンドの `--db` は廃止。未指定・欠落時は exit 2、stderr に不足項目と `Run somniloq config init, then use --config default.` を表示し、DB・設定を自動生成しない。旧 JSON 設定は探索・変換しない。
 
 `config init [NAME] [--output PATH] [--db PATH]` は設定だけを作り、DB は開かない。NAME 省略時は default、名前は `[A-Za-z0-9_-]+`。既定出力は `~/.somniloq/config/NAME.toml`、既定 DB は `~/.somniloq/NAME.db`。任意出力でも NAME が既定 DB を決める。parent directory は作成し、通常ファイル・directory・symlink（dangling を含む）への上書きは exit 2 で拒否する。stdout は作成した設定の絶対 path 一行。
 
@@ -204,8 +187,8 @@ root = "~/.cursor/projects"
 - `--config` が名前規則を満たせば設定名、それ以外は path。`foo.toml` は path、拡張子なし相対ファイルは `./foo` と指定する。設定 path 自体の相対解決は実行 cwd 基準。
 - 設定 symlink の実体親を相対 db/root の基準とする。先頭 `~` または `~/` だけを home へ展開し（`~other`・環境変数は展開しない）、絶対化・Clean・既存 symlink 解決を行う。未存在末尾は存在する最長 parent を実体解決して接続する。大文字小文字は変換しない。
 - `projectAliases` は canonical 名から旧名配列への map。`--project` がグループ内の名に完全一致した場合だけ全名称へ OR 展開し、その他は literal substring。canonical/alias が別グループと重なる設定は拒否する。
-- project 表示は一致する canonical 名を使う。projects は表示名ごとに件数を合算し、DB の repo_path は変更しない。
-- `dayBoundary` はローカル時計の `HH:MM`。sessions/search/show の date-only フィルタと sessions の logical_day に適用し、DB に保存しない。DST 時の欠落・重複時刻は Go の `time.Date` の解決に従う。
+- projects の表示は一致する canonical 名を使い、表示名ごとに件数を合算する。search は root の repo_path をそのまま表示する。DB の repo_path は変更しない。
+- `dayBoundary` はローカル時計の `HH:MM`。search/show の date-only フィルタに適用し、DB に保存しない。DST 時の欠落・重複時刻は Go の `time.Date` の解決に従う。
 
 ## CLI インターフェース
 
@@ -216,17 +199,30 @@ somniloq migrate --config archive --from ./archive-snapshot.db
 somniloq import --config default                   # 全設定入力を差分取り込み
 somniloq import --config default --source codex     # Codex 入力だけ
 somniloq import --config default --input /path/to/logs --full --yes
-somniloq sessions --config default --since 7d
-somniloq sessions --config default --imported-since 24h --format json
+somniloq search --config default --since 2026-10-01
+somniloq search --config default --imported-since 2026-10-01T00:00:00+09:00 --format json
 somniloq search --config default --project somniloq "auth bug"
 somniloq search --config default --limit 50 --offset 50 "auth bug"
 somniloq show --config default REF --role user --one-line
 somniloq show --config default REF --messages 12:18
 somniloq show --config default REF1 REF2 --since 2026-10-01 --until 2026-10-01 --format json
 somniloq projects --config default --short
-somniloq --config ./archive.toml sessions
+somniloq --config ./archive.toml search
 somniloq --version
 ```
+
+一覧から指定日の原文を取得する POSIX sh 例（既定20件のページ。全件は hasMore/nextOffset で続きのページを取得）:
+
+```sh
+sh <<'SH'
+set -- $(somniloq search --config default --since 2026-10-01 --until 2026-10-01 --format json | jq -r '.items[].members[]' | sort -u)
+if [ "$#" -gt 0 ]; then
+  somniloq show --config default "$@" --since 2026-10-01 --until 2026-10-01 --format json
+fi
+SH
+```
+
+members は root 所属だけの子を含むまとまり全体、matchedMembers は候補本人。sort 順が show の会話順となり、空選択では show を呼ばない。
 
 ## SQLite と入力・会話の識別
 

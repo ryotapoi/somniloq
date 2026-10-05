@@ -43,12 +43,12 @@ func TestConfiguredCommandsKeepSameSessionAndMessageIDsSeparate(t *testing.T) {
 		return out.String()
 	}
 	run("import")
-	var sessions []sessionJSON
-	if err := json.Unmarshal([]byte(run("sessions", "--format", "json")), &sessions); err != nil {
+	var listed searchGroupJSON
+	if err := json.Unmarshal([]byte(run("search", "--format", "json")), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(sessions) != 2 || sessions[0].REF == sessions[1].REF {
-		t.Fatalf("sessions: %+v", sessions)
+	if len(listed.Items) != 2 || listed.Items[0].REF == listed.Items[1].REF {
+		t.Fatalf("sessions: %+v", listed)
 	}
 	var page searchGroupJSON
 	if err := json.Unmarshal([]byte(run("search", "--format", "json", "needle")), &page); err != nil {
@@ -86,18 +86,22 @@ func TestConfiguredCommandsKeepSameSessionAndMessageIDsSeparate(t *testing.T) {
 		t.Fatal(err)
 	}
 	run("import", "--input", "a", "--full", "--yes")
-	if err := json.Unmarshal([]byte(run("sessions", "--format", "json")), &sessions); err != nil {
+	if err := json.Unmarshal([]byte(run("search", "--format", "json")), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(sessions) != 1 || sessions[0].MessageCount != 2 {
-		t.Fatalf("selected full touched other input: %+v", sessions)
+	if len(listed.Items) != 1 || listed.Items[0].Input == nil || *listed.Items[0].Input != roots[1] {
+		t.Fatalf("selected full touched other input: %+v", listed)
+	}
+	var remaining showJSON
+	if err := json.Unmarshal([]byte(run("show", "--format", "json", listed.Items[0].REF)), &remaining); err != nil || len(remaining.Items) != 2 {
+		t.Fatalf("remaining body: %+v, %v", remaining, err)
 	}
 	run("import", "--input", "a", "--source", "codex", "--full", "--yes")
-	if err := json.Unmarshal([]byte(run("sessions", "--format", "json")), &sessions); err != nil {
+	if err := json.Unmarshal([]byte(run("search", "--format", "json")), &listed); err != nil {
 		t.Fatal(err)
 	}
-	if len(sessions) != 1 {
-		t.Fatalf("empty selection deleted input: %+v", sessions)
+	if len(listed.Items) != 1 {
+		t.Fatalf("empty selection deleted input: %+v", listed)
 	}
 }
 

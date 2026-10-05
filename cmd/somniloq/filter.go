@@ -67,41 +67,6 @@ func resolveTimeFlag(value string, now time.Time, isUntil bool, loc *time.Locati
 	return t.UTC().Format(time.RFC3339Nano), nil
 }
 
-// resolveImportedSince resolves an imported_at lower bound. imported_at is
-// stored at whole-second precision, so a boundary between seconds must advance
-// to the next stored second instead of admitting the preceding one lexically.
-func resolveImportedSince(value string, now time.Time, loc *time.Location) (string, error) {
-	t, _, err := core.ParseTimeRef(value, now, loc)
-	if err != nil {
-		return "", err
-	}
-	t = t.UTC()
-	if t.Nanosecond() != 0 {
-		t = t.Truncate(time.Second).Add(time.Second)
-	}
-	return t.Format("2006-01-02T15:04:05.000Z"), nil
-}
-
-func sessionLogicalDay(session core.SessionRow, boundary dayBoundary, loc *time.Location) string {
-	value := session.EndedAt
-	if value == "" {
-		value = session.StartedAt
-	}
-	if value == "" {
-		return ""
-	}
-	t, err := time.Parse(time.RFC3339Nano, value)
-	if err != nil {
-		return ""
-	}
-	local := t.In(loc)
-	year, month, day := local.Date()
-	if t.Before(boundary.onDate(local, 0, loc)) {
-		day--
-	}
-	return time.Date(year, month, day, 0, 0, 0, 0, time.UTC).Format("2006-01-02")
-}
-
 // onDate constructs a local clock boundary, rather than adding elapsed time
 // to midnight, because DST days need not contain 24 hours.
 func (boundary dayBoundary) onDate(date time.Time, dayOffset int, loc *time.Location) time.Time {

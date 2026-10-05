@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -54,23 +55,19 @@ func newCursorCrossCommandDB(t *testing.T, addAmbiguousSource bool) *core.DB {
 }
 
 func TestCursorFixture_CrossCommandReferenceContract(t *testing.T) {
-	t.Run("sessions preserves unknown metadata without a filter and excludes it by time", func(t *testing.T) {
+	t.Run("search list preserves unknown metadata and excludes it by time", func(t *testing.T) {
 		var out, errOut bytes.Buffer
 		db := newCursorCrossCommandDB(t, false)
 		ref := testREF(t, db, core.SourceCursorAgent, cursorFixtureSessionID)
-		code, err := sessionsCmd(nil, staticDB(db), config{}, &out, &errOut)
-		if err != nil || code != 0 {
-			t.Fatalf("sessionsCmd = %d, %v (stderr: %q)", code, err, errOut.String())
+		code, err := searchCmd([]string{"--format", "json"}, staticDB(db), config{}, &out, &errOut)
+		var page searchGroupJSON
+		if err != nil || code != 0 || json.Unmarshal(out.Bytes(), &page) != nil || page.Count != 1 || page.Items[0].REF != ref || page.Items[0].Project != nil || page.Items[0].StartedAt != nil || page.Items[0].LastAt != nil {
+			t.Fatalf("search list = %d, %v, %s", code, err, out.String())
 		}
-		if !strings.HasSuffix(out.String(), "\tcursor_agent\n") || !strings.Contains(out.String(), ref+"\t\t\t\t") {
-			t.Fatalf("sessions output = %q, want Cursor source and unknown timestamp/repository fields", out.String())
-		}
-
 		out.Reset()
-		errOut.Reset()
-		code, err = sessionsCmd([]string{"--until", "2026-03-29"}, staticDB(newCursorCrossCommandDB(t, false)), config{}, &out, &errOut)
-		if err != nil || code != 0 || out.Len() != 0 {
-			t.Fatalf("time-filtered sessions = %d, %v, %q; want successful empty output", code, err, out.String())
+		code, err = searchCmd([]string{"--format", "json", "--until", "2026-03-29"}, staticDB(newCursorCrossCommandDB(t, false)), config{}, &out, &errOut)
+		if err != nil || code != 0 || json.Unmarshal(out.Bytes(), &page) != nil || page.Count != 0 {
+			t.Fatalf("time-filtered search list = %d, %v, %s", code, err, out.String())
 		}
 	})
 
