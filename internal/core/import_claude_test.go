@@ -333,3 +333,81 @@ func TestClaudeIncompleteSnapshotRetainsOwnerAndCursors(t *testing.T) {
 		t.Fatalf("recovered originals=%+v", after)
 	}
 }
+
+func TestClaudeBlankAppendPreservesOwnerAndImportTime(t *testing.T) {
+	root := testTempDir(t)
+	db := testDB(t)
+	const firstTime = "2026-10-01T00:00:00Z"
+	const secondTime = "2026-10-03T00:00:00Z"
+	priorClock := timeNow
+	timeNow = func() string { return firstTime }
+	defer func() { timeNow = priorClock }()
+	const relative = "p/r.jsonl"
+	body := `{"type":"user","uuid":"u","sessionId":"r","timestamp":"2026-09-30T10:00:00+09:00","message":{"role":"user","content":[{"type":"text","text":" alpha "},{"type":"text","text":"\nend"}]}}` + "\n"
+	writeClaude(t, root, relative, body)
+	importClaudeTest(t, db, root)
+	session, err := db.LookupSessionREF(claudeREF(root, "r"))
+	must(t, err)
+	if session == nil {
+		t.Fatal("missing imported owner")
+	}
+	before, err := db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
+	must(t, err)
+	if len(before) != 1 || before[0].Number != 1 || before[0].Content != " alpha \n\n\nend" || before[0].OriginPath != relative || before[0].OriginLine != 1 || before[0].Timestamp != "2026-09-30T10:00:00+09:00" || !reflect.DeepEqual(before[0].Blocks, []string{" alpha ", "\nend"}) {
+		t.Fatalf("initial originals=%+v", before)
+	}
+	readImportedAt := func() string {
+		t.Helper()
+		var value string
+		must(t, db.db.QueryRow(`SELECT imported_at FROM sessions WHERE input_id=? AND identity=?`, session.InputID, session.Identity).Scan(&value))
+		return value
+	}
+	if got := readImportedAt(); got != firstTime {
+		t.Fatalf("initial imported_at=%s", got)
+	}
+	search := func(boundary string) []SearchGroup {
+		t.Helper()
+		groups, err := db.SearchGroups(SearchCandidates{ImportedSince: boundary}, SessionFilter{}, nil, false, "active")
+		must(t, err)
+		return groups
+	}
+	included := search(firstTime)
+	excluded := search("2026-10-02T00:00:00Z")
+	if len(included) != 1 || len(excluded) != 0 {
+		t.Fatalf("initial search=%+v/%+v", included, excluded)
+	}
+	oldState, err := db.GetImportState(session.InputID, filepath.Join(root, relative))
+	must(t, err)
+	if oldState == nil {
+		t.Fatal("missing initial import state")
+	}
+	timeNow = func() string { return secondTime }
+	writeClaude(t, root, relative, body+"\n\n")
+	result := importClaudeTest(t, db, root)
+	after, err := db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
+	must(t, err)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("originals changed: before=%+v after=%+v", before, after)
+	}
+	if got := readImportedAt(); got != firstTime {
+		t.Fatalf("blank append changed imported_at: got %s want %s", got, firstTime)
+	}
+	if !reflect.DeepEqual(included, search(firstTime)) || !reflect.DeepEqual(excluded, search("2026-10-02T00:00:00Z")) {
+		t.Fatal("blank append changed imported-since results")
+	}
+	state, err := db.GetImportState(session.InputID, filepath.Join(root, relative))
+	must(t, err)
+	if result.FilesImported != 1 || state == nil || state.ContentHash == oldState.ContentHash || state.FileSize != int64(len(body)+2) || state.LastOffset != state.FileSize {
+		t.Fatalf("blank append did not advance state: result=%+v state=%+v", result, state)
+	}
+	if result = importClaudeTest(t, db, root); result.FilesSkipped != 1 || result.FilesImported != 0 {
+		t.Fatalf("processed input not skipped: %+v", result)
+	}
+	writeClaude(t, root, relative, strings.Replace(body, "alpha", "changed", 1))
+	importClaudeTest(t, db, root)
+	changed, err := db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
+	must(t, err)
+	if len(changed) != 1 || !strings.Contains(changed[0].Content, "changed") || readImportedAt() != secondTime {
+		t.Fatalf("changed body not imported: %+v", changed)
+	}
+}

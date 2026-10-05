@@ -110,7 +110,7 @@
 
 `43597927c1443206b64ea7f111214e757bf27423..66c28c76f85534652e0221d465b810129fe7b2c3` の Fresh Review と Finding Verification で、以下の8件を `confirmed`・`actionable` と判定した。FR-001〜006 は CLI で動的再現済み、FR-007・008 は静的な処理量の確認のみ。各タスクは記載した再現条件と完了条件を基準に実装・検証し、共通の必須 gate を通す。
 
-- [ ] Claude の本文不変時に取り込み日時を保持する
+- [x] Claude の本文不変時に取り込み日時を保持する
 
   FR-001。本文を1件以上保存した Claude 会話へ空行だけを追記して通常 `import` すると、本文・番号が同一でも `imported_at` が更新されることを再現した。不変判定の期待値は `Provenance` が空、取得値は `source_record` であり、構造体全体の比較が不一致となって本人の削除・再保存へ進む。`search --imported-since` に不変会話が混ざる。
 

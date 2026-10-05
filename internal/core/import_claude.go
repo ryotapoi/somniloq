@@ -212,7 +212,7 @@ func claudeOwnerUnchanged(db *DB, inputID int64, identity string, files []claude
 			}
 			m := r.Message
 			if strings.TrimSpace(m.Content) != "" {
-				expected = append(expected, MessageRow{UUID: m.UUID, Role: m.Role, Content: m.Content, Timestamp: m.Timestamp, Blocks: m.Blocks, Number: m.Number, OriginPath: m.OriginPath, OriginLine: m.OriginLine, PayloadID: m.PayloadID})
+				expected = append(expected, MessageRow{UUID: m.UUID, Role: m.Role, Content: m.Content, Timestamp: m.Timestamp, Blocks: m.Blocks, Number: m.Number, OriginPath: m.OriginPath, OriginLine: m.OriginLine, PayloadID: m.PayloadID, Provenance: "source_record"})
 			}
 		}
 		if t, ok := f.Titles[identity]; ok && t != title {
