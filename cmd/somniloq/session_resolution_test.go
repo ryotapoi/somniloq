@@ -95,10 +95,11 @@ func TestSearchSessionFixtureAndOwnShow(t *testing.T) {
 	if code != 0 || err != nil {
 		t.Fatalf("search: %d %v", code, err)
 	}
-	var hits []searchJSON
-	if err := json.Unmarshal(out.Bytes(), &hits); err != nil {
+	var page searchDetailJSON
+	if err := json.Unmarshal(out.Bytes(), &page); err != nil {
 		t.Fatal(err)
 	}
+	hits := page.Items
 	if len(hits) != 2 {
 		t.Fatalf("hits: %+v", hits)
 	}

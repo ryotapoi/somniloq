@@ -21,7 +21,7 @@ func validateFormat(format string, supported ...string) error {
 
 // JSON output is the machine-readable counterpart of the TSV/Markdown views
 // (ADR 0012). Timestamps stay in the stored RFC3339 UTC form, strings are
-// raw (no TSV sanitizing), and show emits a message envelope. Other commands emit JSON arrays.
+// raw (no TSV sanitizing), and show/search detail emit envelopes. Other commands emit JSON arrays.
 
 type sessionJSON struct {
 	REF          string `json:"ref"`

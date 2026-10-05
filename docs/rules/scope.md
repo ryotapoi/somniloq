@@ -126,8 +126,24 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 
 ### 検索（search）
 
-- `search --config NAME_OR_PATH [--session REF] [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] <query>` で全メッセージ本文を横断検索する。デフォルトは `tsv`。フラグは検索語より前に置く
+- `search --config NAME_OR_PATH` は session 指定の有無で詳細と横断検索を選ぶ。デフォルトは `tsv`。フラグは位置 pattern/query より前に置く
+
+#### 詳細検索（--session REF）
+
+`search --config NAME_OR_PATH --session REF [-e PATTERN]... [-F] [--all] [--limit N] [--offset N] [--format tsv|json] [PATTERN]`。位置 PATTERN が先頭、その後は -e の指定順で pattern 列を作る。フラグは位置 PATTERN より前に置く。
+
+- Go regexp の大小文字区別が既定、`(?i)` を受理し、`-F` は全 pattern を固定文字列にする。既定 OR、`--all` は対象本文集合全体で各 pattern が一度以上一致する AND。不成立は0箇所、成立時は全 pattern の一致を返す。空・無効・欠落 pattern は DB query 前に exit 2。
 - `--session REF` は指定本人と確定直接親を辿る子孫だけを対象とする。祖先・兄弟・root 所属だけの子は含めない。完全 REF の不正・不存在は exit 2、stdout 空。入力・source を跨いで接続せず、ページ化前に絞る。本人 show と core の関係 resolver を共有する。
+- 原文の UTF-8 byte `[startByte,endByte)` を返す。同一区間を統合して1始まり patternIndexesを残し、異なる重なりは別箇所。ゼロ幅と隣接空一致は Go FindAllStringIndex に従う。REF 辞書順→保存済み messageNumber→start/end 順で、occurrenceNumber は各発言内で1から採番し、page後も維持する。
+- matchText は一致原文、lineText は一致の先頭・末尾を含む行全体。LF は直前の行に属し、非空一致の末尾は endByte-1 の行まで含む。ゼロ幅は startByte の行、本文末尾は末尾行（末尾 LF の後なら空行）。行末 LF 自体は lineText に含めないが複数行の途中 LF は保持する。
+- JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`。item は `ref,messageNumber,occurrenceNumber,role,timestamp,startByte,endByte,patternIndexes,matchText,lineText` を常に返す。日時は raw 値、未知は null。TSV は同じ列順、先頭 `# page` metadata、可逆 escape を show と共有する。
+- 既定は全件（limit=null/offset=0）。明示 limit/offset だけ箇所単位で page 化する。limit=0 の hasMore は offset<total、nextOffset=null。末尾超過も page 前 total を返す。REF 解決・本文・件数は同じ read snapshot。
+- 負の limit/offset、不正・不存在 REF、pattern エラーは stdout 空の exit 2。現行 project alias/repo_path substring と発言 timestamp の条件を先に適用して AND を判定する。期間なしでは未知日時を保持する。新しい候補会話・日時 mode の契約は後続実装。
+
+#### 横断検索（--session なし、一覧切替前）
+
+`--session` なしは query 必須の既存 LIKE 検索。`-e` / `-F` / `--all` を指定すると exit 2。以下の turn/snippet/配列・limit>=1 の仕様はこの入口だけに適用する。
+
 - 実装は LIKE 全走査。FTS5 は日本語だと trigram 必須で索引が本文の 2〜3 倍に膨らみ、3 文字未満のクエリが索引で引けないため、LIKE で困るスケールになるまで見送り（本文 42 MB の DB で実測 0.1 秒前後）
 - マッチは SQLite LIKE 準拠: 大文字小文字の無視は ASCII のみ。query の `%`、`_`、`\` は文字列として扱う
 - 継承 context と所属不明本文は検索しない。Claude Code・Codex の本人 sidechain は対象とし、Cursor Agent は従来の sidechain 除外に従う（show と同じ扱い）
@@ -140,16 +156,16 @@ Claude Code と Codex は共通の `ResolveRepoPath` で `cwd` を解決する�
 - `--since`/`--until` は**メッセージの timestamp 基準**。RFC3339 instant は `Z` または numeric offset で指定した正確な時点として解釈する。NULL / 空 / 不正な timestamp は時刻条件に一致しない。sessions のセッション開始基準とは異なり、show と同じ発言基準となる（検索対象がメッセージのため。`docs/decisions/0013-search-time-filter-on-message-timestamp.md` 参照）。date-only（`YYYY-MM-DD`）は `dayBoundary`（未設定時 `00:00`、`--day-boundary HH:MM` で上書き可）を起点に解釈する。相対時刻と日時は `dayBoundary` の影響を受けない
 - `--project` は sessions と同じフィルタ規則（`repo_path` への substring マッチ、alias 展開含む）
 - `--limit N` は最大 N 件を返す。未指定時は無制限、N は 1 以上。`--offset M` は順序付け済みの先頭 M 件を飛ばす。未指定時は 0、M は 0 以上。すべての既存 filter と新しい順（timestamp 降順、同値は rowid 降順）を適用した後にページ化する
-- 同じ query・filter・`--limit` で `--offset` を増やせば続きのページを取得できる。ただし、この保証は DB が固定で、相対時刻 filter を含む場合は解決済みの時刻条件も固定である場合だけ。DB の変更や snapshot はサポートしない
+- 同じ query・filter・`--limit` で `--offset` を増やせば続きのページを取得できる。ただし、この保証は DB が固定で、相対時刻 filter を含む場合は解決済みの時刻条件も固定である場合だけ。DB の変更を跨ぐページの固定は保証しない
 
 ### JSON 出力（--format json）
 
 機械消費（スクリプト・skill からの利用）向けの構造化出力。判断の経緯は `docs/decisions/0012-json-output-schema.md` 参照。
 
 - 対象コマンド: `sessions` / `projects` / `search` / `show`（`--format tsv|json`、デフォルト `tsv`）
-- show は発言 envelope object（前節参照）、その他は JSON 配列。結果 0 件は show の items=[]、その他は `[]`。show の関係・本文・件数は同じ read transaction から取得する。
+- show と search --session は envelope object、その他は JSON 配列。結果0件は envelope の items=[]、配列入口は `[]`。show と詳細 search の関係・本文・件数は同じ read transaction から取得する。
 - フィールド名は camelCase
-- タイムスタンプは DB 保存値をそのまま出す。show は元の offset・精度・不正な非空 raw 値も保持する。ローカルタイム整形は sessions / projects / search の TSV 側だけの表示都合とする（タイムゾーン情報を失わないため）
+- タイムスタンプは DB 保存値をそのまま出す。show は元の offset・精度・不正な非空 raw 値も保持する。ローカルタイム整形は sessions / projects / 横断 search の TSV 側だけの表示都合とする（タイムゾーン情報を失わないため）
 - 文字列は生値（TSV のタブ・改行置換はしない。エスケープは JSON 側で担保される）
 - `title` は `custom_title` の生値（session_id フォールバックはしない）
 - `project` は alias canonical 表示と `--short` を反映した表示名（alias 一致時は canonical 名のみ、alias 非一致時のデフォルトは `repo_path` の生値）
@@ -238,7 +254,7 @@ DB path は TOML の db で指定する。新 DB は revision 1（`PRAGMA user_v
 
 ## 互換性
 
-- v0.12.0 以降、`search` query と `--project` は `%`、`_`、`\` を wildcard ではなく文字列として扱う。従来 wildcard を渡していた検索結果は変わる。explicit wildcard mode は提供しない。保存形式は変わらないため、DB migration、再 import は不要
+- v0.12.0 以降、横断 `search` query と `--project` は `%`、`_`、`\` を wildcard ではなく文字列として扱う。従来 wildcard を渡していた検索結果は変わる。explicit wildcard mode は提供しない。保存形式は変わらないため、DB migration、再 import は不要
 
 ## スキーマ変更への対応方針
 

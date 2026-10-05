@@ -12,9 +12,19 @@ import (
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
-const searchUsageLine = "somniloq search --config default [--session <REF>] [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] <query>"
+const searchUsageLine = "somniloq search --config default [--session <REF>] [--since <time>] [--until <time>] [--day-boundary <HH:MM>] [--project <name>] [--limit <n>] [--offset <n>] [--format <fmt>] [-e PATTERN] [-F] [--all] [PATTERN]"
 
-const searchHelpDetails = `Columns (TSV, in order):
+const searchHelpDetails = `Session detail (--session REF):
+  Go regexp, case sensitive; positional PATTERN first, then repeated -e in flag order.
+  -F quotes all patterns; --all requires every pattern across the selected bodies.
+  Returns all occurrences with original messageNumber, byte offsets, matchText and full lineText.
+  JSON uses {items,total,count,limit,offset,hasMore,nextOffset}; TSV uses page metadata and a fixed header.
+  Default unlimited; explicit --limit (including 0) and --offset page occurrences.
+  Empty/invalid/missing patterns, invalid/missing REFs and negative pages exit 2.
+  Current --project and message-time filters apply before AND; new grouped/date contracts are pending.
+  Without --session, the existing LIKE search below remains; -e/-F/--all require --session.
+
+Columns (TSV, in order):
   ref: full slq1 reference containing the matching message.
   turn: legacy user turn number containing the hit.
   time: local timestamp of the matching message.
@@ -42,6 +52,8 @@ Notes:
   Typical flow: search -> show <REF> --role user --one-line -> show <REF> --messages A:B.
 
 Examples:
+  somniloq search --config default --session <REF> -e "Inherited question" -e "Child answer" --all --format json
+  somniloq search --config default --session <REF> -F --limit 20 --offset 20 "auth bug"
   somniloq search --config default "auth bug"
   somniloq search --config default --since 7d --project somniloq "migration"
   somniloq search --config default --limit 50 --offset 50 "auth bug"
@@ -65,7 +77,16 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 	if fs.NArg() > 1 {
 		writeUsageError(errOut, "too many arguments")
 		fmt.Fprintln(errOut, searchUsage)
+		if flagWasProvided(fs, "session") {
+			return 2, nil
+		}
 		return 1, nil
+	}
+	if flagWasProvided(fs, "session") {
+		return searchDetailCmd(fs, flags, openDB, cfg, out, errOut)
+	}
+	if flagWasProvided(fs, "e") || flagWasProvided(fs, "F") || flagWasProvided(fs, "all") {
+		return 2, fmt.Errorf("-e, -F and --all require --session until grouped search is implemented")
 	}
 	query := fs.Arg(0)
 	if query == "" {
@@ -156,6 +177,8 @@ func searchCmd(args []string, openDB func() (*core.DB, error), cfg config, out, 
 type searchFlags struct {
 	since, until, dayBoundary, project, format, session *string
 	limit, offset                                       *int
+	patterns                                            *[]string
+	fixed, all                                          *bool
 }
 
 func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
@@ -166,10 +189,14 @@ func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 		until:       fs.String("until", "", "filter messages before a relative, local date/datetime, or RFC3339 instant"),
 		dayBoundary: fs.String("day-boundary", "", "logical day boundary for date filters (HH:MM, overrides config dayBoundary)"),
 		project:     fs.String("project", "", "filter by repo path (literal substring match)"),
-		limit:       fs.Int("limit", 0, "maximum number of results (at least 1)"),
+		limit:       fs.Int("limit", 0, "maximum results (detail: at least 0; legacy: at least 1)"),
 		offset:      fs.Int("offset", 0, "number of ordered results to skip (at least 0)"),
 		format:      fs.String("format", "tsv", "output format (tsv, json)"),
 	}
+	flags.fixed = fs.Bool("F", false, "treat all patterns as fixed strings (requires --session)")
+	flags.all = fs.Bool("all", false, "require every pattern across selected bodies (requires --session)")
+	flags.patterns = new([]string)
+	fs.Func("e", "append a regexp pattern (requires --session)", func(value string) error { *flags.patterns = append(*flags.patterns, value); return nil })
 	return fs, flags
 }
 

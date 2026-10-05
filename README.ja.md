@@ -42,9 +42,9 @@ Codex の取り込みは rollout の本人会話と継承文脈を区別する�
 
 新 DB は schema revision 1。通常コマンドは旧形式・非対応 DB（以前の root-only revision 1 shape を含む）を変更せず拒否する。既知の旧形式は `somniloq migrate --config archive --from ./archive-snapshot.db` で移せる。設定の `db` を未存在または空の移行先にし、残存 Codex ログの全 root を設定する。元は sidecar のない固定 standalone snapshot にする。同じ snapshot と完了 receipt がある移行先には再実行できる。所属不明・ログ欠落・他 source の旧履歴は保持し、legacy REF で参照できる。詳細は [移行契約](docs/specs/v0.14.0-migration.md) を参照。read コマンドは未存在 DB を作成せず拒否する。
 
-フラグ・出力形式は `somniloq <command> --help` を参照。`sessions`、`projects`、`search`、`show` は `--format tsv|json` に対応する。show 以外の JSON は配列、search は literal substring 検索。Claude Code の子・孫は root と sessionId を共有しても独立した本人 REF で取り込み・検索・閲覧でき、本人 sidechain の原文も保持する。直接親は同一物理ファイルの Agent/Task call と構造化結果を厳密に照合し、path の root 所属とは区別する。走査・読み取りが不完全な入力は前回保存の本文・関係・cursor を保持し、他入力の取り込みを続ける。`search --session REF QUERY` は共通 resolver で指定本人と確定子孫だけを検索し、祖先・兄弟・root 所属だけの子を含めない。query 必須の LIKE 検索を維持する。まとまり検索は後続実装。
+フラグ・出力形式は `somniloq <command> --help` を参照。`sessions`、`projects`、`search`、`show` は `--format tsv|json` に対応する。show と search --session の JSON は envelope、その他は配列。session なし search は literal substring 検索。Claude Code の子・孫は root と sessionId を共有しても独立した本人 REF で取り込み・検索・閲覧でき、本人 sidechain の原文も保持する。直接親は同一物理ファイルの Agent/Task call と構造化結果を厳密に照合し、path の root 所属とは区別する。走査・読み取りが不完全な入力は前回保存の本文・関係・cursor を保持し、他入力の取り込みを続ける。`search --session REF PATTERN` は共通 resolver で指定本人と確定子孫だけを検索し、祖先・兄弟・root 所属だけの子を含めない。Go regexp の全一致箇所を返す。複数 -e、全 pattern を固定文字列にする -F、本文集合全体の --all AND を指定できる。まとまり検索は後続実装。
 
-複数の完全 REF を一回の呼び出しで渡し、指定日の実発言だけを Daily Note の材料として取得できます。REF の指定順・各会話の元の発言番号順を保ち、`--descendants` は確定子孫だけを展開して重複会話を除きます。role・発言番号・日時で絞った後に、発言単位で limit / offset / tail を適用します。`--one-line` は text だけを最初の一行へ短縮し、blocks は原文を保ちます。既定 TSV、JSON は `{items,total,count,limit,offset,hasMore,nextOffset}` envelope です。show の日時は日付または zone 付き RFC3339 で指定し、相対時刻は受理しません。旧 outline・summary・turn・表示除外・Markdown・REF なし期間入口は廃止しました。現行 search の `turn` は show の `messageNumber` とは異なります。詳細は [現行仕様](docs/rules/scope.md#内容表示show) を参照してください。
+複数の完全 REF を一回の呼び出しで渡し、指定日の実発言だけを Daily Note の材料として取得できます。REF の指定順・各会話の元の発言番号順を保ち、`--descendants` は確定子孫だけを展開して重複会話を除きます。role・発言番号・日時で絞った後に、発言単位で limit / offset / tail を適用します。`--one-line` は text だけを最初の一行へ短縮し、blocks は原文を保ちます。既定 TSV、JSON は `{items,total,count,limit,offset,hasMore,nextOffset}` envelope です。show の日時は日付または zone 付き RFC3339 で指定し、相対時刻は受理しません。旧 outline・summary・turn・表示除外・Markdown・REF なし期間入口は廃止しました。session なし search の `turn` は show の `messageNumber` とは異なります。詳細 search の messageNumber は show と同じ原文番号です。詳細は [現行仕様](docs/rules/scope.md#内容表示show) を参照してください。
 
 ```sh
 # REF1 / REF2 は sessions / search からコピーした完全 REF
@@ -53,7 +53,7 @@ somniloq show --config default REF --role user --one-line
 somniloq show --config default REF --messages 12:18 --limit 50 --format json
 ```
 
-次は後続 search 実装後の最終契約例です。現在の search JSON は配列で、`.items[].members[]` や query なしの日付一覧はまだ利用できません。
+次は後続 search 実装後の最終契約例です。現在の session なし search JSON は配列で、`.items[].members[]` や query なしの日付一覧はまだ利用できません。
 
 ```sh
 set -- $(somniloq search --config default --since 2026-10-01 --until 2026-10-01 --time-mode active --format json | jq -r '.items[].members[]' | sort -u)
@@ -105,3 +105,11 @@ root = "~/.cursor/projects"
 ## ライセンス
 
 [MIT License](LICENSE)
+
+既知 REF の詳細検索は既定全件で、明示 limit/offset は一致箇所単位です。原文 UTF-8 byte 位置、matchText、行全体の lineText と番号を返し、同じ REF/番号で show に戻れます。フラグは位置 PATTERN より前に置き、patternIndexes は位置 PATTERN が先頭、次に -e の指定順です。session なしで -e/-F/--all は exit 2 になります。
+
+```sh
+somniloq search --config default --session REF -e "Inherited question" -e "Child answer" --all --format json
+somniloq search --config default --session REF -F --limit 20 --offset 20 "auth bug"
+somniloq show --config default REF --messages 1:1 --format json
+```
