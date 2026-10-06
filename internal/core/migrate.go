@@ -107,6 +107,7 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 			}
 		}
 	}
+	candidates := migrationGroupCandidates(evidence)
 	successful := map[string]map[int]bool{}
 	for i, scan := range scans {
 		if len(scan.Errors) > 0 {
@@ -139,7 +140,7 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 			}
 			removed := 0
 			if err == nil {
-				removed, err = replaceMigrationGroup(db, scan.Input, g, i, j, evidence, adapter, scan, importedAt)
+				removed, err = replaceMigrationGroup(db, scan.Input, g, candidates[[2]int{i, j}], adapter, scan, importedAt)
 			}
 			if err != nil {
 				result.GroupsFailed++
@@ -196,6 +197,19 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 	return db.db.QueryRow(`SELECT count(*) FROM legacy_sessions`).Scan(&result.LegacyConversationsRetained)
 }
 
+// Candidates must be assigned only after evidence from all inputs, including
+// failed groups, is complete. Physical duplicate/context lines remain evidence.
+func migrationGroupCandidates(evidence map[string][]migrationEvidence) map[[2]int][]string {
+	candidates := map[[2]int][]string{}
+	for uuid, matches := range evidence {
+		if len(matches) == 1 {
+			owner := [2]int{matches[0].Input, matches[0].Group}
+			candidates[owner] = append(candidates[owner], uuid)
+		}
+	}
+	return candidates
+}
+
 func checkMigrationSnapshot(adapter codex.Adapter, scan migrationInput, group codex.Group) error {
 	files, errs := adapter.ScanFiles(scan.Input.Root)
 	if len(errs) > 0 {
@@ -219,7 +233,7 @@ func checkMigrationSnapshot(adapter codex.Adapter, scan migrationInput, group co
 	return nil
 }
 
-func replaceMigrationGroup(db *DB, input Input, g codex.Group, inputIndex, groupIndex int, evidence map[string][]migrationEvidence, adapter codex.Adapter, scan migrationInput, importedAt string) (int, error) {
+func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, adapter codex.Adapter, scan migrationInput, importedAt string) (int, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, err
@@ -249,31 +263,21 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, inputIndex, group
 			return 0, err
 		}
 	}
-	rows, err := tx.Query(`SELECT legacy_rowid,uuid,session_id FROM legacy_messages WHERE source='codex'`)
-	if err != nil {
-		return 0, err
-	}
 	type removal struct {
 		rowid     int64
 		sessionID string
 	}
 	var removals []removal
-	for rows.Next() {
+	for _, uuid := range uuids {
 		var row removal
-		var uuid string
-		if err = rows.Scan(&row.rowid, &uuid, &row.sessionID); err != nil {
-			rows.Close()
+		err = tx.QueryRow(`SELECT legacy_rowid,session_id FROM legacy_messages WHERE uuid=? AND source='codex'`, uuid).Scan(&row.rowid, &row.sessionID)
+		if err == sql.ErrNoRows {
+			continue
+		}
+		if err != nil {
 			return 0, err
 		}
-		matches := evidence[uuid]
-		if len(matches) == 1 && matches[0].Input == inputIndex && matches[0].Group == groupIndex {
-			removals = append(removals, row)
-		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return 0, err
+		removals = append(removals, row)
 	}
 	for _, row := range removals {
 		if _, err = tx.Exec(`DELETE FROM legacy_messages WHERE legacy_rowid=?`, row.rowid); err != nil {

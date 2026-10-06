@@ -146,7 +146,7 @@
 
   同じ cwd の record 数を増やしても Git 解決の起動数が record 数に比例せず、repository / branch の結果と不変取り込みの skip が維持されることを確認すれば完了。異なる cwd の結果を混同しないことも確認する。wall-clock 性能と実ログでの頻度は未測定。空 cwd と `/.claude/worktrees/` は Git 不要で、linked worktree は通常より起動数が多い場合がある。過去の取り込み中止原因には帰属しない。入口は [snapshot構築](../internal/ingest/claudecode/snapshot.go)、[hash判定](../internal/core/import_claude.go)、[Git resolver](../internal/core/repo_path.go)。再利用の既存例は [adapter](../internal/ingest/claudecode/adapter.go) の cwd cache を参照する。
 
-- [ ] migrate の group ごとの無関係な legacy 全件読取を減らす
+- [x] migrate の group ごとの無関係な legacy 全件読取を減らす
 
   FR-007。多数の Codex group と legacy 発言を持つ snapshot の `migrate` では、UUID→group evidence を事前構築済みでも、各 group の write transaction 内で `source='codex'` の残存 legacy 行をすべて Scan し、Go 側で対象を選ぶ。G group の各回に残存 L_i 行を読み、置換不能な行が残れば G×L の反復が生じることを静的確認した。[実ログの規模](../docs/specs/v0.14.0-log-evidence.md) は旧 DB 14,783会話・196,787発言を記録している。
 
