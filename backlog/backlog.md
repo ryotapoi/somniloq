@@ -152,7 +152,7 @@
 
   当該 group に無関係な全行を毎回 Go へ移送する処理を減らし、大きい fixture で読取量と所要時間を比較して改善を確認すれば完了。旧行の限定削除・競合証拠の保持・失敗時 rollback の契約も既存 fixture で維持する。実際の G・L_i・削除分布・経過時間・SQLite cache 効果は未測定で、G×L/2 は均等削除時の近似にすぎない。inventory 再検査の安全保証と費用は本件に含めない。入口は [migration](../internal/core/migrate.go) の evidence 構築と `replaceMigrationGroup` の全行 query、[UUID UNIQUE制約](../internal/core/db_schema.go)。削除・保持契約は [移行契約](../docs/specs/v0.14.0-migration.md) を参照する。
 
-- [ ] 複数 REF の show で namespace 集計と関係構築を共有する
+- [x] 複数 REF の show で namespace 集計と関係構築を共有する
 
   FR-008。help にある `search` の `.items[].members[]` を複数 REF として `show` へ渡す経路では、同じ Claude / Codex namespace の全 session・全 message 集約と graph 構築を REF ごとに繰り返す。子孫指定なしでも発言フィルタと重複除外より前に行うため、同 namespace の K REF で集約・構築が K 回になることを静的確認した。
 

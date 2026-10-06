@@ -173,3 +173,52 @@ func TestResolutionSiblingDFSOrder(t *testing.T) {
 		t.Fatalf("DFS %+v want %v", r.Descendants, want)
 	}
 }
+
+func TestSessionResolverNamespacesAndNextSnapshot(t *testing.T) {
+	db := testDB(t)
+	codex := testTempDir(t)
+	other := testTempDir(t)
+	for _, root := range []string{codex, other} {
+		copyCodexFixture(t, root, "child.jsonl")
+		copyCodexFixture(t, root, "grandchild.jsonl")
+		runCodexImport(t, db, root, false)
+	}
+	claude, err := filepath.Abs("../ingest/testdata/v0.14.0/claude-code/input-a")
+	must(t, err)
+	importClaudeTest(t, db, claude)
+	selected := []string{relationREF(codex, SourceCodex, "child"), claudeREF(claude, "cc-root", "unresolved"), relationREF(other, SourceCodex, "child"), claudeREF(claude, "cc-root", "child"), relationREF(codex, SourceCodex, "grandchild")}
+	must(t, db.ReadSnapshot(func(snapshot *DB) error {
+		resolver := snapshot.NewSessionResolver()
+		for _, ref := range selected {
+			want := requireResolution(t, snapshot, ref)
+			got, err := resolver.Resolve(ref, true)
+			must(t, err)
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("shared %s: %+v want %+v", ref, got, want)
+			}
+			got, err = resolver.Resolve(ref, false)
+			must(t, err)
+			want.Descendants = nil
+			if !reflect.DeepEqual(got, want) {
+				t.Fatalf("self %s: %+v want %+v", ref, got, want)
+			}
+		}
+		return nil
+	}))
+	copyCodexFixture(t, codex, "root.jsonl")
+	runCodexImport(t, db, codex, false)
+	must(t, db.ReadSnapshot(func(snapshot *DB) error {
+		resolver := snapshot.NewSessionResolver()
+		got, err := resolver.Resolve(selected[0], false)
+		must(t, err)
+		if got.Parent == nil || got.Root == nil {
+			t.Fatalf("next snapshot missed parent: %+v", got)
+		}
+		other, err := resolver.Resolve(selected[2], false)
+		must(t, err)
+		if other.Parent != nil || other.Root != nil {
+			t.Fatalf("mixed inputs: %+v", other)
+		}
+		return nil
+	}))
+}

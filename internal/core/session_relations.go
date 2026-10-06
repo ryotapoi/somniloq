@@ -22,29 +22,61 @@ type SessionResolution struct {
 // Descendants include Self in parent-first DFS order, with siblings sorted by REF.
 // Legacy and Cursor sessions remain independent.
 func (d *DB) ResolveSession(ref string) (*SessionResolution, error) {
-	self, err := d.LookupSessionREF(ref)
+	return d.NewSessionResolver().Resolve(ref, true)
+}
+
+type sessionNamespace struct {
+	inputID int64
+	source  Source
+}
+
+// SessionResolver shares namespace relations for one read operation.
+// Create it inside ReadSnapshot and discard it when the callback returns.
+type SessionResolver struct {
+	db         *DB
+	namespaces map[sessionNamespace]*sessionRelations
+}
+
+func (d *DB) NewSessionResolver() *SessionResolver {
+	return &SessionResolver{db: d, namespaces: map[sessionNamespace]*sessionRelations{}}
+}
+
+// Resolve preserves full REF validation and optionally expands descendants.
+func (r *SessionResolver) Resolve(ref string, descendants bool) (*SessionResolution, error) {
+	self, err := r.db.LookupSessionREF(ref)
 	if err != nil || self == nil {
 		return nil, err
 	}
 	if self.InputID < 0 || self.Source == SourceCursorAgent {
 		self.ParentREF, self.RootREF = "", ""
-		return &SessionResolution{Self: *self, GroupKey: ref, RepresentativeREF: ref, Members: []SessionRow{*self}, Descendants: []SessionRow{*self}}, nil
+		result := &SessionResolution{Self: *self, GroupKey: ref, RepresentativeREF: ref, Members: []SessionRow{*self}}
+		if descendants {
+			result.Descendants = []SessionRow{*self}
+		}
+		return result, nil
 	}
-	rows, err := d.execer().Query(sessionRowSelect+` WHERE s.input_id=? AND s.source=? GROUP BY s.input_id,s.source,s.identity`, self.InputID, self.Source)
-	if err != nil {
-		return nil, fmt.Errorf("resolve sessions: %w", err)
-	}
-	sessions, err := scanSessionRows(rows, "resolve sessions")
-	if err != nil {
-		return nil, err
+	namespace := sessionNamespace{inputID: self.InputID, source: self.Source}
+	g := r.namespaces[namespace]
+	if g == nil {
+		rows, err := r.db.execer().Query(sessionRowSelect+` WHERE s.input_id=? AND s.source=? GROUP BY s.input_id,s.source,s.identity`, self.InputID, self.Source)
+		if err != nil {
+			return nil, fmt.Errorf("resolve sessions: %w", err)
+		}
+		sessions, err := scanSessionRows(rows, "resolve sessions")
+		if err != nil {
+			return nil, err
+		}
+		g = buildSessionRelations(sessions)
+		r.namespaces[namespace] = g
 	}
 	key, _, _, _ := parseREF(ref)
-	return resolveSessionRelations(*self, sessions, key), nil
+	return g.resolve(*self, key, descendants), nil
 }
 
 type sessionRelations struct {
 	byID        map[string]SessionRow
 	parents     map[string]string
+	children    map[string][]SessionRow
 	groups      map[string][]SessionRow
 	groupKeys   map[string]string
 	diagnostics []string
@@ -124,14 +156,16 @@ func (g *sessionRelations) resolve(self SessionRow, inputKey string, descendants
 	if !descendants {
 		return result
 	}
-	children := map[string][]SessionRow{}
-	for id, parent := range g.parents {
-		if _, exists := g.byID[parent]; exists {
-			children[parent] = append(children[parent], g.byID[id])
+	if g.children == nil {
+		g.children = map[string][]SessionRow{}
+		for id, parent := range g.parents {
+			if _, exists := g.byID[parent]; exists {
+				g.children[parent] = append(g.children[parent], g.byID[id])
+			}
 		}
-	}
-	for parent := range children {
-		sort.Slice(children[parent], func(i, j int) bool { return children[parent][i].REF < children[parent][j].REF })
+		for parent := range g.children {
+			sort.Slice(g.children[parent], func(i, j int) bool { return g.children[parent][i].REF < g.children[parent][j].REF })
+		}
 	}
 	visited := map[string]bool{}
 	var visit func(SessionRow)
@@ -141,7 +175,7 @@ func (g *sessionRelations) resolve(self SessionRow, inputKey string, descendants
 		}
 		visited[s.Identity] = true
 		result.Descendants = append(result.Descendants, s)
-		for _, c := range children[s.Identity] {
+		for _, c := range g.children[s.Identity] {
 			visit(c)
 		}
 	}

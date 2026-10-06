@@ -111,10 +111,11 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	items := []showMessageJSON{}
 	selectionCode := 1
 	err = db.ReadSnapshot(func(snapshot *core.DB) error {
+		resolver := snapshot.NewSessionResolver()
 		sessions := []core.SessionRow{}
 		seen := map[string]bool{}
 		for _, ref := range fs.Args() {
-			resolved, err := snapshot.ResolveSession(ref)
+			resolved, err := resolver.Resolve(ref, *f.descendants)
 			if err != nil {
 				var re *core.REFError
 				if errors.As(err, &re) {

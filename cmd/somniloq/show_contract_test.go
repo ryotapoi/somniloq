@@ -175,6 +175,36 @@ func TestShowOriginalFixtureContract(t *testing.T) {
 		}
 	}
 
+	// Claude root-only membership and overlapping expansion remain distinct,
+	// even when Codex and another input are selected in the same operation.
+	for _, descendants := range []bool{false, true} {
+		selected := []string{ref(core.SourceClaudeCode, `["cc-root","unresolved"]`), ref(core.SourceClaudeCode, `["cc-root","child"]`), ref(core.SourceCodex, `["child"]`), ref(core.SourceClaudeCode, `["cc-root","child"]`), ref(core.SourceClaudeCode, `["cc-root"]`)}
+		args := []string{"--format", "json"}
+		if descendants {
+			args = append(args, "--descendants")
+		}
+		var out, diag bytes.Buffer
+		code, err := showCmd(append(args, selected...), open, config{}, &out, &diag)
+		if code != 0 || err != nil {
+			t.Fatalf("mixed: %d %v", code, err)
+		}
+		var got showJSON
+		if err := json.Unmarshal(out.Bytes(), &got); err != nil {
+			t.Fatal(err)
+		}
+		texts := []string{}
+		for _, item := range got.Items {
+			texts = append(texts, item.Text)
+		}
+		want := []string{"Unresolved prompt", "Child prompt", "Child result", "Child answer", "Second rollout answer", "Child follow-up", "Root question"}
+		if descendants {
+			want = []string{"Unresolved prompt", "Child prompt", "Child result", "Grandchild prompt", "Grandchild result", "Child answer", "Second rollout answer", "Child follow-up", "Grandchild answer", "Root question"}
+		}
+		if !reflect.DeepEqual(texts, want) {
+			t.Fatalf("mixed descendants=%t: %v", descendants, texts)
+		}
+	}
+
 	for _, tc := range []struct {
 		src   core.Source
 		id    string
