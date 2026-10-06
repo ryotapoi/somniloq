@@ -38,7 +38,7 @@ SQLite の変更目的から入口を選ぶ。schema・migration・書き込み�
 - project の集約・日時条件を変える: `ListProjects` と `timeFilterConditions`、表示は `cmd/somniloq/projects.go` を確認する。search の候補条件は `internal/core/search_groups.go` の `SearchCandidates.accepts` と `candidateBodies` を辿る。
 - 本文の取得や順序を変える: `internal/core/db_messages_summary.go` の `GetIdentityMessages`（show）を読み、本人原文の保存済み番号順と context 非混入を確認する。show の filter と表示変換は cmd 層で行う。表示・一覧・詳細への影響は [Display and turns](display-and-turns.md) を辿る。
 
-- REF の本人・まとまり・確定子孫の解決は `internal/core/session_relations.go` の `ResolveSession`。入力と source 内の保存関係だけを辿り、Codex 欠落親 key と Claude root 所属を区別する。show と `SearchOccurrences` が同じ解決を使う。検索 scope は照合とページ化の前に適用し、循環辺は未確定として診断する。回帰の入口は `internal/core/session_relations_test.go`。
+- REF の本人・まとまり・確定子孫の解決は `internal/core/session_relations.go`。show は `ReadSnapshot` 内で `NewSessionResolver` を作り、`SessionResolver.Resolve` で namespace の集計・関係構築を REF 間で共有する。`SearchOccurrences` は単一 REF の `ResolveSession` を使う。入力と source 内の保存関係だけを辿り、Codex 欠落親 key と Claude root 所属を区別する。検索 scope は照合とページ化の前に適用し、循環辺は未確定として診断する。回帰の入口は `internal/core/session_relations_test.go`。
 
 - 全一致詳細は `internal/core/search_matches.go` の `PatternMatcher` / `SearchOccurrences` と `cmd/somniloq/search_detail.go`。候補は `search_groups.go` の `searchOwners` / `SearchCandidates.accepts`、候補本文は `candidateBodies` を一覧と共有し、本人原文の保存済み番号を保持する。関係・本文・件数は ReadSnapshot。
 - まとまり一覧は `SearchGroups`。全 group metadata の日時読み取りは `readOwnerTimes`、一括関係解決は `resolveSessionGroups`。候補の本文照合を済ませた全結果に cmd が page を適用する。回帰は `search_groups_test.go` の候補/metadata と独立 writer 下の snapshot tests。

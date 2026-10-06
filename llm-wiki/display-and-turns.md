@@ -20,7 +20,7 @@ sources:
 
 ## show の選択から表示まで
 
-- 入口は `cmd/somniloq/show.go` の `showCmd`。複数 REF の解決・確定子孫の展開は `internal/core/session_relations.go` の `ResolveSession`、本人原文の読み取りは `internal/core/db_messages_summary.go` の `GetIdentityMessages` を同じ `ReadSnapshot` 内で呼ぶ。REF の展開順と重複排除を変えるなら resolver と show の両方を見る。
+- 入口は `cmd/somniloq/show.go` の `showCmd`。複数 REF の解決・確定子孫の展開は `internal/core/session_relations.go` の `NewSessionResolver` / `SessionResolver.Resolve`、本人原文の読み取りは `internal/core/db_messages_summary.go` の `GetIdentityMessages` を同じ `ReadSnapshot` 内で呼ぶ。resolver は read snapshot 内で一つ作り、REF 間で namespace の集計・関係構築を共有する。REF の展開順・重複排除・共有範囲を変えるなら resolver と show の両方を見る。
 - 発言 filter、ページ、一行化は show の cmd 層にある。番号範囲は `parseMessageRange`、日時の受理は `parseShowTime`、一行化は `showFirstLine` が入口。保存済み番号・raw timestamp・blocks の読み取りを変えずに text だけを変換する経路を確認する。回帰の入口は `cmd/somniloq/show_contract_test.go` と `cmd/somniloq/show_filters_test.go`。
 - JSON の item/envelope 型と構築は `cmd/somniloq/jsonout.go`、TSV の page 行・header・escape は `cmd/somniloq/show_tsv.go`。両形式の件数と本文は show で組み立てる同じ結果を使う。出力契約の正本は `docs/specs/v0.14.0-contract.md` の「出力」。
 
