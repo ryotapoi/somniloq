@@ -140,7 +140,7 @@
 
   再実行の開始前に一部 rollout が欠落した場合、当該 group を成功置換せず、既存正常本文・旧行・cursor を保持することを確認すれば完了。全 rollout が消えて group 自体がない場合は本件の対象外。動的再現は旧本文0件の snapshot であり、初回削除済み legacy コピーを receipt により復元できない追加影響は静的確認のみ。入口は [group検査・置換](../internal/core/migrate.go) の `replaceMigrationGroup` と [receiptによるコピー省略](../internal/core/migrate_snapshot.go)。保持契約は [移行契約](../docs/specs/v0.14.0-migration.md) の rollout 欠落時の失敗条件を参照する。
 
-- [ ] Claude snapshot の同一 cwd で Git 解決を再利用する
+- [x] Claude snapshot の同一 cwd で Git 解決を再利用する
 
   FR-006。通常 repository の同じ cwd を持つ20 user record を CLI で取り込み、PATH の wrapper で数えると Git 起動は初回40回、不変再取り込みも40回だった。後者は1 file skip でも、hash 判定より前に全 record で resolver を呼ぶ。旧 adapter の cwd cache を使わず、通常 repository で record 数 R に対して2R回の同期外部 process 待ちが生じる。
 

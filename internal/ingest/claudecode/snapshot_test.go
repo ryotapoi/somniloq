@@ -1,12 +1,73 @@
 package claudecode
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
 )
+
+func TestBuildSnapshotsReusesRepositoryPerCWDWithinPass(t *testing.T) {
+	root := t.TempDir()
+	paths := []string{filepath.Join(root, "a.jsonl"), filepath.Join(root, "b.jsonl")}
+	inputs := []struct {
+		cwd, branch, role string
+	}{
+		{"/project/a", "main", "user"},
+		{"/project/a", "feature", "assistant"},
+		{"/project/b", "other", "user"},
+		{"/not-a-repository", "", "user"},
+	}
+	for _, path := range paths {
+		var data []byte
+		for i, input := range inputs {
+			record, err := json.Marshal(RawRecord{
+				Type: input.role, UUID: string(rune('a' + i)), SessionID: "session",
+				CWD: input.cwd, GitBranch: input.branch,
+				Message: json.RawMessage(`{"role":"` + input.role + `","content":"text"}`),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			data = append(data, record...)
+			data = append(data, '\n')
+		}
+		if err := os.WriteFile(path, data, 0644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	repositories := map[string]string{"/project/a": "/repo/a", "/project/b": "/repo/b", "/not-a-repository": ""}
+	calls := map[string]int{}
+	adapter := NewAdapter(func(cwd string) string {
+		calls[cwd]++
+		return repositories[cwd]
+	})
+	for pass := 1; pass <= 2; pass++ {
+		files, readErrors, diagnostics := adapter.BuildSnapshots(root, paths, "now")
+		if len(readErrors) != 0 || len(diagnostics) != 0 || len(files) != len(paths) {
+			t.Fatalf("files=%d readErrors=%v diagnostics=%v", len(files), readErrors, diagnostics)
+		}
+		for _, file := range files {
+			if len(file.Failures) != 0 || len(file.Records) != len(inputs) {
+				t.Fatalf("records=%d failures=%v", len(file.Records), file.Failures)
+			}
+			for i, record := range file.Records {
+				input := inputs[i]
+				if record.Session.RepoPath != repositories[input.cwd] || record.Session.GitBranch != input.branch {
+					t.Fatalf("pass=%d cwd=%q repo=%q branch=%q", pass, input.cwd, record.Session.RepoPath, record.Session.GitBranch)
+				}
+			}
+		}
+		for cwd := range repositories {
+			if calls[cwd] != pass {
+				t.Fatalf("pass=%d cwd=%q resolver calls=%d want=%d", pass, cwd, calls[cwd], pass)
+			}
+		}
+		repositories["/project/a"] = "/repo/changed"
+	}
+}
 
 func TestResolveParents(t *testing.T) {
 	for _, tc := range []struct {

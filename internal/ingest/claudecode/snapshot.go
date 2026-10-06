@@ -62,6 +62,7 @@ func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string) 
 	var files []FileSnapshot
 	var readErrors, diagnostics []error
 	candidates := map[string]map[string]bool{}
+	repoCache := map[string]string{}
 	for _, path := range paths {
 		data, err := os.ReadFile(path)
 		if err != nil {
@@ -112,7 +113,12 @@ func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string) 
 			case "agent-name":
 				f.AgentNames[identity] = rec.AgentName
 			case "user", "assistant":
-				normalized, err := NormalizeRecord(rec, a.resolveRepoPath(rec.CWD))
+				repo, ok := repoCache[rec.CWD]
+				if !ok {
+					repo = a.resolveRepoPath(rec.CWD)
+					repoCache[rec.CWD] = repo
+				}
+				normalized, err := NormalizeRecord(rec, repo)
 				if err != nil {
 					fail(err)
 					return nil
