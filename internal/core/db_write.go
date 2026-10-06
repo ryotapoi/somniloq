@@ -10,8 +10,9 @@ import (
 )
 
 type importTx struct {
-	tx      *sql.Tx
-	inputID int64
+	tx                 *sql.Tx
+	inputID            int64
+	allowCyclicParents bool
 }
 
 // importTx must keep satisfying the claude-code-specific extension interface
@@ -19,7 +20,7 @@ type importTx struct {
 var _ claudecode.SessionMetaWriter = importTx{}
 
 func (t importTx) UpsertSession(meta ingest.SessionMeta, importedAt string) error {
-	return upsertSession(t.tx, t.inputID, meta, importedAt)
+	return upsertSession(t.tx, t.inputID, meta, importedAt, t.allowCyclicParents)
 }
 
 func (t importTx) InsertMessage(msg ingest.NormalizedMessage) error {
@@ -57,10 +58,10 @@ func (t importTx) Rollback() error {
 }
 
 func (d *DB) UpsertSession(inputID int64, meta SessionMeta, importedAt string) error {
-	return upsertSession(d.execer(), inputID, meta, importedAt)
+	return upsertSession(d.execer(), inputID, meta, importedAt, false)
 }
 
-func upsertSession(e execer, inputID int64, meta SessionMeta, importedAt string) error {
+func upsertSession(e execer, inputID int64, meta SessionMeta, importedAt string, allowCyclicParents bool) error {
 	identity := meta.Identity
 	if identity == "" {
 		identity = rootIdentity(meta.SessionID)
@@ -69,7 +70,7 @@ func upsertSession(e execer, inputID int64, meta SessionMeta, importedAt string)
 	if parentIdentity == "" && meta.ParentSessionID != "" {
 		parentIdentity = rootIdentity(meta.ParentSessionID)
 	}
-	if parentIdentity != "" {
+	if parentIdentity != "" && !allowCyclicParents {
 		if parentIdentity == identity {
 			return fmt.Errorf("session %q cannot parent itself", meta.SessionID)
 		}

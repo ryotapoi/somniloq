@@ -362,7 +362,7 @@ func TestMigrateFixtureReplacementOracle(t *testing.T) {
 }
 
 func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
-	for _, kind := range []string{"partial_tail", "metadata_only_sibling", "save_failure", "changed_rollout", "missing_rollout"} {
+	for _, kind := range []string{"partial_tail", "metadata_only_sibling", "save_failure", "changed_rollout", "missing_rollout", "cyclic_parent"} {
 		t.Run(kind, func(t *testing.T) {
 			oracle := readMigrationOracle(t)
 			c := migrationOracleCase{Name: "multiple_rollouts", Files: []string{"02-multi.jsonl", "03-multi.jsonl"}}
@@ -408,6 +408,17 @@ func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
 					t.Fatal(errs)
 				}
 			}
+			if kind == "cyclic_parent" {
+				inputID, err := db.EnsureInput(f.inputs[0])
+				must(t, err)
+				must(t, db.UpsertSession(inputID, SessionMeta{Source: SourceCodex, SessionID: "peer", ParentSessionID: "multi"}, "saved"))
+				for _, path := range files {
+					data, err := os.ReadFile(path)
+					must(t, err)
+					data = []byte(strings.ReplaceAll(string(data), `"id":"multi"`, `"id":"multi","source":{"subagent":{"thread_spawn":{"parent_thread_id":"peer"}}}`))
+					must(t, os.WriteFile(path, data, 0600))
+				}
+			}
 			groups, errs := adapter.BuildMigrationGroups(f.root, files, "2026-01-01T00:00:00Z")
 			if len(errs) > 0 {
 				t.Fatal(errs)
@@ -440,6 +451,9 @@ func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
 					t.Fatalf("group cursors=%d want 3", n)
 				}
 				return
+			}
+			if kind == "cyclic_parent" && (len(r.Errors) != 1 || !strings.Contains(r.Errors[0].Error(), "cycle")) {
+				t.Fatalf("expected strict cycle rejection: %+v", r.Errors)
 			}
 			if r.GroupsFailed != 1 || r.GroupsReplaced != 0 {
 				t.Fatalf("failure result=%+v", r)

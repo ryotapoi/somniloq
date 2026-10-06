@@ -122,7 +122,7 @@
 
   metadata-only 編集後の通常取り込みと `--full` で本文列・番号が一致することを確認すれば完了。malformed-only 編集の保持方針は対象外。物理削除・入力外移動は同じ skip 経路を静的確認しただけで、独立した契約は未確認。入口は [group構築](../internal/ingest/codex/group.go) の `BuildGroups` と [通常・full取り込み](../internal/core/import_codex.go)。編集再構築と通常 / full 一致の契約は [制約](../docs/rules/constraints.md)「SQLとデータの意味」、[JSONL schema](../docs/specs/jsonl-schema.md)、[v0.14.0契約](../docs/specs/v0.14.0-contract.md) を参照する。
 
-- [ ] Codex の循環した親情報でも本人本文を保持する
+- [x] Codex の循環した親情報でも本人本文を保持する
 
   FR-003。正常本文を持つ A / B が `parent_thread_id` で互いを指す入力を通常 `import` すると、循環保存エラーで exit 1 となり A 本文だけが残り B 本文が欠落した。続く `--full` も exit 1 となり、入力全体の置換を rollback して A だけの状態に戻る。親と本文を同じ保存経路に置くため、循環辺を未確定として扱う関係解決器へ本人本文が届かない。
 

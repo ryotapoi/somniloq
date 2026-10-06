@@ -7,6 +7,9 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
 
+// Ordinary Codex imports retain raw parent evidence even when cyclic so the
+// relation resolver can diagnose it without discarding valid owner bodies.
+// Dedicated migration keeps the strict writer default.
 func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter, importedAt string, full bool) (*ImportResult, error) {
 	files, scanErrs := adapter.ScanFiles(root)
 	result := &ImportResult{FilesScanned: len(files), Errors: scanErrs}
@@ -62,7 +65,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 		if err != nil {
 			return nil, err
 		}
-		t := importTx{tx: tx, inputID: inputID}
+		t := importTx{tx: tx, inputID: inputID, allowCyclicParents: true}
 		for i, path := range paths {
 			current, e := getImportState(tx, inputID, path)
 			if e != nil {
@@ -142,7 +145,7 @@ func replaceCodexInput(db *DB, inputID int64, groups []codex.Group, result *Impo
 			return nil, err
 		}
 	}
-	t := importTx{tx: tx, inputID: inputID}
+	t := importTx{tx: tx, inputID: inputID, allowCyclicParents: true}
 	for _, g := range groups {
 		for _, report := range g.Reports {
 			pr := report.Diagnostics(nil)
