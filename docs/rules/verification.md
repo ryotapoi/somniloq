@@ -14,11 +14,16 @@ go test -count=1 ./...
 go vet ./...
 go build -o bin/somniloq ./cmd/somniloq
 
+go install github.com/google/go-licenses/v2@v2.0.1
+python3 scripts/update-third-party-notices.py --check
+
 mdhop build --vault llm-wiki
 mdhop diagnose --vault llm-wiki --fields basename_conflicts,asset_basename_conflicts,phantoms,anchors --format json
 ```
 
 `mdhop diagnose` は対象 field に問題がないことまで確認する。限定した package のテストは実装中の確認には使えるが、全体テストの代わりにはしない。
+
+通知の生成方法と配布時の扱いは [release](release.md) に従う。
 
 ## 変更条件ごとの追加確認
 

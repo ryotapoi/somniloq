@@ -111,6 +111,9 @@ root = "~/.cursor/projects"
 
 [MIT License](LICENSE)
 
+外部ライブラリと Go 本体のライセンス・著作権通知は
+[THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) を参照してください。
+
 既知 REF の詳細検索は既定全件で、明示 limit/offset は一致箇所単位です。原文 UTF-8 byte 位置、matchText、行全体の lineText と番号を返し、同じ REF/番号で show に戻れます。フラグは位置 PATTERN より前に置き、patternIndexes は位置 PATTERN が先頭、次に -e の指定順です。一覧でも同じ -e/-F/--all を使えます。
 
 ```sh
