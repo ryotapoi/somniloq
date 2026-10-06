@@ -14,6 +14,17 @@ import (
 
 func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecode.Adapter, importedAt string, full bool) (*ImportResult, error) {
 	paths, scanErrors := adapter.ScanFiles(root)
+	// Bind every scanned path to its cursor before constructing full snapshots.
+	expected := make(map[string]*ImportState, len(paths))
+	if !full {
+		for _, path := range paths {
+			old, err := db.GetImportState(inputID, path)
+			if err != nil {
+				return nil, err
+			}
+			expected[path] = old
+		}
+	}
 	files, readErrors, diagnostics := adapter.BuildSnapshots(root, paths, importedAt)
 	result := &ImportResult{FilesScanned: len(paths), Errors: append(scanErrors, readErrors...)}
 	result.addUnparsedDiagnostics(diagnostics)
@@ -27,9 +38,13 @@ func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecod
 	oldStates := make([]*ImportState, len(files))
 	changed := map[string]bool{}
 	for i, f := range files {
-		old, err := db.GetImportState(inputID, f.State.JSONLPath)
-		if err != nil {
-			return nil, err
+		old := expected[f.State.JSONLPath]
+		if full {
+			var err error
+			old, err = db.GetImportState(inputID, f.State.JSONLPath)
+			if err != nil {
+				return nil, err
+			}
 		}
 		oldStates[i] = old
 		if full || old == nil || old.ContentHash != f.State.ContentHash {

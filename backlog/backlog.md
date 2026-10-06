@@ -128,7 +128,7 @@
 
   通常取り込みと `--full` の両方で A / B の正常本文を参照でき、循環辺だけが未確定として診断され、確定辺のみを使うことを確認すれば完了。異常 metadata の発生頻度は未確認で、専用 `migrate` の厳格失敗契約は対象外。入口は [親の保存](../internal/core/db_write.go) の `upsertSession`、[本文を含むtransaction](../internal/core/import_codex.go)、[関係解決](../internal/core/session_relations.go) の `buildSessionRelations`。契約は [v0.14.0契約](../docs/specs/v0.14.0-contract.md)「関係とまとまり」を参照する。
 
-- [ ] 同時 import による古い snapshot の上書きを防ぐ
+- [x] 同時 import による古い snapshot の上書きを防ぐ
 
   FR-004。Codex / Claude の各 CLI で、先発 A をファイル全文読取後の Git resolver 内で待機させ、追記済みファイルを後発 B が保存してから A を再開すると、両実行 exit 0 のまま新本文が消えた。cursor は Codex で 352→226、Claude で 368→184、`imported_at` も1秒退行した。snapshot 解析後に期待 cursor を取得するため、A が B の新 cursor を期待値として受け入れ、transaction 内の再比較を通って古い本文を保存する。
 

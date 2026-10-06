@@ -13,6 +13,18 @@ import (
 func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter, importedAt string, full bool) (*ImportResult, error) {
 	files, scanErrs := adapter.ScanFiles(root)
 	result := &ImportResult{FilesScanned: len(files), Errors: scanErrs}
+	// Capture expected cursors before reading bytes; a later importer must not
+	// become the expected state of this older snapshot.
+	expected := make(map[string]*ImportState, len(files))
+	if !full {
+		for _, path := range files {
+			old, err := db.GetImportState(inputID, path)
+			if err != nil {
+				return nil, err
+			}
+			expected[path] = old
+		}
+	}
 	groups, readErrs := adapter.BuildGroups(root, files, importedAt)
 	result.Errors = append(result.Errors, readErrs...)
 	result.FilesFailed += len(readErrs)
@@ -33,7 +45,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 		if len(g.States) == 0 && len(g.EmptyPaths) == 0 {
 			result.FilesImported += g.Files
 			for _, report := range g.Reports {
-				old, _ := db.GetImportState(inputID, report.Path)
+				old := expected[report.Path]
 				pr := report.Diagnostics(old)
 				result.UnparsedLines += pr.UnparsedLines
 				result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
@@ -48,10 +60,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 		paths = append(paths, g.EmptyPaths...)
 		oldStates := make([]*ImportState, len(paths))
 		for i, path := range paths {
-			old, err := db.GetImportState(inputID, path)
-			if err != nil {
-				return nil, err
-			}
+			old := expected[path]
 			oldStates[i] = old
 			if (i < len(g.States) && (old == nil || old.ContentHash != g.States[i].ContentHash)) || (i >= len(g.States) && old != nil) {
 				unchanged = false
@@ -108,14 +117,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 		result.FilesImported += g.Files
 		addCodexMembershipDiagnostics(result, g.Messages)
 		for _, report := range g.Reports {
-			var old *ImportState
-			for i, path := range paths {
-				if path == report.Path {
-					old = oldStates[i]
-					break
-				}
-			}
-			pr := report.Diagnostics(old)
+			pr := report.Diagnostics(expected[report.Path])
 			result.UnparsedLines += pr.UnparsedLines
 			result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
 		}
