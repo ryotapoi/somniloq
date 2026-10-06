@@ -134,7 +134,7 @@
 
   両 source でこの実行順を決定的に作り、後発が保存した新本文・cursor・取り込み日時を先発が退行させないことを確認すれば完了。実環境の重複実行頻度は未測定で、ログが残れば次回取り込みで復旧できる。`--full` は別経路で再現対象外。入口は [Codex取り込み](../internal/core/import_codex.go) と [Claude取り込み](../internal/core/import_claude.go) の snapshot 作成・旧 state 取得・transaction 内再比較、および全文を読む [Codex group構築](../internal/ingest/codex/group.go) / [Claude snapshot構築](../internal/ingest/claudecode/snapshot.go)。
 
-- [ ] migrate 再実行前に欠落した rollout の本文を保持する
+- [x] migrate 再実行前に欠落した rollout の本文を保持する
 
   FR-005。空の有効 legacy-v013 snapshot と同本人 a / b rollout で初回 `migrate` を行い、b を削除して同じ snapshot / config で再実行すると、exit 0・`copy_performed=false`・`groups_replaced=1` のまま b の正常本文が消え、b の旧 cursor だけが残った。当回の発見集合と再走査だけを比較し、前回保存した rollout 集合を照合しないため、a だけの本人全文で置換する。
 

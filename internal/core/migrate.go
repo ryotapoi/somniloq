@@ -2,8 +2,10 @@ package core
 
 import (
 	"bytes"
+	"database/sql"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -232,6 +234,9 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, inputIndex, group
 	if err = tx.QueryRow(`SELECT id FROM inputs WHERE input_key=?`, key).Scan(&inputID); err != nil {
 		return 0, err
 	}
+	if err = checkSavedMigrationRollouts(tx, inputID, input.Root, g); err != nil {
+		return 0, err
+	}
 	t := importTx{tx: tx, inputID: inputID}
 	if err = t.ReplaceSession(SourceCodex, g.Session.SessionID); err != nil {
 		return 0, err
@@ -285,4 +290,36 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, inputIndex, group
 		return 0, err
 	}
 	return len(removals), nil
+}
+
+// Saved body and context provenance must still belong to the replacement's
+// rollout set. Checking inside the transaction protects the prior full owner.
+func checkSavedMigrationRollouts(tx *sql.Tx, inputID int64, root string, g codex.Group) error {
+	paths := make(map[string]bool, len(g.Reports))
+	for _, report := range g.Reports {
+		rel, err := filepath.Rel(root, report.Path)
+		if err != nil {
+			return err
+		}
+		paths[filepath.ToSlash(rel)] = true
+	}
+	identity := g.Session.Identity
+	if identity == "" {
+		identity = rootIdentity(g.Session.SessionID)
+	}
+	rows, err := tx.Query(`SELECT DISTINCT origin_path FROM messages WHERE input_id=? AND source=? AND identity=? ORDER BY origin_path`, inputID, SourceCodex, identity)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var path string
+		if err = rows.Scan(&path); err != nil {
+			return err
+		}
+		if !paths[path] {
+			return fmt.Errorf("%s: rollout missing from migration group %s", filepath.Join(root, filepath.FromSlash(path)), g.Session.SessionID)
+		}
+	}
+	return rows.Err()
 }

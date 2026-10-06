@@ -476,6 +476,100 @@ func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
 	}
 }
 
+func TestMigrateMissingRolloutBeforeRetryPreservesPriorState(t *testing.T) {
+	for _, membership := range []string{"body", "context"} {
+		t.Run(membership, func(t *testing.T) {
+			c := migrationOracleCase{Files: []string{"02-multi.jsonl", "03-multi.jsonl"}}
+			c.Mutation.SQL = "DELETE FROM messages; DELETE FROM sessions; DELETE FROM import_state;"
+			f := setupMigrationFixture(t, readMigrationOracle(t), c)
+			a := filepath.Join(f.root, "02-multi.jsonl")
+			b := filepath.Join(f.root, "03-multi.jsonl")
+			if membership == "context" {
+				for _, path := range []string{a, b} {
+					data, err := os.ReadFile(path)
+					must(t, err)
+					text := strings.ReplaceAll(string(data), `"id":"multi"`, `"id":"multi","subagent_history_start_ordinal":1,"source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent"}}}`)
+					text = strings.ReplaceAll(text, `"type":"response_item",`, `"type":"response_item","ordinal":1,`)
+					text = strings.ReplaceAll(text, `"ordinal":1,"payload":{"type":"message","role":"assistant","id":"m2"`, `"ordinal":0,"payload":{"type":"message","role":"assistant","id":"m2"`)
+					must(t, os.WriteFile(path, []byte(text), 0600))
+				}
+			}
+			// A second input has the same owner ID but a different rollout set.
+			peer := filepath.Join(f.shared, "peer.jsonl")
+			peerData := "{\"type\":\"session_meta\",\"payload\":{\"id\":\"multi\"}}\n{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"text\",\"text\":\"peer\"}]}}\n"
+			must(t, os.WriteFile(peer, []byte(peerData), 0600))
+			result, err := Migrate(f.from, f.destination, f.inputs)
+			if err != nil || len(result.Errors) != 0 || !result.CopyPerformed || result.GroupsReplaced != 2 {
+				t.Fatalf("initial: %+v %v", result, err)
+			}
+			result, err = Migrate(f.from, f.destination, f.inputs)
+			if err != nil || len(result.Errors) != 0 || result.CopyPerformed || result.GroupsReplaced != 2 {
+				t.Fatalf("complete retry: %+v %v", result, err)
+			}
+			db, err := OpenDB(f.destination)
+			must(t, err)
+			defer db.Close()
+			inputID, err := db.EnsureInput(f.inputs[0])
+			must(t, err)
+			gotMembership := migrationQueryStrings(t, db, `SELECT membership FROM messages WHERE input_id=? AND origin_path='03-multi.jsonl'`, inputID)
+			if !reflect.DeepEqual(gotMembership, []string{membership}) {
+				t.Fatalf("missing rollout membership: %v", gotMembership)
+			}
+			// Seed proven old rows after the first copy; receipt retry cannot restore them.
+			_, err = db.db.Exec(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) SELECT snapshot_sha256,'codex','multi','saved' FROM migration_origin; INSERT INTO legacy_messages(legacy_rowid,snapshot_sha256,uuid,source,session_id,role,content,number) SELECT 4,snapshot_sha256,?,'codex','multi','user','saved',1 FROM migration_origin`, migrationFixtureUUID(a, 2))
+			must(t, err)
+			queries := []string{
+				`SELECT json_array(input_id,uuid,source,session_id,identity,parent_uuid,role,content,blocks_json,timestamp,is_sidechain,number,origin_path,origin_line,membership,payload_id) FROM messages WHERE input_id=? ORDER BY identity,uuid`,
+				`SELECT json_array(input_id,source,session_id,identity,parent_session_id,parent_identity,root_identity,cwd,repo_path,git_branch,custom_title,agent_name,version,started_at,ended_at,imported_at) FROM sessions WHERE input_id=? ORDER BY identity`,
+				`SELECT json_array(input_id,jsonl_path,source,file_size,last_offset,imported_at,content_hash) FROM import_state WHERE input_id=? ORDER BY jsonl_path`,
+			}
+			before := make([][]string, len(queries))
+			for i, query := range queries {
+				before[i] = migrationQueryStrings(t, db, query, inputID)
+			}
+			legacyQueries := []string{
+				`SELECT json_array(snapshot_sha256,source,session_id,cwd,repo_path,git_branch,custom_title,agent_name,version,started_at,ended_at,imported_at) FROM legacy_sessions ORDER BY session_id`,
+				`SELECT json_array(legacy_rowid,snapshot_sha256,uuid,source,session_id,parent_uuid,role,content,timestamp,is_sidechain,number,blocks_json,provenance) FROM legacy_messages ORDER BY legacy_rowid`,
+			}
+			old := make([][]string, len(legacyQueries))
+			for i, query := range legacyQueries {
+				old[i] = migrationQueryStrings(t, db, query)
+			}
+			missing, err := os.ReadFile(b)
+			must(t, err)
+			must(t, os.Remove(b))
+			data, err := os.ReadFile(a)
+			must(t, err)
+			must(t, os.WriteFile(a, bytes.ReplaceAll(data, []byte(`"text":"first"`), []byte(`"text":"updated first"`)), 0600))
+			must(t, os.WriteFile(peer, []byte(strings.ReplaceAll(peerData, `"text":"peer"`, `"text":"updated peer"`)), 0600))
+			result, err = Migrate(f.from, f.destination, f.inputs)
+			if err != nil || result.CopyPerformed || result.GroupsFailed != 1 || result.GroupsReplaced != 1 || result.LegacyReplacementFailures != 1 || len(result.Errors) != 2 || !strings.Contains(result.Errors[0].Error(), "rollout missing") {
+				t.Fatalf("missing retry: %+v %v", result, err)
+			}
+			for i, query := range queries {
+				if got := migrationQueryStrings(t, db, query, inputID); !reflect.DeepEqual(got, before[i]) {
+					t.Fatalf("owner state changed (%d): %v", i, got)
+				}
+			}
+			for i, query := range legacyQueries {
+				if got := migrationQueryStrings(t, db, query); !reflect.DeepEqual(got, old[i]) {
+					t.Fatalf("legacy state changed (%d): %v", i, got)
+				}
+			}
+			if got := migrationQueryStrings(t, db, `SELECT content FROM messages WHERE input_id<>?`, inputID); !reflect.DeepEqual(got, []string{"updated peer"}) {
+				t.Fatalf("independent same-ID owner did not progress: %v", got)
+			}
+			assertMigrationSourceUnchanged(t, f)
+			must(t, os.WriteFile(b, bytes.ReplaceAll(missing, []byte(`"text":"first"`), []byte(`"text":"updated first"`)), 0600))
+			result, err = Migrate(f.from, f.destination, f.inputs)
+			if err != nil || len(result.Errors) != 0 || result.CopyPerformed || result.GroupsReplaced != 2 || result.LegacyMessagesRemoved != 1 {
+				t.Fatalf("restored retry: %+v %v", result, err)
+			}
+			assertMigrationSourceUnchanged(t, f)
+		})
+	}
+}
+
 func TestMigrateEarlierRolloutAndNormalFullPreserveLegacy(t *testing.T) {
 	oracle := readMigrationOracle(t)
 	f := setupMigrationFixture(t, oracle, migrationOracleCase{Name: "multiple_rollouts", Files: []string{"02-multi.jsonl", "03-multi.jsonl"}})
