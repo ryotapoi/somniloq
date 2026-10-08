@@ -1,11 +1,57 @@
 package codex
 
 import (
+	"crypto/sha256"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
+
+func TestMigrationIndexRetainsEvidenceWithoutBodies(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "owner.jsonl")
+	data := []byte("{\"type\":\"session_meta\",\"payload\":{\"id\":\"owner\"}}\n" +
+		"{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"content\":[{\"type\":\"input_text\",\"text\":\"hello\"}]}}\n")
+	if err := os.WriteFile(path, data, 0600); err != nil {
+		t.Fatal(err)
+	}
+	groups, errs := NewAdapter(func(s string) string { return s }).BuildMigrationIndex(root, []string{path}, "")
+	if len(errs) != 0 || len(groups) != 1 || groups[0].Err != nil {
+		t.Fatalf("groups=%+v errs=%v", groups, errs)
+	}
+	g := groups[0]
+	if g.Session.SessionID != "owner" || len(g.Messages) != 0 || len(g.Reports) != 1 || len(g.Reports[0].Data) != 0 {
+		t.Fatalf("index retained body or lost owner: %+v", g)
+	}
+	if g.Reports[0].Hash != sha256.Sum256(data) || len(g.Reports[0].Lines) != 2 || g.Reports[0].Lines[1].UUID != messageUUID(path, 2) {
+		t.Fatalf("index lost snapshot or physical evidence: %+v", g.Reports[0])
+	}
+}
+
+func TestMigrationAdapterReusesRepositoryAcrossBodyPasses(t *testing.T) {
+	root := t.TempDir()
+	paths := []string{filepath.Join(root, "a.jsonl"), filepath.Join(root, "b.jsonl")}
+	for i, path := range paths {
+		data := []byte(`{"type":"session_meta","payload":{"id":"owner-` + string(rune('a'+i)) + `","cwd":"/same"}}` + "\n")
+		if err := os.WriteFile(path, data, 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	calls := 0
+	adapter := NewMigrationAdapter(func(string) string { calls++; return "/repo" })
+	if _, errs := adapter.BuildMigrationIndex(root, paths, ""); len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	for _, path := range paths {
+		if _, errs := adapter.BuildMigrationGroups(root, []string{path}, ""); len(errs) != 0 {
+			t.Fatal(errs)
+		}
+	}
+	if calls != 1 {
+		t.Fatalf("repository resolutions=%d, want 1", calls)
+	}
+}
 
 func TestMigrationGroupsRetainAllPhysicalEvidenceAndMetadataOnlyRollouts(t *testing.T) {
 	root := t.TempDir()

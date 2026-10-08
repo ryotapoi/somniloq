@@ -20,6 +20,12 @@ func NewAdapter(resolveRepoPath ingest.RepoResolver) Adapter {
 	return Adapter{resolveRepoPath: resolveRepoPath}
 }
 
+// NewMigrationAdapter shares repository resolutions across the index and
+// per-owner body passes of one Migrate call.
+func NewMigrationAdapter(resolveRepoPath ingest.RepoResolver) Adapter {
+	return Adapter{resolveRepoPath: memoizeRepoResolver(resolveRepoPath)}
+}
+
 func (a Adapter) ScanFiles(rootDir string) ([]string, []error) {
 	return ingest.ScanFilesRecursive(rootDir, func(path string) bool {
 		return strings.HasSuffix(path, ".jsonl")

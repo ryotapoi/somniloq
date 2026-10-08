@@ -1,7 +1,7 @@
 package core
 
 import (
-	"bytes"
+	"crypto/sha256"
 	"database/sql"
 	"fmt"
 	"os"
@@ -36,7 +36,7 @@ func Migrate(from, destination string, inputs []Input) (*MigrationResult, error)
 	defer db.Close()
 	result := &MigrationResult{SnapshotSHA256: digest, CopyPerformed: copied}
 	importedAt := timeNow()
-	adapter := codex.NewAdapter(ResolveRepoPath)
+	adapter := codex.NewMigrationAdapter(ResolveRepoPath)
 	var scans []migrationInput
 	seen := map[string]bool{}
 	for _, input := range inputs {
@@ -61,7 +61,7 @@ func Migrate(from, destination string, inputs []Input) (*MigrationResult, error)
 		}
 		seen[key] = true
 		files, scanErrors := adapter.ScanFiles(input.Root)
-		groups, readErrors := adapter.BuildMigrationGroups(input.Root, files, importedAt)
+		groups, readErrors := adapter.BuildMigrationIndex(input.Root, files, importedAt)
 		scan := migrationInput{Input: input, Files: files, Groups: groups}
 		scan.Errors = append(scanErrors, readErrors...)
 		// Unknown-owner failures invalidate the input's complete owner snapshot.
@@ -117,16 +117,6 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 		}
 		for j, g := range scan.Groups {
 			err := g.Err
-			hasBody := false
-			for _, m := range g.Messages {
-				if m.Membership == "body" && strings.TrimSpace(m.Content) != "" {
-					hasBody = true
-					break
-				}
-			}
-			if err == nil && g.Session.SessionID != "" && !hasBody {
-				err = fmt.Errorf("%s: no_own_messages", g.Session.SessionID)
-			}
 			if err == nil && g.Session.SessionID == "" {
 				continue
 			}
@@ -135,12 +125,40 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 					err = fmt.Errorf("%s: input_membership_conflict", report.Path)
 				}
 			}
+			var body codex.Group
 			if err == nil {
 				err = checkMigrationSnapshot(adapter, scan, g)
 			}
+			if err == nil {
+				paths := make([]string, len(g.Reports))
+				for k, report := range g.Reports {
+					paths[k] = report.Path
+				}
+				groups, readErrors := adapter.BuildMigrationGroups(scan.Input.Root, paths, importedAt)
+				if len(readErrors) > 0 {
+					err = readErrors[0]
+				} else if len(groups) != 1 || groups[0].Session.SessionID != g.Session.SessionID || !sameMigrationReports(g.Reports, groups[0].Reports) {
+					err = fmt.Errorf("%s: rollout changed during migration", g.Session.SessionID)
+				} else {
+					body = groups[0]
+					err = body.Err
+				}
+			}
+			if err == nil {
+				hasBody := false
+				for _, m := range body.Messages {
+					if m.Membership == "body" && strings.TrimSpace(m.Content) != "" {
+						hasBody = true
+						break
+					}
+				}
+				if !hasBody {
+					err = fmt.Errorf("%s: no_own_messages", g.Session.SessionID)
+				}
+			}
 			removed := 0
 			if err == nil {
-				removed, err = replaceMigrationGroup(db, scan.Input, g, candidates[[2]int{i, j}], adapter, scan, importedAt)
+				removed, err = replaceMigrationGroup(db, scan.Input, body, candidates[[2]int{i, j}], adapter, scan, g, importedAt)
 			}
 			if err != nil {
 				result.GroupsFailed++
@@ -197,6 +215,18 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 	return db.db.QueryRow(`SELECT count(*) FROM legacy_sessions`).Scan(&result.LegacyConversationsRetained)
 }
 
+func sameMigrationReports(index, body []codex.FileReport) bool {
+	if len(index) != len(body) {
+		return false
+	}
+	for i := range index {
+		if index[i].Path != body[i].Path || index[i].Hash != body[i].Hash {
+			return false
+		}
+	}
+	return true
+}
+
 // Candidates must be assigned only after evidence from all inputs, including
 // failed groups, is complete. Physical duplicate/context lines remain evidence.
 func migrationGroupCandidates(evidence map[string][]migrationEvidence) map[[2]int][]string {
@@ -226,14 +256,14 @@ func checkMigrationSnapshot(adapter codex.Adapter, scan migrationInput, group co
 		if err != nil {
 			return fmt.Errorf("%s: %w", report.Path, err)
 		}
-		if !bytes.Equal(data, report.Data) {
+		if sha256.Sum256(data) != report.Hash {
 			return fmt.Errorf("%s: rollout changed during migration", report.Path)
 		}
 	}
 	return nil
 }
 
-func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, adapter codex.Adapter, scan migrationInput, importedAt string) (int, error) {
+func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, adapter codex.Adapter, scan migrationInput, index codex.Group, importedAt string) (int, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, err
@@ -287,7 +317,7 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, a
 			return 0, err
 		}
 	}
-	if err = checkMigrationSnapshot(adapter, scan, g); err != nil {
+	if err = checkMigrationSnapshot(adapter, scan, index); err != nil {
 		return 0, err
 	}
 	if err = tx.Commit(); err != nil {
