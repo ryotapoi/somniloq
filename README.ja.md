@@ -1,8 +1,10 @@
 # somniloq
 
+[![CI](https://github.com/ryotapoi/somniloq/actions/workflows/ci.yml/badge.svg)](https://github.com/ryotapoi/somniloq/actions/workflows/ci.yml)
+
 somniloq は Claude Code / Codex / Cursor Agent の JSONL セッションログを SQLite に取り込み、セッションを横断して会話を検索・閲覧するローカル CLI。TOML 設定で DB と source ごとの複数ログ root を指定する。
 
-[English README](README.md)
+[English](README.md) · 日本語
 
 ## インストール
 
@@ -19,7 +21,7 @@ somniloq config init                              # default TOML を生成（DB 
 somniloq import --config default                  # 全設定入力を取り込む
 somniloq search --config default --since 2026-10-01 # 指定日以降のまとまりを探す
 somniloq search --config default "auth bug"        # 本文の語からまとまりを探す
-somniloq show --config default <REF> --messages 12:18 # 発言番号で読む
+somniloq show --config default REF --messages 12:18 # 発言番号で読む
 ```
 
 全 DB コマンドで `--config NAME_OR_PATH` 省略時は `default` を使う。コマンド名の前でも後でも指定できる。search のフラグは検索語より前に置く。`search` の完全 `slq1:...` REF は、別入力にある同名セッション ID も区別する。そのまま `show` に渡す。裸 ID・短縮 REF は受理しない。
@@ -56,7 +58,7 @@ somniloq show --config default REF --messages 12:18 --limit 50 --format json
 
 search の日時は日付または zone 付き RFC3339。日付は dayBoundary（CLI で上書き可）が起点で、until 日付は指定日全体を含み、日時の上限は排他です。--time-mode は active（既定）/started/last/overlap、明示時は期間必須。active は期間内候補本文で照合し、pattern なしでも実発言が必要です。他 mode は全 members の開始/最後・重なる期間でまとまりを選び、候補全文を照合します。--imported-since RFC3339 は候補本人の取り込み下限で、除外された親本文を AND に使いません。詳細は active のみです。相対時刻・zone なし日時・空値は拒否します。
 
-次は既定ページから REF を選ぶ例です。全件が必要なら hasMore/nextOffset を見てページを取得します。
+次は条件に合う全まとまりから REF を選ぶ例です（既定は全件取得）。明示 limit で件数を制限する場合は、hasMore/nextOffset を見て続きのページを取得します。
 
 ```sh
 sh <<'SH'
@@ -68,6 +70,14 @@ SH
 ```
 
 POSIX sh で実行する例です（対話 zsh でも `sh` が実行します）。members は root 所属だけの子を含むまとまり全体、matchedMembers は検索条件で選んだ候補本人です。完全 REF は空白や glob 文字を含まず、この sort 順が show の会話順になります。空の選択では show を呼びません。
+
+既知 REF の詳細検索は既定全件で、明示 limit/offset は一致箇所単位です。原文 UTF-8 byte 位置、matchText、行全体の lineText と番号を返し、同じ REF/番号で show に戻れます。フラグは位置 PATTERN より前に置き、patternIndexes は位置 PATTERN が先頭、次に -e の指定順です。一覧でも同じ -e/-F/--all を使えます。
+
+```sh
+somniloq search --config default --session REF -e "Inherited question" -e "Child answer" --all --format json
+somniloq search --config default --session REF -F --limit 20 --offset 20 "auth bug"
+somniloq show --config default REF --messages 1:1 --format json
+```
 
 ## 設定
 
@@ -113,11 +123,3 @@ root = "~/.cursor/projects"
 
 外部ライブラリと Go 本体のライセンス・著作権通知は
 [THIRD-PARTY-NOTICES.txt](THIRD-PARTY-NOTICES.txt) を参照してください。
-
-既知 REF の詳細検索は既定全件で、明示 limit/offset は一致箇所単位です。原文 UTF-8 byte 位置、matchText、行全体の lineText と番号を返し、同じ REF/番号で show に戻れます。フラグは位置 PATTERN より前に置き、patternIndexes は位置 PATTERN が先頭、次に -e の指定順です。一覧でも同じ -e/-F/--all を使えます。
-
-```sh
-somniloq search --config default --session REF -e "Inherited question" -e "Child answer" --all --format json
-somniloq search --config default --session REF -F --limit 20 --offset 20 "auth bug"
-somniloq show --config default REF --messages 1:1 --format json
-```
