@@ -1,8 +1,9 @@
+---
+status: current
+---
+
 # ADR 0008: ImportTransaction を source 中立に縮小し固有書き込みは拡張 interface にする
 
-## Status
-
-Accepted（2026-06-11 決定）
 
 ## Context
 
@@ -11,7 +12,7 @@ Accepted（2026-06-11 決定）
 ## Considered Options
 
 - **A: 共通 interface を最小化 + source 固有の拡張 interface**: `ImportTransaction` は全 source が使う 5 メソッド（UpsertSession / InsertMessage / UpsertImportState / Commit / Rollback）に縮小。title/agent-name は `claudecode.SessionMetaWriter` として claudecode パッケージに定義し、Flush 時に type assertion で取得する。
-- **B: union interface のまま残す**: 現在 2 source・固有メソッド 2 つなので実害が出るまで放置する。
+- **B: union interface のまま残す**: 当時の 2 source・固有メソッド 2 つでは実害が出るまで放置する。
 - **C: 固有メソッドをトランザクション外の DB API として渡す**: adapter constructor が title 更新関数を別依存として受け取る。
 
 ## Decision

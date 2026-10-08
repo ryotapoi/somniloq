@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0021-input-identity-and-configuration.md
+---
+
 # ADR 0006: import の source 選択
 
-## Status
-
-Accepted（2026-05-05 決定）
 
 ## Context
 
@@ -33,6 +35,6 @@ v0.4 リリース前に CLI の取り込み入口を整理する。ADR 0005 で�
 
 ## References
 
-- `docs/rules/scope.md`
+- `docs/requirements.md`
 - `backlog/backlog.md`
-- `docs/decisions/0005-codex-ingest-adapter-policy.md`
+- `decisions/0005-codex-ingest-adapter-policy.md`

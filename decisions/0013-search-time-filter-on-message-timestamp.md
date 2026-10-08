@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0022-complete-ref-and-original-messages.md
+---
+
 # ADR 0013: search の時刻フィルタはメッセージ timestamp 基準
 
-## Status
-
-Accepted（2026-06-11 決定）
 
 ## Context
 

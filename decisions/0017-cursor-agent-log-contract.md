@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0023-source-evidence-and-ingest-boundaries.md
+---
+
 # ADR 0017: Cursor Agent の入力契約を観測事実と分離して固定する
 
-## Status
-
-Accepted（2026-09-14 決定）
 
 ## Context
 
@@ -21,7 +23,7 @@ Cursor Agent `2026.09.10-fd3934a` のローカルログ 607 files / 9259 records
 
 ## Decision
 
-Option C を採用する。現行結論は `docs/specs/jsonl-schema.md` の Cursor Agent 節に置き、
+Option C を採用する。外部形式は `docs/jsonl-format.md` の Cursor Agent 節に置き、
 `internal/ingest/testdata/cursor-agent/` に合成・匿名化済み fixture と行単位の期待結果を置く。
 
 受理する path は Cursor projects root から

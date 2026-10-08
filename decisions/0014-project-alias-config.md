@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0021-input-identity-and-configuration.md
+---
+
 # ADR 0014: project alias は設定ファイルの完全一致グループで展開する
 
-## Status
-
-Accepted（2026-06-11 決定）
 
 ## Context
 

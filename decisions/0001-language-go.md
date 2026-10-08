@@ -1,8 +1,9 @@
+---
+status: current
+---
+
 # ADR 0001: 実装言語に Go を採用
 
-## Status
-
-Accepted（2026-03-28 決定）
 
 ## 文脈
 

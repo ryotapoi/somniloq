@@ -1,8 +1,9 @@
+---
+status: current
+---
+
 # ADR 0002: Go formatter に goimports を採用
 
-## Status
-
-Accepted（2026-03-29 決定）
 
 ## Context
 
@@ -30,7 +31,7 @@ Go エコシステムのフォーマッタ候補:
 
 ## Decision
 
-We will use `goimports` as the Go formatter in the PostToolUse Hook, with default settings. We will not add any linter to the Hook.
+Go の formatter に既定設定の `goimports` を採用し、Hook に linter を追加しない。整形と import 整理の完了は [検証手順](../docs/verification.md) の gate で確認する。
 
 - goimports は gofmt の完全上位互換であり、import 整理という実用的な付加価値がある
 - `golang.org/x/tools` は Go チームの準公式リポジトリで、Swift における Apple 公式 swift-format と同等の位置づけ
@@ -39,6 +40,5 @@ We will use `goimports` as the Go formatter in the PostToolUse Hook, with defaul
 
 ## Consequences
 
-- Go ファイルの Write/Edit 後に自動でフォーマット + import 整理が行われる
+- Go ファイルは変更後に `goimports` で整形と import 整理を行い、format gate で確認する
 - goimports が PATH にない環境では Hook がサイレントに失敗する（exit 0 固定で操作は阻害しない）
-- 将来 gofumpt 等に切り替えたい場合、Hook スクリプトのコマンドを差し替えるだけで対応可能

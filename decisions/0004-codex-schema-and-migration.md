@@ -1,12 +1,14 @@
+---
+status: superseded
+superseded_by: 0021-input-identity-and-configuration.md
+---
+
 # ADR 0004: Codex 対応のスキーマ設計と v0.3 → v0.4 migration 方針
 
-## Status
-
-Superseded by ADR 0019（2026-05-04 決定）
 
 ## Context
 
-v0.4 で Codex（`~/.codex/sessions/` 配下の rollout JSONL）の取り込みに対応する。`docs/rules/scope.md` で Claude Code と Codex を共通の `sessions` / `messages` テーブルに正規化する方針は決まったが、以下の設計判断が未確定だった。
+v0.4 で Codex（`~/.codex/sessions/` 配下の rollout JSONL）の取り込みに対応する。`docs/requirements.md` で Claude Code と Codex を共通の `sessions` / `messages` テーブルに正規化する方針は決まったが、以下の設計判断が未確定だった。
 
 1. `sessions` / `messages` の主キーをどうするか（Claude Code の session_id と Codex の session_id が衝突しうる前提でどう一意性を取るか）
 2. `import_state` の主キーをどうするか（差分取り込みの単位）
@@ -77,7 +79,6 @@ v0.4 で Codex（`~/.codex/sessions/` 配下の rollout JSONL）の取り込み�
 
 ## References
 
-- `docs/rules/scope.md` のテーブル設計セクション
-- `docs/decisions/0003-backfill-as-separate-subcommand.md`（backfill コマンドの位置付け）
-- `llm-wiki/`（modernc.org/sqlite の罠、PRAGMA check-first migration パターン）
+- `docs/requirements.md` のテーブル設計セクション
+- `decisions/0003-backfill-as-separate-subcommand.md`（backfill コマンドの位置付け）
 - `backlog/backlog.md` v0.4 セクション

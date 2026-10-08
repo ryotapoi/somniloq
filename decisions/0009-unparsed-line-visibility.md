@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0016-ingest-runner-contract-consolidation.md
+---
+
 # ADR 0009: parse 失敗行は黙殺せずカウントして import 結果に表示する
 
-## Status
-
-Superseded by ADR 0016（2026-08-09 決定）
 
 ## Context
 
@@ -13,7 +15,7 @@ Superseded by ADR 0016（2026-08-09 決定）
 ## Considered Options
 
 - **A: 解釈失敗行をカウントして import 出力に表示する**: `FileHandler.HandleLine` の戻り値を `LineOutcome`（Ignored / WroteBody / Unparsed）にし、`ProcessJSONL` が Unparsed をカウント、`ImportResult.UnparsedLines` 経由で CLI のサマリ行に出す。
-- **B: 黙殺を仕様として `docs/rules/scope.md` に明文化する**: コードは変えずドキュメントだけ置く。
+- **B: 黙殺を仕様として `docs/requirements.md` に明文化する**: コードは変えずドキュメントだけ置く。
 
 ## Decision
 

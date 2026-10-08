@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0016-ingest-runner-contract-consolidation.md
+---
+
 # ADR 0010: ディレクトリ走査エラーの非致命扱い
 
-## Status
-
-Superseded by ADR 0016（2026-08-09 決定）
 
 ## Context
 

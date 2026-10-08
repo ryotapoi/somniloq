@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0022-complete-ref-and-original-messages.md
+---
+
 # ADR 0018: source を識別した横断参照と未知 metadata の条件契約
 
-## Status
-
-Accepted（2026-09-14 決定）
 
 ## Context
 

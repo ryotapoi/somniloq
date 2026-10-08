@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0022-complete-ref-and-original-messages.md
+---
+
 # ADR 0011: outline サブコマンドとターン採番契約
 
-## Status
-
-Accepted（2026-06-11 決定）
 
 ## Context
 

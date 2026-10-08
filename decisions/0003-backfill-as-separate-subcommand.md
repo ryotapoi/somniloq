@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0019-remove-legacy-backfill.md
+---
+
 # ADR 0003: repo_path バックフィルを専用サブコマンド化
 
-## Status
-
-Superseded by ADR 0019（2026-04-25 決定）
 
 ## Context
 

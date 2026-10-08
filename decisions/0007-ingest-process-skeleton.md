@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0016-ingest-runner-contract-consolidation.md
+---
+
 # ADR 0007: adapter ProcessFile の共通骨格を ingest runner に抽出する
 
-## Status
-
-Superseded by ADR 0016（2026-08-09 決定）
 
 ## Context
 

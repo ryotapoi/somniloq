@@ -1,8 +1,10 @@
+---
+status: superseded
+superseded_by: 0022-complete-ref-and-original-messages.md
+---
+
 # ADR 0015: 論理日境界はクエリ時に適用する
 
-## Status
-
-Accepted（2026-07-04 決定）
 
 ## Context
 
