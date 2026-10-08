@@ -1,19 +1,18 @@
 # somniloq
 
-somniloq は複数の coding agent のセッションログ（JSONL）を SQLite に保存・検索する CLI。目的と非目標は [docs/rules/mission.md](docs/rules/mission.md) を正本とする。
+somniloq は複数の coding agent のセッションログ（JSONL）を SQLite に保存・検索する CLI。目的と非目標は [要件](docs/requirements.md) に置く。
 
-## タスク別の正本
+## タスク別の入口
 
-タスクに必要な文書だけを読む。推測で済ませず、判断に影響する正本を確認する。
+作業開始時に [開発時の取り決め](docs/development.md) を読む。その他はタスクに必要な文書だけを読み、判断に影響する実体を推測で済ませない。
 
-- 目的、非目標、対象範囲、CLI の表面を変更する: `docs/rules/mission.md` と `docs/rules/scope.md`
-- 責務配置や依存方向を変更する: `docs/rules/architecture.md`
-- SQLite schema、migration、`backfill`、DELETE、SQL 集約、JSONL ingest を変更する: `docs/rules/constraints.md` と `docs/rules/verification.md`。JSONL ingest 時は `docs/specs/jsonl-schema.md` も確認する
-- 検証方法と必須 gate: `docs/rules/verification.md`
-- 振る舞い仕様: `docs/specs/`
-- `docs/`、`backlog/`、`llm-wiki/` を変更する: `docs/rules/information-management.md`
-- 過去の判断の理由が必要なとき: `docs/decisions/`
-
-## Language
-
-コード・コメント・コミットメッセージは英語、`AGENTS.md`・`.agents/`・`docs/`・`llm-wiki/`・`backlog/`・README 等の文書は日本語で書く。
+- 目的、非目標、保持制約: `docs/requirements.md`
+- 横断する設計判断とその理由: `decisions/` の `status: current` の ADR
+- CLI の参照・出力形式: `docs/cli-contract.md`。利用方法は README と help
+- JSONL 入力形状: `docs/jsonl-format.md`。版別の観測は `cache/` として時点を確認する
+- 旧 SQLite 履歴の移行: `docs/migration.md` と ADR 0020
+- 開発時の言語・操作: `docs/development.md`
+- 検証方法と必須 gate: `docs/verification.md`
+- 版を切る作業: `docs/release.md`
+- `docs/`、`backlog/`、`decisions/`、`cache/` の変更: `docs/rules/information-management.md`
+- 過去の判断の理由: `decisions/` の `status: superseded` の ADR

@@ -19,9 +19,9 @@ func validateFormat(format string, supported ...string) error {
 	return fmt.Errorf("unknown format: %q (supported: %s)", format, strings.Join(supported, ", "))
 }
 
-// JSON output is the machine-readable counterpart of the TSV/Markdown views
-// (ADR 0012). Timestamps stay in the stored RFC3339 UTC form, strings are
-// raw (no TSV sanitizing), and show/search emit envelopes. Projects emits a JSON array.
+// JSON and TSV expose the same original-message references (ADR 0022).
+// JSON keeps stored raw timestamps and strings without TSV sanitizing.
+// Show/search emit envelopes; projects emits an array.
 
 type projectJSON struct {
 	Project      string `json:"project"`

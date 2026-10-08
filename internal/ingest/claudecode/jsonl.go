@@ -32,7 +32,7 @@ type MessageEnvelope struct {
 
 // ContentBlock intentionally remains separate from codex.ContentBlock.
 // Claude Code ExtractText accepts only text blocks; the source-specific sets
-// must not be unified (ADR 0005).
+// must not be unified (ADR 0023).
 type ContentBlock struct {
 	Type      string `json:"type"`
 	Text      string `json:"text"`

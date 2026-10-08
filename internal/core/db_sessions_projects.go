@@ -167,9 +167,8 @@ func projectsCondition(projects []string) (condition string, args []any) {
 }
 
 // sessionFilterConditions composes the supported SessionFilter conditions in
-// their stable parameter order. Callers select the timestamp for their primary
-// record: sessions use started_at, while search uses message timestamp (ADR
-// 0013).
+// their stable parameter order. Callers choose the timestamp column explicitly
+// to keep session metadata and message activity distinct (ADR 0022).
 func sessionFilterConditions(filter SessionFilter, column timestampColumn) (conditions []string, args []any) {
 	conditions, args = timeFilterConditions(filter, column)
 	if filter.ImportedSince != "" {

@@ -1,6 +1,6 @@
 # v0.14.0 migration 合成 fixture
 
-[専用移行契約](../../../../docs/specs/v0.14.0-migration.md) 用の後続実装 oracle。現行 production を実行する失敗テストではない。値と本文はすべて架空で、schema と UUID 算式以外は実 DB の複製ではない。
+[専用移行契約](../../../../docs/migration.md) 用の合成 oracle。値と本文はすべて架空で、schema と UUID 算式以外は実 DB の複製ではない。
 
 `legacy.sql` を新しい SQLite DB へ実行し、接続を閉じる。その固定 DB の全 bytes SHA-256 を一度計算して以後同じファイルを使う。SQL ファイル自体の digest ではない。`expected.json` の digest 記述はこの生成手順を指し、全環境で SQLite ファイルが同じ bytes になると要求しない。
 

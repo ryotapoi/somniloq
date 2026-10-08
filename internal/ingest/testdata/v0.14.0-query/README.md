@@ -1,6 +1,6 @@
 # v0.14.0 検索・取得の期待例
 
-[確定契約](../../../../docs/specs/v0.14.0-contract.md) の代表オラクル。まとまり一覧・詳細全一致と show の例は実装済み。活動日4 mode と取り込み下限も実装済み。
+[確定契約](../../../../docs/cli-contract.md) の代表オラクル。まとまり一覧・詳細全一致と show の例は実装済み。活動日4 mode と取り込み下限も実装済み。
 
 `config.toml` は隣の v0.14.0 fixture を指す構文例。expected.json の完全REFは host依存を避けるため canonical root `/fixtures/codex/input-a` と `/fixtures/codex/input-b` に対して計算している。実ホストでの設定実行は実際の実体rootに対するREFへ置き換える。
 

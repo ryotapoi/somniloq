@@ -39,7 +39,7 @@ type ResponseItemPayload struct {
 
 // ContentBlock intentionally remains separate from claudecode.ContentBlock.
 // Codex accepts input_text, output_text, and text in ExtractText; the
-// source-specific sets must not be unified (ADR 0005).
+// source-specific sets must not be unified (ADR 0023).
 type ContentBlock struct {
 	Type string `json:"type"`
 	Text string `json:"text"`

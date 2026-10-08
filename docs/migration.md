@@ -44,4 +44,3 @@ somniloq migrate --config archive --from ./archive-snapshot.db
 ```
 
 上例は説明用 digest placeholder。旧 parent の未照合残行は、本人 parent の残存 rollout がない限りログ欠落履歴の保持であり失敗にしない。残存本人 ID と同名の旧会話に所属不明行がある場合は `legacy_replacement_failures` を増やし、group の新本文保存と別に置換不成功を診断して終了1になる。再実行で snapshot 不一致なら `migrate: snapshot digest mismatch` を stderr に出し終了1。通常新 DB なら `migrate: destination has no completed copy receipt`。本文や snapshot 全内容を出力しない。
-
