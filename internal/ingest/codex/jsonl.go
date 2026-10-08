@@ -53,7 +53,7 @@ func ParseRecord(line []byte) (*RawRecord, error) {
 	return &rec, nil
 }
 
-func parseSessionMeta(rec *RawRecord, resolveRepoPath ingest.RepoResolver) (*ingest.SessionMeta, error) {
+func parseSessionMeta(rec *RawRecord) (*ingest.SessionMeta, error) {
 	var payload SessionMetaPayload
 	if err := json.Unmarshal(rec.Payload, &payload); err != nil {
 		return nil, err
@@ -69,7 +69,6 @@ func parseSessionMeta(rec *RawRecord, resolveRepoPath ingest.RepoResolver) (*ing
 		Source:          ingest.SourceCodex,
 		SessionID:       payload.ID,
 		CWD:             payload.CWD,
-		RepoPath:        resolveRepoPath(payload.CWD),
 		GitBranch:       payload.Git.Branch,
 		Version:         payload.CLIVersion,
 		ParentSessionID: parent,

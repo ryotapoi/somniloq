@@ -79,6 +79,7 @@ func (a Adapter) BuildMigrationGroups(root string, paths []string, importedAt st
 }
 
 func (a Adapter) buildGroups(root string, paths []string, importedAt string, strict bool) ([]Group, []error) {
+	resolveRepoPath := memoizeRepoResolver(a.resolveRepoPath)
 	paths = append([]string(nil), paths...)
 	boundaries := map[string]*int{}
 	sort.Slice(paths, func(i, j int) bool {
@@ -96,7 +97,7 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 			continue
 		}
 		c := &collector{}
-		h := &fileHandler{resolveRepoPath: a.resolveRepoPath, importedAt: importedAt}
+		h := &fileHandler{resolveRepoPath: resolveRepoPath, importedAt: importedAt}
 		h.path = path
 		hasBody := false
 		var unfinishedTail int64
@@ -246,7 +247,7 @@ func (h *fileHandler) validateMigrationLine(line []byte) error {
 		return nil
 	} // HandleLine records malformed JSON, including unfinished tails.
 	if rec.Type == "session_meta" {
-		meta, err := parseSessionMeta(rec, h.resolveRepoPath)
+		meta, err := parseSessionMeta(rec)
 		if err != nil {
 			return nil
 		}

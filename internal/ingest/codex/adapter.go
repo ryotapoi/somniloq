@@ -46,7 +46,7 @@ func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, path st
 		return ingest.ProcessResult{}, errors.New("resolve repo path is nil")
 	}
 	h := &fileHandler{
-		resolveRepoPath: a.resolveRepoPath,
+		resolveRepoPath: memoizeRepoResolver(a.resolveRepoPath),
 		importedAt:      importedAt,
 	}
 	return ingest.ProcessJSONL(newTransaction, ingest.SourceCodex, h, path, offset, fileSize, importedAt)
@@ -171,7 +171,7 @@ func (h *fileHandler) unparsed(err error) ingest.LineResult {
 }
 
 func (h *fileHandler) applySessionMeta(rec *RawRecord) error {
-	meta, err := parseSessionMeta(rec, h.resolveRepoPath)
+	meta, err := parseSessionMeta(rec)
 	if err != nil {
 		return err
 	}
@@ -182,7 +182,22 @@ func (h *fileHandler) applySessionMeta(rec *RawRecord) error {
 	if err := json.Unmarshal(rec.Payload, &payload); err != nil {
 		return err
 	}
+	meta.RepoPath = h.resolveRepoPath(meta.CWD)
 	h.historyStart = payload.HistoryStart
 	h.meta = meta
 	return nil
+}
+
+// Cache both repository roots and failure fallbacks only for one processing
+// pass. A later pass retries Git, so repository changes cannot leak across runs.
+func memoizeRepoResolver(resolve ingest.RepoResolver) ingest.RepoResolver {
+	paths := map[string]string{}
+	return func(cwd string) string {
+		if path, ok := paths[cwd]; ok {
+			return path
+		}
+		path := resolve(cwd)
+		paths[cwd] = path
+		return path
+	}
 }
