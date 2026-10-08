@@ -22,7 +22,7 @@ ADR 0007 は adapter の `ProcessFile` に重複していた共通骨格を shar
 
 We will adopt Option C. ADR 0016 を ingest runner の判断系列の現行案内とし、ADR 0007、ADR 0009、ADR 0010 の Status を `Superseded by ADR 0016` に更新する。
 
-ADR 0007 の shared runner 抽出はこの系列の出発点として残る。ADR 0009 は `FileHandler` / `ProcessFile` の結果処理を変更し、ADR 0010 は `ScanFiles` のエラー処理を変更した。この ADR は当時の系列整理であり、現在の実装は `internal/ingest/process.go`、`internal/ingest/ingest.go`、`internal/core/import.go` と対応テストを参照し、JSONL の入力形式は `docs/jsonl-format.md` を参照する。現在の ADR の配置と statusは `docs/rules/information-management.md` に従う。
+ADR 0007 の shared runner 抽出はこの系列の出発点として残る。ADR 0009 は `FileHandler` / `ProcessFile` の結果処理を変更し、ADR 0010 は `ScanFiles` のエラー処理を変更した。この ADR は当時の系列整理であり、現在の実装は `internal/ingest/process.go`、`internal/ingest/ingest.go`、`internal/core/import.go` と対応テストを参照し、JSONL の入力形式は `docs/jsonl-format.md` を参照する。現在の ADR の配置と statusは `docs/information-management.md` に従う。
 
 ## Consequences
 

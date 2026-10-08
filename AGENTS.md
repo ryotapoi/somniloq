@@ -14,5 +14,5 @@ somniloq は複数の coding agent のセッションログ（JSONL）を SQLite
 - 開発時の言語・操作: `docs/development.md`
 - 検証方法と必須 gate: `docs/verification.md`
 - 版を切る作業: `docs/release.md`
-- `docs/`、`backlog/`、`decisions/`、`cache/` の変更: `docs/rules/information-management.md`
+- `docs/`、`backlog/`、`decisions/`、`cache/` の変更: `docs/information-management.md`
 - 過去の判断の理由: `decisions/` の `status: superseded` の ADR
