@@ -75,6 +75,7 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 	if !source.Valid() {
 		return nil, fmt.Errorf("unknown import source: %s", source)
 	}
+	// One import time keeps all writes in this run comparable without inventing source timestamps.
 	importedAt := timeNow()
 	selected := []struct {
 		input   Input

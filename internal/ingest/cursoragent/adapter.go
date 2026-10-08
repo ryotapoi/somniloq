@@ -30,6 +30,7 @@ func acceptedPath(rootDir, path string) bool {
 	if len(parts) != 4 || parts[0] == "" || parts[1] != "agent-transcripts" || parts[2] == "" {
 		return false
 	}
+	// The slug is only a path component; it is not evidence of a repository.
 	return parts[3] == parts[2]+".jsonl"
 }
 

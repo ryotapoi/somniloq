@@ -1,12 +1,21 @@
-# v0.14.0 元ログ調査と代表 fixture
+---
+observed_at: 2026-10-05
+compiled_at: 2026-10-08
+compiled_from_commit: a2f63a7
+source_record_commits:
+  - d9a6ced7f3dba370952fe1b04901230be3624bdc
+  - 50fed22389c1eedf852b472c7f7e86185458ce8b
+---
 
-v0.14.0 第1段階で確定した観測範囲と受け入れ入力の正本。ここにある期待値は後続実装へ適用する。現行 parser の実装済み契約は [JSONL schema](jsonl-schema.md) の各 source 節と区別する。
+# 元ログの時点付き観測
+
+原文の記録 commit は観測本文の履歴であり、計測時の正確な実行 binary commit を証明しない。再編纂する場合は `git ls-tree -r --name-only a2f63a7` から `v0.14.0-log-evidence.md` と `jsonl-schema.md` の一致名を探し、各 `git show a2f63a7:<見つけたpath>` を読む。先行 Cursor 件数と Claude 版差は後者から抽出する。新たな観測では対象 root の各ファイル size を走査開始時に固定し、その byte 範囲を read-only で解析して集計値だけ残す。元本文・実 ID・実 path は記録しない。
 
 ## 方法と範囲
 
 2026-10-05、標準 root の Codex sessions、Claude projects、Cursor projects を read-only で構造走査した。各走査の開始時に対象ファイルの size を固定し、その byte 範囲だけを読む。個人本文・実 ID・実 path は保存も fixture へ転記もしない。本文の比較はメモリ内で行い、集計値のみを残す。稼働中のログなので別走査時の inventory／records は変わり得る。元ログの完全 snapshot や全形式保証ではない。
 
-一時スクリプト・集計・fixture 構造検査は workflow artifact の `changes/v0.14.0-01/log-evidence/` に置く。恒久的な根拠はこの文書と合成 fixture に残す。2026-10-04 の既存調査は先頭制限で Codex 親子30組、Claude 全構造、Cursor 全構造を確認済みだった。今回の追加は最新 Codex 160 rollout の全文と孫の接続、および Claude の同一物理親内の照合・重複 result・未確定例の分離を対象とした。既調査の全量を単にやり直したものとして完了理由にしない。
+一時スクリプト・集計は調査時の作業物であり、この cache の再導出に依存しない。2026-10-04 の既存調査は先頭制限で Codex 親子30組、Claude 全構造、Cursor 全構造を確認済みだった。今回の追加は最新 Codex 160 rollout の全文と孫の接続、および Claude の同一物理親内の照合・重複 result・未確定例の分離を対象とした。既調査の全量を単にやり直したものとして完了理由にしない。
 
 ## 観測根拠
 
@@ -33,22 +42,11 @@ Claudeの構造走査では、子1,175のagentIdは全件ファイル名と一�
 
 Codexの明示境界の意味は、当時参照した公式sourceの[値の定義](https://github.com/openai/codex/blob/main/codex-rs/thread-store/src/types.rs#L2371-L2380)と[履歴projection](https://github.com/openai/codex/blob/main/codex-rs/thread-store/src/local/thread_history_materialization.rs#L1404-L1414)でも確認した。境界は本人のprojected history開始ordinalであり、境界未満を継承履歴として扱う根拠となった。リンクは調査時点の参照先である。
 
-同日のGo 1.27.1で標準regexpの大小文字、Unicodeの(?i)、非重複UTF8 byte区間、ゼロ幅、QuoteMetaの挙動を確認した。[regexp](https://pkg.go.dev/regexp)と[構文](https://pkg.go.dev/regexp/syntax)を参照した実験であり、現行の検索仕様・期待値は契約とquery fixtureを参照する。SQLiteの`:memory:` DBにdeterministic scalar functionを登録し、bindしたpatternを渡す実験も成功した。これは登録・受け渡しの成立確認であり、実データの照合性能を示さない。性能の取得範囲は[検索計測](v0.14.0-search-measurements.md)を参照する。
+同日のGo 1.27.1で標準regexpの大小文字、Unicodeの(?i)、非重複UTF8 byte区間、ゼロ幅、QuoteMetaの挙動を確認した。[regexp](https://pkg.go.dev/regexp)と[構文](https://pkg.go.dev/regexp/syntax)を参照した実験であり、現行の検索仕様・期待値はコードと query fixture を参照する。SQLiteの`:memory:` DBにdeterministic scalar functionを登録し、bindしたpatternを渡す実験も成功した。これは登録・受け渡しの成立確認であり、実データの照合性能を示さない。性能の取得範囲は[検索計測](2026-10-05-search-measurements.md)を参照する。
 
-## 観測から固定する境界
 
-- Codex 本人は最初の有効 metadata で固定する。埋込親 metadata は本人を切り替えない。明示境界未満だけを継承 context とし、本人先頭が assistant でも1番にする。先行調査の境界あり親子の件数と読み取り限界は前節に記録した。
-- 境界がなければ本文を除外しない。ordinal 単独、先頭 user、親本文との類似、本文 tag は境界根拠にしない。境界があるのに対象本文 ordinal がない例は今回は未観測だが、非推測を検証する意図的な所属不明 fixture を置く。
-- Codex の旧 UUID は `codex:` に `sha256(path + NUL + 物理行番号)` の64桁小文字hexを続けた値。旧 row がファイルのどの行から来たかと、本来の本人会話を分ける。埋込 metadata 後の旧 session ID は本人の証明にしない。
-- Claude の root 所属を直接親の確定と同一視しない。call/result が別ファイル、call ID 不一致、agentId 不一致、複数親候補では直接親を未知として保つ。通常の子ログは本人の prompt から始まるので親の本文コピーを仮定して除外しない。
-- Cursor の未知日時・project・親を補完しない。本文に日時らしい tag があっても本文のまま保持する。
+## 日付が確定していない先行 Cursor 観測
 
-## fixture と期待結果
+Cursor Agent `2026.09.10-fd3934a` のローカルログ 607 files / 9,259 records では、transcript path、directory と basename の一致、`role=user|assistant`、text / tool_use、`turn_ended` を確認した。prefix を保つ末尾追記は controlled follow-up で確認した。観測日を原文から確定できないため、2026-10-05 の 708 files / 11,280 records と合算しない。独立 timestamp、cwd、repository、version、title、usage、parent は観測されず、slug の可逆性も保証できない。
 
-[fixture README](../../internal/ingest/testdata/v0.14.0/README.md) と [expected.json](../../internal/ingest/testdata/v0.14.0/expected.json) が各 source の入力・identity・物理行・context・発言番号を対応づける。番号は会話の本人本文 record ごと1始まりで、同一 record の text block は空行結合。元の timestamp を保持し、ない場合は `null`。metadata 開始日時は本文日時の代用にしない。tool-only と継承 context は本人番号を消費しない。
-
-代表的な観測構造は合成値へ置き換えている。親欠落／後着、同本人複数 rollout、同じ ID を持つ別入力、厳密照合の ID 不一致、明示境界下の ordinal 欠落、末尾途中追記は意図的に作った処理境界であり、すべてが実ログで観測されたとは主張しない。
-
-旧行 fixture は physical UUID と旧 sessionId の不一致を扱う最小 JSON で、旧 DB 全体や migration の実装を代替しない。親後着・再処理は fixture README の操作順、差分再開は `resume/before.txt` と `append.txt` の連結で検証する。production parser へ新仕様を実装するまで、この fixture で現行成功を要求しない。
-
-検索・日時条件・show・ページ・正規表現の期待値は [query fixture](../../internal/ingest/testdata/v0.14.0-query/README.md)、操作と出力の詳細は [取り込み・参照・検索契約](v0.14.0-contract.md) を参照する。元ログの本人番号と未知日時を共通のオラクルにし、query fixture は正常 Codex profile（所属不明の missing-ordinal を除外）を使う。
+Claude Code の版 v2.1.37〜v2.1.86 の既存観測では `isMeta`、`slug`、`permissionMode`、`todos`、`thinkingMetadata`、`planContent`、`imagePasteIds`、`promptId`、`toolUseResult`、`entrypoint` に増減がある。この版別一覧の観測日は確定できず、全版の固定 schema を意味しない。

@@ -1,12 +1,13 @@
-# v0.14.0 まとまり検索の試用と実データ計測
+---
+observed_at: 2026-10-05
+compiled_at: 2026-10-08
+compiled_from_commit: a2f63a7
+source_record_commit: 05b837fb831986bb85df986762740f46c7082133
+---
 
-2026-10-05 に build した CLI で、[検索契約](v0.14.0-contract.md)の一覧・総数・ページを確認した。JSON/TSV の表示仕様、並び順、members/matchedMembers、子 REF の探索範囲はユーザー確認を完了した。既定件数は現在全件へ変更済みであり、本書の計測は既定20件だった変更前の実行結果である。
+# まとまり検索の時点付き計測
 
-## fixture の試用
-
-[検索・取得 fixture](../../internal/ingest/testdata/v0.14.0-query/README.md)の設定と Codex input-a/input-b、Cursor input-a を一時 DB に取り込んだ。全一覧は3まとまりで、同じ root ID の別入力と Cursor を分離する。親子 AND は1まとまり・全6本人、詳細検索は2箇所となり、同じ REF を show に渡して原文を取得できた。
-
-build CLI で import→一覧→limit/offset→limit=0→末尾超過→親子 AND→詳細→show を実行した。input/source の交差条件、0件の成功、invalid regexp の exit 2・stdout 空も確認した。TSV はページ metadata と固定11列、JSON は全11 field を持つ envelope として試用できる。具体例は fixture の expected.json の listExample を参照する。importedAt は取り込みごとに変わる。
+原文の記録 commit は計測結果を記した履歴であり、計測時に clean だった正確な binary commit は断定できない。再編纂する場合は `git ls-tree -r --name-only a2f63a7` から `v0.14.0-search-measurements.md` の一致名を探し、`git show a2f63a7:<見つけたpath>` を読む。新たに測る場合は一時 DB を作り、対象 root だけを import した後、同条件の CLI を別 process で3回ずつ実行して件数・経過時間・冷温条件を記録する。実本文は保存しない。
 
 ## 実データの取得範囲
 
