@@ -1,6 +1,32 @@
 # 変更履歴
 
-[English](CHANGELOG.md) | 日本語
+[English](CHANGELOG.md) · 日本語
+
+## v0.14.0 — 2026-10-08
+
+### 追加
+
+- source ごとの複数ログ root を指定する TOML 設定と `config init` を追加。DB コマンドは `--config` 省略時に名前付きの `default` 設定を使い、設定生成時は設定ファイルまたは参照 DB が既存なら拒否する。
+- 入力ごとに分離した会話 identity と完全な `slq1:...` REF を追加。別入力の同名 session ID を分け、Claude Code の子・孫も root と session ID を共有していても独立した原文を保持する。
+- 対応する旧 DB の固定 standalone snapshot を別の移行先へコピーする `migrate` を追加。残存ログで本人への帰属を証明できた Codex 履歴だけを置換し、他の履歴は legacy REF で参照できる状態で保持する。通常コマンドは旧形式・非対応 schema を変更せず拒否する。[移行手順](docs/migration.md)を参照。
+- 本人と確定子孫内の正規表現全一致検索を追加。複数 `-e`、`-F` の固定文字列、`--all` の AND 照合に対応し、原文の UTF-8 byte 位置と `show` に共通する発言番号を返す。
+- 外部ソフトウェアと Go のライセンス通知、生成スクリプト、CI の整合性確認を追加。README 両言語に CI バッジと言語切り替えを整備した。
+
+### 変更
+
+- `sessions` をまとまり単位の `search` 一覧へ統合。既定で全件を返し、任意のページングと入力・source・project・活動日・取り込み日時の条件に対応する。一覧は本文抜粋を含まず完全 REF と metadata を返し、活動日の mode は `active`・`started`・`last`・`overlap` とする。
+- `show` を会話の原文取得へ再設計。複数の完全 REF、任意の確定子孫展開、role・発言番号・日時の条件、ページング、末尾選択、一行表示に対応し、原文 blocks と番号を保持する。
+- `search` と `show` の JSON を `{items,total,count,limit,offset,hasMore,nextOffset}` envelope に、TSV をページ情報と可逆な field escape を含む形式に変更。`projects` の JSON は配列を維持する。
+- 旧 JSON 設定を TOML に置き換え、既存 JSON の探索・自動変換は行わない。裸の session ID・短縮 REF を拒否し、`outline`、`show --summary`、turn 選択、表示除外フラグ・設定、Markdown 出力、REF なしの期間取得を廃止した。更新前にスクリプトと設定を変更する必要がある。
+- 同じ cwd の Claude repository 解決を再利用し、移行時の旧履歴読取を関係する UUID に限定し、複数 REF の `show` で関係解決を共有して反復処理を減らした。
+
+### 修正
+
+- Codex の本人原文を継承文脈と分けて保持し、複数 rollout の発言順と親 metadata の後着に対応した。
+- 原文が不変な Claude 会話の取り込み日時を保持し、Codex rollout の metadata-only 編集後も本文を再構築して通常・全件取り込みの結果を揃えた。
+- Codex の親 metadata が循環しても正常本文を保持し、循環する関係だけを未確定として扱うようにした。
+- 同時に実行した通常取り込みの古い snapshot が、新しい本文・cursor・取り込み日時を上書きする問題を防いだ。
+- 移行再実行時に以前取り込んだ rollout が欠けていても、移行済み会話の本文と cursor を保持するようにした。
 
 ## v0.13.0 — 2026-10-04
 

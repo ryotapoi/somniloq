@@ -1,6 +1,32 @@
 # Changelog
 
-English | [日本語](CHANGELOG.ja.md)
+English · [日本語](CHANGELOG.ja.md)
+
+## v0.14.0 — 2026-10-08
+
+### Added
+
+- Added TOML configuration with multiple log roots per source and `config init`. Database commands use the named `default` config when `--config` is omitted; initialization refuses an existing config or referenced database.
+- Added input-scoped conversation identities and complete `slq1:...` REFs. Identical session IDs in different inputs remain separate, and Claude Code children and grandchildren retain independent original messages even when they share the root session ID.
+- Added `migrate` to copy a fixed standalone snapshot of the supported legacy database into a separate destination. Only Codex history whose ownership is proven by remaining logs is replaced; other history remains accessible through legacy REFs. Normal commands reject legacy and unsupported schemas without modifying them. See the [migration guide](docs/migration.md).
+- Added every-occurrence regular-expression search within a conversation and its confirmed descendants, with multiple `-e` patterns, `-F` literal matching, `--all` AND matching, original UTF-8 byte positions, and message numbers shared with `show`.
+- Added third-party and Go license notices, a generation script, and a CI consistency check. Added CI badges and language navigation to the README pair.
+
+### Changed
+
+- Replaced `sessions` with grouped `search` listings. Listings return all results by default, with optional pagination and filters for input, source, project, activity dates, and import time. Results contain complete REFs and metadata without message excerpts; activity modes are `active`, `started`, `last`, and `overlap`.
+- Redesigned `show` around original conversation messages. It accepts multiple complete REFs, optionally expands confirmed descendants, and supports role, message-number, and date filters, pagination, tail selection, and one-line text while retaining original blocks and numbering.
+- Changed `search` and `show` JSON output to the `{items,total,count,limit,offset,hasMore,nextOffset}` envelope and TSV output to include page metadata and reversible field escaping. `projects` JSON remains an array.
+- Replaced legacy JSON configuration with TOML; existing JSON configs are neither discovered nor automatically converted. Bare session IDs and shortened REFs are rejected. Removed `outline`, `show --summary`, turn selection, display-exclusion flags and configuration, Markdown output, and period-only retrieval without a REF. Update scripts and configuration before upgrading.
+- Reduced repeated work by reusing Claude repository resolution for the same working directory, narrowing legacy migration reads to relevant UUIDs, and sharing relation resolution across multiple `show` REFs.
+
+### Fixed
+
+- Preserved Codex conversations' own messages separately from inherited context, including stable message ordering across multiple rollouts and parent metadata arriving later.
+- Preserved Claude import times when original messages are unchanged, and rebuilt Codex messages after metadata-only rollout edits so incremental and full imports agree.
+- Preserved valid Codex messages when parent metadata contains cycles; cyclic relationships remain unresolved.
+- Prevented concurrent incremental imports from overwriting newer messages, cursors, and import times with stale snapshots.
+- Preserved migrated conversation messages and cursors when a previously imported rollout is missing on a migration rerun.
 
 ## v0.13.0 — 2026-10-04
 
