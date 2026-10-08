@@ -35,7 +35,7 @@ CLAUDE.local.md
 .codex/
 
 # Temporary files (scratch notes, etc.)
-/tmp/
+/.tmp/
 
 # SQLite database
 *.db
