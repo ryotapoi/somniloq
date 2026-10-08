@@ -106,14 +106,20 @@ func (h *fileHandler) Begin(path string, offset int64) error {
 }
 
 func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (ingest.LineResult, error) {
-	h.lineNumber++
-	defer func() { h.byteOffset += int64(len(line)) }()
 	trimmed := bytes.TrimSpace(line)
 	if len(trimmed) == 0 {
+		return h.handleParsedLine(tx, line, nil, nil)
+	}
+	rec, perr := ParseRecord(trimmed)
+	return h.handleParsedLine(tx, line, rec, perr)
+}
+
+func (h *fileHandler) handleParsedLine(tx ingest.ImportTransaction, line []byte, rec *RawRecord, perr error) (ingest.LineResult, error) {
+	h.lineNumber++
+	defer func() { h.byteOffset += int64(len(line)) }()
+	if rec == nil && perr == nil {
 		return ingest.LineResult{Outcome: ingest.LineIgnored}, nil
 	}
-
-	rec, perr := ParseRecord(trimmed)
 	if perr != nil {
 		return h.unparsed(perr), nil
 	}

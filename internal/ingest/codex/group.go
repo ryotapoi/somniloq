@@ -119,13 +119,23 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 		var lines []PhysicalLine
 		var strictErr error
 		_, err = ingest.ForEachLine(bytes.NewReader(data), -1, func(line []byte) error {
+			var outcome ingest.LineResult
+			var err error
 			if strict {
 				lines = append(lines, PhysicalLine{UUID: messageUUID(path, len(lines)+1), Line: len(lines) + 1})
-				if e := h.validateMigrationLine(line); e != nil && strictErr == nil {
+				trimmed := bytes.TrimSpace(line)
+				var rec *RawRecord
+				var parseErr error
+				if len(trimmed) != 0 {
+					rec, parseErr = ParseRecord(trimmed)
+				}
+				if e := h.validateMigrationRecord(rec); e != nil && strictErr == nil {
 					strictErr = fmt.Errorf("%s:%d: %w", path, len(lines), e)
 				}
+				outcome, err = h.handleParsedLine(c, line, rec, parseErr)
+			} else {
+				outcome, err = h.HandleLine(c, line)
 			}
-			outcome, err := h.HandleLine(c, line)
 			if err != nil {
 				return err
 			}
@@ -266,21 +276,19 @@ func (r FileReport) Diagnostics(old *ingest.ImportState) ingest.ProcessResult {
 	return result
 }
 
-func (h *fileHandler) validateMigrationLine(line []byte) error {
-	rec, err := ParseRecord(bytes.TrimSpace(line))
-	if err != nil {
-		return nil
-	} // HandleLine records malformed JSON, including unfinished tails.
-	if rec.Type == "session_meta" {
+func (h *fileHandler) validateMigrationRecord(rec *RawRecord) error {
+	if rec == nil {
+		return nil // The handler records malformed JSON, including unfinished tails.
+	}
+	// Only later metadata can conflict with an owner; the handler validates
+	// the first record after this check, before applying it.
+	if rec.Type == "session_meta" && h.meta != nil {
 		meta, err := parseSessionMeta(rec)
 		if err != nil {
 			return nil
 		}
 		var payload SessionMetaPayload
 		if err := json.Unmarshal(rec.Payload, &payload); err != nil {
-			return nil
-		}
-		if h.meta == nil {
 			return nil
 		}
 		if meta.SessionID != h.meta.SessionID {
