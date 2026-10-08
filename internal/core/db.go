@@ -70,6 +70,7 @@ func openDatabase(path string, readOnly bool) (*DB, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Each SQLite :memory: connection is a separate database. Keep schema checks and queries on one connection.
 	db.SetMaxOpenConns(1)
 	fail := func(err error) (*DB, error) { db.Close(); return nil, err }
 	empty, err := inspectSchema(db)

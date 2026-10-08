@@ -39,6 +39,3 @@ CLAUDE.local.md
 
 # SQLite database
 *.db
-
-# mdhop index
-.mdhop/
