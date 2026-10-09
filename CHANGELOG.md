@@ -2,6 +2,15 @@
 
 English · [日本語](CHANGELOG.ja.md)
 
+## v0.14.1 — 2026-10-09
+
+### Changed
+
+- Reduced repeated Git calls in Codex import and migration by reusing repository resolution for the same working directory within each processing pass. Later runs retry resolution.
+- Reduced migration memory use by retaining ownership evidence first and loading message bodies one conversation at a time. Strict validation and saving now share JSONL parsing results, and snapshot verification hashes files with a reusable buffer instead of allocating their full contents again. Peak memory still depends on the largest conversation.
+- Reduced Codex import and migration allocations by comparing duplicate payload IDs against retained messages without copying full JSON signatures. Exact duplicate detection, conflict rejection, and message numbering are preserved.
+- Recorded synthetic migration benchmarks and optimization evaluations. Migration continues to preserve ownership checks, snapshot-change detection, existing data on group failure, and rerun behavior; CLI, configuration, and database formats are unchanged.
+
 ## v0.14.0 — 2026-10-08
 
 ### Added
