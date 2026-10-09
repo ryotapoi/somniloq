@@ -245,11 +245,8 @@ func assertMigrationOracle(t *testing.T, db *DB, c migrationOracleCase, result *
 			t.Errorf("context=%v want=%v", got, c.Expected.Context)
 		}
 	}
-	if c.Expected.Status == "warning" && (result.LegacyRetentionWarnings != 1 || len(result.Errors) != 0) {
-		t.Errorf("warning result=%+v", result)
-	}
-	if c.Expected.Status == "skipped" && (result.GroupsSkipped != 1 || result.GroupsReplaced != 0 || len(result.Errors) != 0) {
-		t.Errorf("skip result=%+v", result)
+	if c.Expected.Status == "replaced" && (result.GroupsReplaced != 1 || result.GroupsSkipped != 0 || len(result.Errors) != 0 || len(result.Warnings) != 0) {
+		t.Errorf("replacement result=%+v", result)
 	}
 	if c.Expected.Status == "failed" && len(result.Errors) == 0 {
 		t.Error("failed replacement reported success")
@@ -264,31 +261,6 @@ func assertMigrationOracle(t *testing.T, db *DB, c migrationOracleCase, result *
 		}
 		if !found {
 			t.Errorf("errors=%v missing %q", result.Errors, c.Expected.Reason)
-		}
-	}
-	if c.Expected.Status == "skipped" {
-		for _, table := range []string{"sessions", "messages", "import_state", "inputs"} {
-			var n int
-			must(t, db.db.QueryRow("SELECT count(*) FROM "+table).Scan(&n))
-			if n != 0 {
-				t.Errorf("skip created %s: %d", table, n)
-			}
-		}
-	}
-	if c.Expected.Status == "warning" {
-		owners, err := db.LookupSessionsByID("child")
-		must(t, err)
-		if len(owners) != 2 {
-			t.Fatalf("owner REFs=%v", owners)
-		}
-		for _, owner := range owners {
-			session, err := db.LookupSessionREF(owner.REF)
-			must(t, err)
-			messages, err := db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
-			must(t, err)
-			if len(messages) != 1 || messages[0].Content != "child own" || messages[0].Role != "assistant" || messages[0].Timestamp != "" {
-				t.Fatalf("REF %s: %+v", owner.REF, messages)
-			}
 		}
 	}
 	if c.Expected.Saved {
@@ -415,8 +387,8 @@ func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
 			defer db.Close()
 			beforeBody := migrationQueryStrings(t, db, `SELECT printf('%d:%s:%s',number,content,membership) FROM messages ORDER BY number`)
 			beforeCursor := migrationQueryStrings(t, db, `SELECT printf('%s:%d:%d:%s',jsonl_path,file_size,last_offset,content_hash) FROM import_state ORDER BY jsonl_path`)
-			// Restore proven legacy history so rollback protects copied history as well.
-			_, err = db.db.Exec(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) SELECT snapshot_sha256,'codex','multi','' FROM migration_origin; INSERT INTO legacy_messages(legacy_rowid,snapshot_sha256,uuid,source,session_id,role,content,number) SELECT 4,snapshot_sha256,?,'codex','multi','user','saved',1 FROM migration_origin`, migrationFixtureUUID(filepath.Join(f.root, "02-multi.jsonl"), 2))
+			// Restore unmatched same-ID history so rollback protects copied history as well.
+			_, err = db.db.Exec(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) SELECT snapshot_sha256,'codex','multi','' FROM migration_origin; INSERT INTO legacy_messages(legacy_rowid,snapshot_sha256,uuid,source,session_id,role,content,number) SELECT 4,snapshot_sha256,?,'codex','multi','user','saved',1 FROM migration_origin`, "unproven-old-row")
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -571,14 +543,6 @@ func TestMigrateMissingRolloutBeforeRetryPreservesPriorState(t *testing.T) {
 			for i, query := range queries {
 				before[i] = migrationQueryStrings(t, db, query, inputID)
 			}
-			legacyQueries := []string{
-				`SELECT json_array(snapshot_sha256,source,session_id,cwd,repo_path,git_branch,custom_title,agent_name,version,started_at,ended_at,imported_at) FROM legacy_sessions ORDER BY session_id`,
-				`SELECT json_array(legacy_rowid,snapshot_sha256,uuid,source,session_id,parent_uuid,role,content,timestamp,is_sidechain,number,blocks_json,provenance) FROM legacy_messages ORDER BY legacy_rowid`,
-			}
-			old := make([][]string, len(legacyQueries))
-			for i, query := range legacyQueries {
-				old[i] = migrationQueryStrings(t, db, query)
-			}
 			missing, err := os.ReadFile(b)
 			must(t, err)
 			must(t, os.Remove(b))
@@ -587,7 +551,7 @@ func TestMigrateMissingRolloutBeforeRetryPreservesPriorState(t *testing.T) {
 			must(t, os.WriteFile(a, bytes.ReplaceAll(data, []byte(`"text":"first"`), []byte(`"text":"updated first"`)), 0600))
 			must(t, os.WriteFile(peer, []byte(strings.ReplaceAll(peerData, `"text":"peer"`, `"text":"updated peer"`)), 0600))
 			result, err = Migrate(f.from, f.destination, f.inputs)
-			if err != nil || result.CopyPerformed || result.GroupsFailed != 1 || result.GroupsReplaced != 1 || result.LegacyRetentionWarnings != 1 || len(result.Errors) != 1 || !strings.Contains(result.Errors[0].Error(), "rollout missing") {
+			if err != nil || result.CopyPerformed || result.GroupsFailed != 1 || result.GroupsReplaced != 1 || result.LegacyRetentionWarnings != 0 || result.LegacyMessagesRemoved != 1 || len(result.Errors) != 1 || !strings.Contains(result.Errors[0].Error(), "rollout missing") {
 				t.Fatalf("missing retry: %+v %v", result, err)
 			}
 			for i, query := range queries {
@@ -595,10 +559,10 @@ func TestMigrateMissingRolloutBeforeRetryPreservesPriorState(t *testing.T) {
 					t.Fatalf("owner state changed (%d): %v", i, got)
 				}
 			}
-			for i, query := range legacyQueries {
-				if got := migrationQueryStrings(t, db, query); !reflect.DeepEqual(got, old[i]) {
-					t.Fatalf("legacy state changed (%d): %v", i, got)
-				}
+			// The independent successful owner has the same ID and therefore
+			// removes same-ID legacy, while the failed input keeps its saved state.
+			if got := migrationQueryStrings(t, db, `SELECT uuid FROM legacy_messages`); len(got) != 0 {
+				t.Fatalf("same-ID legacy remains: %v", got)
 			}
 			if got := migrationQueryStrings(t, db, `SELECT content FROM messages WHERE input_id<>?`, inputID); !reflect.DeepEqual(got, []string{"updated peer"}) {
 				t.Fatalf("independent same-ID owner did not progress: %v", got)
@@ -606,7 +570,7 @@ func TestMigrateMissingRolloutBeforeRetryPreservesPriorState(t *testing.T) {
 			assertMigrationSourceUnchanged(t, f)
 			must(t, os.WriteFile(b, bytes.ReplaceAll(missing, []byte(`"text":"first"`), []byte(`"text":"updated first"`)), 0600))
 			result, err = Migrate(f.from, f.destination, f.inputs)
-			if err != nil || len(result.Errors) != 0 || result.CopyPerformed || result.GroupsReplaced != 2 || result.LegacyMessagesRemoved != 1 {
+			if err != nil || len(result.Errors) != 0 || result.CopyPerformed || result.GroupsReplaced != 2 || result.LegacyMessagesRemoved != 0 {
 				t.Fatalf("restored retry: %+v %v", result, err)
 			}
 			assertMigrationSourceUnchanged(t, f)
@@ -696,17 +660,15 @@ func TestMigrateDeduplicatedPhysicalEvidenceAndIndependentFailure(t *testing.T) 
 	assertMigrationSourceUnchanged(t, f)
 }
 
-func TestMigrateEmptyOwnerProtectsSavedHistory(t *testing.T) {
-	for _, kind := range []string{"body", "cursor", "physical_legacy", "same_id_legacy"} {
+func TestMigrateEmptyOwnerReplacesSavedHistory(t *testing.T) {
+	for _, kind := range []string{"body", "cursor", "physical_legacy", "same_id_legacy", "same_id_message", "metadata_only"} {
 		t.Run(kind, func(t *testing.T) {
 			c := migrationOracleCase{Files: []string{"05-inherited-only.jsonl"}}
 			f := setupMigrationFixture(t, readMigrationOracle(t), c)
 			path := filepath.Join(f.root, "05-inherited-only.jsonl")
 			empty, err := os.ReadFile(path)
 			must(t, err)
-			if kind == "body" || kind == "cursor" {
-				must(t, os.WriteFile(path, bytes.ReplaceAll(empty, []byte(`"subagent_history_start_ordinal":82`), []byte(`"subagent_history_start_ordinal":3`)), 0600))
-			}
+			must(t, os.WriteFile(path, bytes.ReplaceAll(empty, []byte(`"subagent_history_start_ordinal":82`), []byte(`"subagent_history_start_ordinal":3`)), 0600))
 			result, err := Migrate(f.from, f.destination, f.inputs)
 			must(t, err)
 			if len(result.Errors) != 0 {
@@ -722,24 +684,72 @@ func TestMigrateEmptyOwnerProtectsSavedHistory(t *testing.T) {
 				_, err = db.db.Exec(`DELETE FROM messages`)
 			case "physical_legacy":
 				_, err = db.db.Exec(`UPDATE legacy_messages SET uuid=? WHERE legacy_rowid=1`, migrationFixtureUUID(path, 2))
-			case "same_id_legacy":
+			case "same_id_legacy", "same_id_message", "metadata_only":
 				_, err = db.db.Exec(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) SELECT snapshot_sha256,'codex','inherited-only','' FROM migration_origin`)
+				if err == nil && kind != "same_id_legacy" {
+					_, err = db.db.Exec(`INSERT INTO legacy_messages(legacy_rowid,snapshot_sha256,uuid,source,session_id,role,content,number) SELECT 9,snapshot_sha256,'old-unmatched','codex','inherited-only','user','old body',1 FROM migration_origin`)
+				}
 			}
 			must(t, err)
-			queries := []string{`SELECT json_array(uuid,content,membership) FROM messages ORDER BY uuid`, `SELECT json_array(jsonl_path,last_offset,content_hash) FROM import_state ORDER BY jsonl_path`, `SELECT json_array(legacy_rowid,uuid,content) FROM legacy_messages ORDER BY legacy_rowid`}
-			before := make([][]string, len(queries))
-			for i, q := range queries {
-				before[i] = migrationQueryStrings(t, db, q)
+			_, err = db.db.Exec(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) SELECT snapshot_sha256,'claude_code','inherited-only','' FROM migration_origin; INSERT INTO legacy_messages(legacy_rowid,snapshot_sha256,uuid,source,session_id,role,content,number) SELECT 10,snapshot_sha256,'other-source-same-id','claude_code','inherited-only','user','other source',1 FROM migration_origin`)
+			must(t, err)
+			if kind == "metadata_only" {
+				empty = bytes.SplitAfterN(empty, []byte("\n"), 2)[0]
 			}
 			must(t, os.WriteFile(path, empty, 0600))
-			result, err = Migrate(f.from, f.destination, f.inputs)
+			fresh, err := OpenDB(filepath.Join(t.TempDir(), "fresh.db"))
 			must(t, err)
-			if result.GroupsFailed != 1 || result.GroupsSkipped != 0 || len(result.Errors) != 1 || !strings.Contains(result.Errors[0].Error(), "no_own_messages") {
-				t.Fatalf("protected empty: %+v", result)
-			}
-			for i, q := range queries {
-				if got := migrationQueryStrings(t, db, q); !reflect.DeepEqual(got, before[i]) {
-					t.Fatalf("state changed: %v", got)
+			defer fresh.Close()
+			runCodexImport(t, fresh, f.root, false)
+			membership := `SELECT json_array(content,membership,origin_path,origin_line) FROM messages ORDER BY origin_path,origin_line`
+			want := migrationQueryStrings(t, fresh, membership)
+			queries := []string{membership, `SELECT json_array(jsonl_path,last_offset,content_hash) FROM import_state ORDER BY jsonl_path`, `SELECT json_array(identity,parent_identity,root_identity) FROM sessions ORDER BY identity`}
+			var before [][]string
+			for run := 0; run < 2; run++ {
+				result, err = Migrate(f.from, f.destination, f.inputs)
+				must(t, err)
+				if result.CopyPerformed || result.GroupsReplaced != 1 || result.GroupsFailed != 0 || result.GroupsSkipped != 0 || len(result.Errors) != 0 {
+					t.Fatalf("empty replacement: %+v", result)
+				}
+				wantRemoved := 0
+				if run == 0 && (kind == "physical_legacy" || kind == "same_id_message" || kind == "metadata_only") {
+					wantRemoved = 1
+				}
+				if result.LegacyMessagesRemoved != wantRemoved {
+					t.Fatalf("removed=%d want=%d", result.LegacyMessagesRemoved, wantRemoved)
+				}
+				if got := migrationQueryStrings(t, db, membership); !reflect.DeepEqual(got, want) {
+					t.Fatalf("membership=%v fresh=%v", got, want)
+				}
+				var n int
+				must(t, db.db.QueryRow(`SELECT count(*) FROM legacy_sessions WHERE source='codex' AND session_id='inherited-only'`).Scan(&n))
+				if n != 0 {
+					t.Fatal("same-ID legacy remains")
+				}
+				must(t, db.db.QueryRow(`SELECT count(*) FROM legacy_messages WHERE source='claude_code' AND session_id='inherited-only'`).Scan(&n))
+				if n != 1 {
+					t.Fatal("other source same-ID legacy removed")
+				}
+				must(t, db.db.QueryRow(`SELECT count(*) FROM sessions WHERE session_id='inherited-only' AND parent_session_id='parent' AND parent_identity='["parent"]'`).Scan(&n))
+				if n != 1 {
+					t.Fatal("owner relation missing")
+				}
+				must(t, db.db.QueryRow(`SELECT count(*) FROM messages WHERE membership='body'`).Scan(&n))
+				if n != 0 {
+					t.Fatal("old body remains")
+				}
+				var offset int64
+				must(t, db.db.QueryRow(`SELECT last_offset FROM import_state WHERE jsonl_path=?`, path).Scan(&offset))
+				if offset != int64(len(empty)) {
+					t.Fatalf("cursor=%d", offset)
+				}
+				for i, q := range queries {
+					got := migrationQueryStrings(t, db, q)
+					if run == 0 {
+						before = append(before, got)
+					} else if !reflect.DeepEqual(got, before[i]) {
+						t.Fatalf("retry changed state: %v", got)
+					}
 				}
 			}
 			assertMigrationSourceUnchanged(t, f)

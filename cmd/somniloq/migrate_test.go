@@ -58,7 +58,7 @@ func TestMigrateArgumentAndIOExitCodes(t *testing.T) {
 
 // Summary, severity, and exit form one CLI contract after the initial copy.
 func TestMigrateSafeOutcomesAndMixedFailure(t *testing.T) {
-	for _, kind := range []string{"skip", "warning", "mixed"} {
+	for _, kind := range []string{"empty", "same_id", "mixed"} {
 		t.Run(kind, func(t *testing.T) {
 			dir := t.TempDir()
 			root := filepath.Join(dir, "logs")
@@ -67,7 +67,7 @@ func TestMigrateSafeOutcomesAndMixedFailure(t *testing.T) {
 			}
 			fixture := "../../internal/ingest/testdata/v0.14.0-migration"
 			name := "05-inherited-only.jsonl"
-			if kind != "skip" {
+			if kind != "empty" {
 				name = "01-child.jsonl"
 			}
 			data, err := os.ReadFile(filepath.Join(fixture, name))
@@ -86,7 +86,7 @@ func TestMigrateSafeOutcomesAndMixedFailure(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if kind != "skip" {
+			if kind != "empty" {
 				script = append(script, []byte("INSERT INTO sessions(source,session_id,imported_at) VALUES ('codex','child',''); INSERT INTO messages(uuid,source,session_id,role,content,timestamp) VALUES ('old-path-row','codex','child','assistant','child own','');")...)
 			}
 			from := filepath.Join(dir, "snapshot.db")
@@ -122,14 +122,12 @@ func TestMigrateSafeOutcomesAndMixedFailure(t *testing.T) {
 				if summary.CopyPerformed != (run == 0) {
 					t.Fatalf("copy: %+v", summary)
 				}
-				if kind == "skip" {
-					if summary.GroupsSkipped != 1 || summary.GroupsFailed != 0 || !strings.Contains(stderr.String(), "migrate: skip:") {
-						t.Fatalf("skip: %+v %s", summary, stderr.String())
-					}
-				} else {
-					if summary.GroupsReplaced != 1 || summary.LegacyRetentionWarnings != 1 || summary.LegacyReplacementFailures != 0 || !strings.Contains(stderr.String(), "migrate: warning:") {
-						t.Fatalf("warning: %+v %s", summary, stderr.String())
-					}
+				wantRemoved := 0
+				if run == 0 && kind != "empty" {
+					wantRemoved = 1
+				}
+				if summary.GroupsReplaced != 1 || summary.GroupsSkipped != 0 || summary.LegacyMessagesRemoved != wantRemoved || summary.LegacyMessagesRetained != 8 || summary.LegacyRetentionWarnings != 0 || summary.LegacyReplacementFailures != 0 || strings.Contains(stderr.String(), "migrate: skip:") || strings.Contains(stderr.String(), "migrate: warning:") {
+					t.Fatalf("replacement: %+v %s", summary, stderr.String())
 				}
 				if kind == "mixed" {
 					if summary.GroupsFailed != 1 || !strings.Contains(stderr.String(), "migrate: error:") {

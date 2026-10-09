@@ -22,8 +22,9 @@ func migrateCmd(args []string, cfg config, out, errOut io.Writer) (int, error) {
 	from := fs.String("from", "", "fixed standalone legacy SQLite snapshot (required)")
 	setUsage(fs, "Migrate a legacy snapshot without changing it", "somniloq migrate [--config NAME_OR_PATH] --from PATH", `The configured database must be new, empty, or a completed copy of the same snapshot.
 All configured Codex inputs are processed; missing logs and other sources retain their saved history.
-Output is one JSON summary. Safe empty groups are skipped; unproven old rows are retained with warnings.
-Skips and warnings allow exit 0. Failed groups retain their previous history and cursors and cause exit 1.`)
+Output is one JSON summary. Successfully parsed owners replace same-ID Codex history, including empty bodies.
+Unmatched history with other IDs and other sources is retained.
+Successful replacements allow exit 0. Failed groups retain their saved owner state and cause exit 1.`)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		if code != 0 {
 			code = 2

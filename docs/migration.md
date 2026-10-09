@@ -28,23 +28,23 @@ digest は snapshot ファイル全 bytes の SHA-256、小文字 64 桁 hex。p
 
 ## 旧履歴の参照
 
-初回の全旧会話は入力未知の legacy 会話として保持する。REF は `slq1:legacy:<snapshot_sha256>:<source>:<base64url_legacy_session_id>`。末尾は旧 session ID の UTF-8 bytes を URL-safe base64、padding なしで encode する。正常 REF の JSON array encode と混同しない。この namespace は入力不明の旧値を通常入力の同名会話と衝突させない。未知旧会話は文字列 ID、近い時刻、cwd、path 包含だけで正常会話へ吸収しない。
+初回の全旧会話は入力未知の legacy 会話として保持する。REF は `slq1:legacy:<snapshot_sha256>:<source>:<base64url_legacy_session_id>`。末尾は旧 session ID の UTF-8 bytes を URL-safe base64、padding なしで encode する。正常 REF の JSON array encode と混同しない。この namespace は入力不明の旧値を通常入力の同名会話と衝突させない。ログに本人 ID がない旧会話は、近い時刻、cwd、path 包含だけで正常会話へ吸収しない。
 
-再実行時に以前保存した本人 group の rollout の一部が欠けていれば、その group の置換は失敗として既存の正常本文・旧行・cursor を保持する。他の独立した group は処理を続ける。
+再実行時に以前保存した本人 group の rollout の一部が欠けていれば、その group の置換は失敗として既存の正常本文・旧行・cursor を保持する。他の独立した group は処理を続ける。別入力の同名本人 group が成功した場合は、その成功により同名 legacy を削除する。
 
-残存ログで入力と物理行を一意に証明できた Codex 本人だけを置換する。ログ欠落・所属不明・他 source の旧履歴は legacy として残す。同じ snapshot と完了 receipt がある移行先には再実行できる。移行元と元ログは変更しない。
+残存ログを正常に解析できた Codex 本人 group は、本人本文0件も含めて置換する。同じ本人 ID の Codex 旧本文と旧会話を削除し、旧 UUID の一致は要求しない。別 ID の旧行は入力と物理行を一意に証明できた行だけを削除する。ログに本人 ID がない未照合旧履歴・他 source は legacy として残す。同じ snapshot と完了 receipt がある移行先には再実行できる。移行元と元ログは変更しない。
 
 ## 成功・失敗と出力
 
-正常な初回コピー後は独立した本人 group を最後まで処理し、一つの group の失敗で成功済み group を巻き戻さない。stdout は一つの JSON object、stderr は `migrate: skip:`, `migrate: warning:`, `migrate: error:` で区別する診断（本文を含めない）。summary field は `snapshot_sha256`, `copy_performed`, `groups_replaced`, `groups_skipped`, `groups_failed`, `legacy_messages_removed`, `legacy_messages_retained`, `legacy_conversations_retained`, `legacy_retention_warnings`, `legacy_replacement_failures`。`groups_skipped` は安全な本人本文なし group、`legacy_retention_warnings` は新本人会話を保存できたが同名旧行の入力所属を証明できず保持した会話、`legacy_replacement_failures` は残存旧行の所属証拠が競合した会話を数える。入力未知のため旧行を保持した会話も retained に含める。
+正常な初回コピー後は独立した本人 group を最後まで処理し、一つの group の失敗で成功済み group を巻き戻さない。stdout は一つの JSON object、stderr は `migrate: error:` の診断（本文を含めない）。summary field は `snapshot_sha256`, `copy_performed`, `groups_replaced`, `groups_skipped`, `groups_failed`, `legacy_messages_removed`, `legacy_messages_retained`, `legacy_conversations_retained`, `legacy_retention_warnings`, `legacy_replacement_failures`。正常な本人本文0件 group も `groups_replaced` に数える。互換性のため残す `groups_skipped`, `legacy_retention_warnings`, `legacy_replacement_failures` は0。removed はその実行で実際に消した旧本文行数、retained は移行先に残る旧本文・旧会話数である。
 
-本人本文がなくても、旧同名履歴・当該物理行に対応する旧行・当該入力/本人の保存済み本文や文脈・当該 rollout の保存済み cursor がないこと、解析とログ集合/内容に問題がないことを確認できればスキップする。会話保存・cursor 前進・旧行削除は行わない。既存本文の欠落など保護対象がある本人本文なし group は `no_own_messages` の失敗として保持する。
+本人本文0件の正常結果でも、会話・文脈・関係・移行 cursor を保存し、保存済み本人本文を空結果へ置換する。継承文脈は通常の新規 import と同じく本人本文へ昇格させない。同じ snapshot の再実行ではコピーを繰り返さず、その解析結果を再確定する。
 
-処理失敗がなく、安全なスキップと保持警告だけなら終了0。初回コピー/再実行先拒否、対象 group の解析・保存・不完全入力、ログ集合/内容の変化、所属証拠競合は終了1。警告と失敗が混在しても終了1。ログが全くない履歴の単純保持は失敗ではない。引数・設定エラー、非対応の移行元/先 schema は終了2。I/O、snapshot/receipt 不一致、既存移行先の拒否は終了1。copy 前の拒否では stdout は空。
+処理失敗がなければ終了0。初回コピー/再実行先拒否、対象 group の解析・保存・不完全入力、ログ集合/内容の変化、所属証拠競合は終了1。ログが全くない履歴の単純保持は失敗ではない。引数・設定エラー、非対応の移行元/先 schema は終了2。I/O、snapshot/receipt 不一致、既存移行先の拒否は終了1。copy 前の拒否では stdout は空。
 
 ```text
 somniloq migrate --config archive --from ./archive-snapshot.db
 {"snapshot_sha256":"<64 hex>","copy_performed":true,"groups_replaced":2,"groups_skipped":0,"groups_failed":0,"legacy_messages_removed":5,"legacy_messages_retained":3,"legacy_conversations_retained":4,"legacy_retention_warnings":0,"legacy_replacement_failures":0}
 ```
 
-上例は説明用 digest placeholder。旧 parent の未照合残行は、本人 parent の残存 rollout がない限りログ欠落履歴の保持であり失敗にしない。残存本人 ID と同名の旧会話に所属不明行がある場合は入力間の証拠競合がなければ旧行を残して `legacy_retention_warnings` を増やし、`old_input_membership_unknown` の警告を出す。本文・role・時刻が一致しても旧 path/物理行由来 UUID の証明に代えない。再実行で snapshot 不一致なら `migrate: snapshot digest mismatch` を stderr に出し終了1。通常新 DB なら `migrate: destination has no completed copy receipt`。本文や snapshot 全内容を出力しない。
+上例は説明用 digest placeholder。旧 parent の未照合残行は、本人 parent の残存 rollout がない限りログ欠落履歴の保持であり失敗にしない。再実行で snapshot 不一致なら `migrate: snapshot digest mismatch` を stderr に出し終了1。通常新 DB なら `migrate: destination has no completed copy receipt`。本文や snapshot 全内容を出力しない。

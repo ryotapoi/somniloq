@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
-	"strings"
 
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
@@ -31,7 +30,7 @@ type MigrationResult struct {
 	Errors                      []error `json:"-"`
 }
 
-// Migrate copies a fixed legacy snapshot, then independently replaces proven
+// Migrate copies a fixed legacy snapshot, then independently replaces parsed
 // Codex owner groups. A non-nil result means the initial copy is committed.
 func Migrate(from, destination string, inputs []Input) (*MigrationResult, error) {
 	db, digest, copied, err := prepareMigration(from, destination)
@@ -113,7 +112,6 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 		}
 	}
 	candidates := migrationGroupCandidates(evidence)
-	successful := map[string]map[int]bool{}
 	for i, scan := range scans {
 		if len(scan.Errors) > 0 {
 			result.Errors = append(result.Errors, scan.Errors...)
@@ -149,26 +147,6 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 					err = body.Err
 				}
 			}
-			if err == nil {
-				hasBody := false
-				for _, m := range body.Messages {
-					if m.Membership == "body" && strings.TrimSpace(m.Content) != "" {
-						hasBody = true
-						break
-					}
-				}
-				if !hasBody {
-					err = checkEmptyMigrationGroup(db, scan.Input, body)
-					if err == nil {
-						err = checkMigrationSnapshot(adapter, scan, g)
-					}
-					if err == nil {
-						result.GroupsSkipped++
-						result.Skips = append(result.Skips, fmt.Errorf("%s: no_own_messages", g.Session.SessionID))
-						continue
-					}
-				}
-			}
 			removed := 0
 			if err == nil {
 				removed, err = replaceMigrationGroup(db, scan.Input, body, candidates[[2]int{i, j}], adapter, scan, g, importedAt)
@@ -180,91 +158,13 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 			}
 			result.GroupsReplaced++
 			result.LegacyMessagesRemoved += removed
-			if successful[g.Session.SessionID] == nil {
-				successful[g.Session.SessionID] = map[int]bool{}
-			}
-			successful[g.Session.SessionID][i] = true
 		}
 	}
-	// Same-named old history does not become attributable merely because a new
-	// owner was saved. Diagnose remaining unproven or competing row evidence.
-	rows, err := db.db.Query(`SELECT session_id,uuid FROM legacy_messages WHERE source='codex'`)
-	if err != nil {
-		return err
-	}
-	unknown := map[string]bool{}
-	conflicting := map[string]bool{}
-	for rows.Next() {
-		var id, uuid string
-		if err = rows.Scan(&id, &uuid); err != nil {
-			rows.Close()
-			return err
-		}
-		owners := successful[id]
-		if len(owners) == 0 {
-			continue
-		}
-		matches := evidence[uuid]
-		if len(matches) > 1 {
-			conflicting[id] = true
-		}
-		if len(matches) != 1 || !owners[matches[0].Input] {
-			unknown[id] = true
-		}
-	}
-	err = rows.Err()
-	rows.Close()
-	if err != nil {
-		return err
-	}
-	ids := make([]string, 0, len(unknown))
-	for id := range unknown {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		if conflicting[id] {
-			result.LegacyReplacementFailures++
-			result.Errors = append(result.Errors, fmt.Errorf("%s: input_membership_conflict", id))
-		} else {
-			result.LegacyRetentionWarnings++
-			result.Warnings = append(result.Warnings, fmt.Errorf("%s: old_input_membership_unknown", id))
-		}
-	}
+	var err error
 	if err = db.db.QueryRow(`SELECT count(*) FROM legacy_messages`).Scan(&result.LegacyMessagesRetained); err != nil {
 		return err
 	}
 	return db.db.QueryRow(`SELECT count(*) FROM legacy_sessions`).Scan(&result.LegacyConversationsRetained)
-}
-
-// Empty input is a safe no-op only when neither its physical rows nor its
-// owner has history to protect. Do not create a session or advance a cursor.
-func checkEmptyMigrationGroup(db *DB, input Input, g codex.Group) error {
-	var protected bool
-	err := db.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM legacy_sessions WHERE source='codex' AND session_id=?) OR EXISTS(SELECT 1 FROM messages m JOIN inputs i ON i.id=m.input_id WHERE i.input_key=? AND m.source='codex' AND m.identity=?)`, g.Session.SessionID, InputKey(input.Source, input.Root), rootIdentity(g.Session.SessionID)).Scan(&protected)
-	if err != nil {
-		return err
-	}
-	if protected {
-		return fmt.Errorf("%s: no_own_messages", g.Session.SessionID)
-	}
-	for _, report := range g.Reports {
-		if err = db.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM import_state s JOIN inputs i ON i.id=s.input_id WHERE i.input_key=? AND s.jsonl_path=?)`, InputKey(input.Source, input.Root), report.Path).Scan(&protected); err != nil {
-			return err
-		}
-		if protected {
-			return fmt.Errorf("%s: no_own_messages", g.Session.SessionID)
-		}
-		for _, line := range report.Lines {
-			if err = db.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM legacy_messages WHERE source='codex' AND uuid=?)`, line.UUID).Scan(&protected); err != nil {
-				return err
-			}
-			if protected {
-				return fmt.Errorf("%s: no_own_messages", g.Session.SessionID)
-			}
-		}
-	}
-	return nil
 }
 
 func sameMigrationReports(index, body []codex.FileReport) bool {
@@ -353,27 +253,34 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, a
 			return 0, err
 		}
 	}
-	type removal struct {
-		rowid     int64
-		sessionID string
+	// A successfully parsed owner replaces all same-ID Codex history, including
+	// rows without surviving physical evidence. Other IDs still require evidence.
+	deleted, err := tx.Exec(`DELETE FROM legacy_messages WHERE source='codex' AND session_id=?`, g.Session.SessionID)
+	if err != nil {
+		return 0, err
 	}
-	var removals []removal
+	removed, err := deleted.RowsAffected()
+	if err != nil {
+		return 0, err
+	}
+	if _, err = tx.Exec(`DELETE FROM legacy_sessions WHERE source='codex' AND session_id=?`, g.Session.SessionID); err != nil {
+		return 0, err
+	}
 	for _, uuid := range uuids {
-		var row removal
-		err = tx.QueryRow(`SELECT legacy_rowid,session_id FROM legacy_messages WHERE uuid=? AND source='codex'`, uuid).Scan(&row.rowid, &row.sessionID)
+		var rowid int64
+		var sessionID string
+		err = tx.QueryRow(`SELECT legacy_rowid,session_id FROM legacy_messages WHERE uuid=? AND source='codex'`, uuid).Scan(&rowid, &sessionID)
 		if err == sql.ErrNoRows {
 			continue
 		}
 		if err != nil {
 			return 0, err
 		}
-		removals = append(removals, row)
-	}
-	for _, row := range removals {
-		if _, err = tx.Exec(`DELETE FROM legacy_messages WHERE legacy_rowid=?`, row.rowid); err != nil {
+		if _, err = tx.Exec(`DELETE FROM legacy_messages WHERE legacy_rowid=?`, rowid); err != nil {
 			return 0, err
 		}
-		if _, err = tx.Exec(`DELETE FROM legacy_sessions WHERE source='codex' AND session_id=? AND NOT EXISTS(SELECT 1 FROM legacy_messages WHERE source='codex' AND session_id=?)`, row.sessionID, row.sessionID); err != nil {
+		removed++
+		if _, err = tx.Exec(`DELETE FROM legacy_sessions WHERE source='codex' AND session_id=? AND NOT EXISTS(SELECT 1 FROM legacy_messages WHERE source='codex' AND session_id=?)`, sessionID, sessionID); err != nil {
 			return 0, err
 		}
 	}
@@ -383,7 +290,7 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, a
 	if err = tx.Commit(); err != nil {
 		return 0, err
 	}
-	return len(removals), nil
+	return int(removed), nil
 }
 
 // Saved body and context provenance must still belong to the replacement's

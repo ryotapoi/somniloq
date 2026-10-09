@@ -10,7 +10,7 @@ status: current
 
 本人と関係は source の明示的な証拠だけで決める。Codex は最初の有効 metadata で本人を固定し、明示された継承境界だけで親文脈を除く。Claude Code の直接親には同一物理親内の Agent/Task call、対応する result、子 agent ID の連鎖を要求する。Cursor Agent の未知日時・repository・親を slug、mtime、本文 tag、取り込み時刻で補わない。canonical な本人原文列、関係、差分 cursor の再構築は一つの transaction で確定し、失敗時に旧本文を保持する。
 
-通常 `import` は source ごとの保存境界と部分成功を維持する。旧履歴を限定置換する専用 `migrate` の厳密条件は [ADR 0020](0020-limited-history-migration.md) に従い、通常 import と混ぜない。
+通常 `import` は source ごとの保存境界と部分成功を維持する。旧履歴を限定置換する専用 `migrate` の厳密条件は [ADR 0024](0024-owner-history-migration.md) に従い、通常 import と混ぜない。
 
 ## 理由
 

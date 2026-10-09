@@ -1,5 +1,6 @@
 ---
-status: current
+status: superseded
+superseded_by: 0024-owner-history-migration.md
 ---
 
 # ADR 0020: 履歴保持のための限定移行

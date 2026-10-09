@@ -145,11 +145,15 @@
         "01-child.jsonl"
       ],
       "expected": {
-        "legacy_preserved": true,
+        "legacy_preserved": false,
         "new_conversation_saved": true,
-        "replacement_status": "warning",
-        "reason": "old_input_membership_unknown",
-        "copy_skipped": true
+        "replacement_status": "replaced",
+        "copy_skipped": true,
+        "removed_legacy_rowids": [
+          1,
+          2,
+          9
+        ]
       },
       "mutation": {
         "sql": "INSERT INTO sessions(source,session_id,imported_at) VALUES ('codex','child','2026-01-01T00:00:00Z'); INSERT INTO messages(uuid,source,session_id,role,content,timestamp) VALUES ('codex:1b22bdda1f2ffa92b1de470c5a35a09d62dd49cf0d015030957a909889563a6e','codex','child','assistant','child own','');"
@@ -273,12 +277,17 @@
         ]
       },
       "expected": {
-        "replacement_status": "failed",
-        "retained_legacy_rowids": [
+        "replacement_status": "replaced",
+        "retained_legacy_rowids": [],
+        "removed_legacy_rowids": [
           4,
           5
         ],
-        "reason": "no_own_messages"
+        "new_identity": [
+          "multi"
+        ],
+        "new_text": [],
+        "copy_skipped": true
       }
     },
     {
@@ -287,10 +296,15 @@
         "05-inherited-only.jsonl"
       ],
       "expected": {
-        "replacement_status": "skipped",
-        "reason": "no_own_messages",
+        "replacement_status": "replaced",
         "copy_skipped": true,
-        "new_identity": []
+        "new_identity": [
+          "inherited-only"
+        ],
+        "new_text": [],
+        "inherited_context": [
+          "inherited only"
+        ]
       }
     }
   ]

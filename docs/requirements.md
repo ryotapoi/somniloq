@@ -9,7 +9,7 @@ somniloq は Claude Code、Codex、Cursor Agent の JSONL セッションログ�
 - source の物理的な出自、本人と直接親の証拠、root 所属を区別する。証拠のない入力 identity、日時、repository、親、継承本文は補完しない。元ログが失われた旧履歴は由来不明のまま保持する。
 - 原文の user/assistant record、text block 境界、空白、元 timestamp、source の物理順を保持する。検索・表示の発言番号は本人原文列を基準とし、timestamp や SQLite rowid で付け直さない。
 - 本人原文列・文脈・関係・対象 cursor を再構築するときは一つの transaction で確定し、失敗時に旧本文と cursor を部分更新しない。通常差分と full は同じ最終ファイル集合から同じ列・番号を得る。
-- 通常 import の不完全な走査で安全性が証明できない本人は既存保存を守る。専用 migrate は既知の旧 snapshot だけを受理し、元ログや旧 DB を変更せず、所属を証明できない旧行を消さない。履歴を失わせる推測置換をしない。
+- 通常 import の不完全な走査で安全性が証明できない本人は既存保存を守る。専用 migrate は既知の旧 snapshot だけを受理し、元ログや旧 DB を変更せず、正常解析した本人 ID と同名の Codex 旧履歴は本人本文0件も含めて置換する。別 ID の所属を証明できない旧行は消さず、履歴を失わせる推測置換をしない。
 - 検索の items、total、関係は一つの read snapshot に基づく。日時不明の原文は日時条件に推測で一致させず、条件なしでは参照できる。
 
 ## SQL と公開境界
