@@ -2,6 +2,18 @@
 
 English · [日本語](CHANGELOG.ja.md)
 
+## v0.14.2 — 2026-10-10
+
+### Changed
+
+- `migrate` now replaces same-ID Codex legacy history with successfully parsed owner conversations, including empty bodies. History with other IDs and sources remains accessible through legacy REFs.
+- Reduced migration work by removing repeated root scans and using metadata indexing followed by one full parse per conversation, without retaining all message bodies in memory. Normal appends and new child logs created during migration require a successful normal import afterward; existing logs must not be edited, deleted, or moved during migration. See the [migration guide](docs/migration.md).
+
+### Fixed
+
+- Fixed transaction cleanup after failed SQLite commits so subsequent imports can proceed, while preserving earlier committed conversations and existing data for failed conversations.
+- Import failures after scanning starts now retain the partial stdout summary and original failure diagnostics; only committed files count as imported.
+
 ## v0.14.1 — 2026-10-09
 
 ### Changed
