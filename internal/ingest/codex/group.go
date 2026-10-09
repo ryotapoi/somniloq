@@ -18,13 +18,7 @@ type ParseFailure struct {
 	Diagnostic error
 }
 
-type PhysicalLine struct {
-	UUID string
-	Line int
-}
-
 type FileReport struct {
-	Lines    []PhysicalLine
 	Path     string
 	Data     []byte
 	Hash     [sha256.Size]byte
@@ -87,7 +81,7 @@ func (a Adapter) BuildMigrationGroups(root string, paths []string, importedAt st
 	return a.buildGroups(root, paths, importedAt, true, false)
 }
 
-// BuildMigrationIndex retains owner and physical-line evidence, but releases
+// BuildMigrationIndex retains owner and hash evidence, but releases
 // each file's body before the next file is read.
 func (a Adapter) BuildMigrationIndex(root string, paths []string, importedAt string) ([]Group, []error) {
 	return a.buildGroups(root, paths, importedAt, true, true)
@@ -116,13 +110,13 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 		h.path = path
 		hasBody := false
 		var unfinishedTail int64
-		var lines []PhysicalLine
+		lineNumber := 0
 		var strictErr error
 		_, err = ingest.ForEachLine(bytes.NewReader(data), -1, func(line []byte) error {
 			var outcome ingest.LineResult
 			var err error
 			if strict {
-				lines = append(lines, PhysicalLine{UUID: messageUUID(path, len(lines)+1), Line: len(lines) + 1})
+				lineNumber++
 				trimmed := bytes.TrimSpace(line)
 				var rec *RawRecord
 				var parseErr error
@@ -130,7 +124,7 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 					rec, parseErr = ParseRecord(trimmed)
 				}
 				if e := h.validateMigrationRecord(rec); e != nil && strictErr == nil {
-					strictErr = fmt.Errorf("%s:%d: %w", path, len(lines), e)
+					strictErr = fmt.Errorf("%s:%d: %w", path, lineNumber, e)
 				}
 				outcome, err = h.handleParsedLine(c, line, rec, parseErr)
 			} else {
@@ -161,7 +155,7 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 			strictErr = h.failures[0].Diagnostic
 		}
 		sum := sha256.Sum256(data)
-		report := FileReport{Path: path, Hash: sum, Failures: h.failures, Lines: lines}
+		report := FileReport{Path: path, Hash: sum, Failures: h.failures}
 		if !indexOnly {
 			report.Data = data
 		}

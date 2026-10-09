@@ -4,7 +4,7 @@
 
 `legacy.sql` を新しい SQLite DB へ実行し、接続を閉じる。その固定 DB の全 bytes SHA-256 を一度計算して以後同じファイルを使う。SQL ファイル自体の digest ではない。`expected.json` の digest 記述はこの生成手順を指し、全環境で SQLite ファイルが同じ bytes になると要求しない。
 
-`physical_paths` は旧 UUID 算出時の架空 absolute path。fixture harness は JSONL をこの path に置くか、path への読み取りを fixture file へマッピングする。リポジトリ内の実 path を UUID 算出へ混ぜない。case は独立した初期状態から検証し、`mutation` は記載 file/line/DB に対してその case のみ適用する。競合 case は `override_inputs` の親root `/fixture` と子root `/fixture/shared` により、同じ物理行が二つの入力へ対応する。`candidate_input_ids` はこの照合結果。入力キーが異なるネストrootを許す設定でも、旧行所属を推測で選ばない。
+`physical_paths` は旧 UUID 算出時の架空 absolute path。fixture harness は JSONL をこの path に置くか、path への読み取りを fixture file へマッピングする。リポジトリ内の実 path を UUID 算出へ混ぜない。case は独立した初期状態から検証し、`mutation` は記載 file/line/DB に対してその case のみ適用する。競合 case は `override_inputs` の親root `/fixture` と子root `/fixture/shared` により、同じ物理行が二つの入力へ対応する。`candidate_input_ids` はこの照合結果。入力キーが異なるネストrootを許す設定でも、旧行所属を推測で選ばない。別 ID の旧行は物理行一致でも保持し、正常な本人 ID と一致する旧履歴だけを置換する。
 
 | 旧 rowid | 意味 |
 | --- | --- |

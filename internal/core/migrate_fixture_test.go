@@ -447,8 +447,8 @@ func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			r := &MigrationResult{}
-			err = replaceMigrationGroups(db, []migrationInput{{Input: f.inputs[0], Files: files, Groups: groups}}, adapter, "2026-01-01T00:00:00Z", r)
+			r := &MigrationResult{SnapshotSHA256: result.SnapshotSHA256}
+			err = replaceMigrationGroups(db, []migrationInput{{Input: f.inputs[0], Groups: groups}}, adapter, "2026-01-01T00:00:00Z", r)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -613,11 +613,11 @@ func TestMigrateEarlierRolloutAndNormalFullPreserveLegacy(t *testing.T) {
 	assertMigrationSourceUnchanged(t, f)
 }
 
-func TestMigrateDeduplicatedPhysicalEvidenceAndIndependentFailure(t *testing.T) {
+func TestMigrateSameIDDuplicateUUIDAndIndependentFailure(t *testing.T) {
 	oracle := readMigrationOracle(t)
 	f := setupMigrationFixture(t, oracle, migrationOracleCase{Name: "multiple_rollouts", Files: []string{"01-child.jsonl", "02-multi.jsonl", "03-multi.jsonl"}})
 	// The old row points at the payload duplicate that disappears from canonical
-	// body, but its physical provenance must remain usable as deletion evidence.
+	// body. Same-ID replacement must not depend on that physical UUID.
 	snapshot, err := sql.Open("sqlite", f.from)
 	if err != nil {
 		t.Fatal(err)
@@ -712,7 +712,7 @@ func TestMigrateEmptyOwnerReplacesSavedHistory(t *testing.T) {
 					t.Fatalf("empty replacement: %+v", result)
 				}
 				wantRemoved := 0
-				if run == 0 && (kind == "physical_legacy" || kind == "same_id_message" || kind == "metadata_only") {
+				if run == 0 && (kind == "same_id_message" || kind == "metadata_only") {
 					wantRemoved = 1
 				}
 				if result.LegacyMessagesRemoved != wantRemoved {
@@ -755,4 +755,94 @@ func TestMigrateEmptyOwnerReplacesSavedHistory(t *testing.T) {
 			assertMigrationSourceUnchanged(t, f)
 		})
 	}
+}
+
+func TestMigrateUnrelatedRolloutChangesDoNotInvalidateOwner(t *testing.T) {
+	for _, mutation := range []string{"add", "remove"} {
+		t.Run(mutation, func(t *testing.T) {
+			f := setupMigrationFixture(t, readMigrationOracle(t), migrationOracleCase{Files: []string{"02-multi.jsonl", "03-multi.jsonl"}})
+			unrelated := filepath.Join(f.root, "unrelated.jsonl")
+			must(t, os.WriteFile(unrelated, []byte("{\"type\":\"session_meta\",\"payload\":{\"id\":\"unrelated\"}}\n"), 0600))
+			db, digest, _, err := prepareMigration(f.from, f.destination)
+			must(t, err)
+			defer db.Close()
+			adapter := codex.NewMigrationAdapter(ResolveRepoPath)
+			files, errs := adapter.ScanFiles(f.root)
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			groups, errs := adapter.BuildMigrationIndex(f.root, files, "now")
+			if len(errs) != 0 {
+				t.Fatal(errs)
+			}
+			if mutation == "add" {
+				must(t, os.WriteFile(filepath.Join(f.root, "added.jsonl"), []byte("invalid\n"), 0600))
+			} else {
+				must(t, os.Remove(unrelated))
+			}
+			result := &MigrationResult{SnapshotSHA256: digest}
+			must(t, replaceMigrationGroups(db, []migrationInput{{Input: f.inputs[0], Groups: groups}}, adapter, "now", result))
+			wantFailed := 0
+			if mutation == "remove" {
+				wantFailed = 1
+			}
+			if result.GroupsFailed != wantFailed || result.GroupsReplaced != 2-wantFailed || result.LegacyMessagesRemoved != 2 {
+				t.Fatalf("result=%+v", result)
+			}
+			if got := migrationQueryStrings(t, db, `SELECT content FROM messages WHERE membership='body' ORDER BY number`); !reflect.DeepEqual(got, []string{"first", "second"}) {
+				t.Fatalf("body=%v", got)
+			}
+			assertMigrationSourceUnchanged(t, f)
+		})
+	}
+}
+
+func TestMigrateCommitFailureRollsBackOwnerAndKeepsPriorSuccess(t *testing.T) {
+	f := setupMigrationFixture(t, readMigrationOracle(t), migrationOracleCase{Files: []string{"01-child.jsonl", "02-multi.jsonl", "03-multi.jsonl"}})
+	db, digest, _, err := prepareMigration(f.from, f.destination)
+	must(t, err)
+	defer db.Close()
+	// A deferred FK fails only at commit, after body, cursor and legacy deletion.
+	_, err = db.db.Exec(`CREATE TABLE guard_parent(id TEXT PRIMARY KEY); CREATE TABLE commit_guard(owner TEXT REFERENCES guard_parent(id) DEFERRABLE INITIALLY DEFERRED); CREATE TRIGGER fail_multi AFTER INSERT ON sessions WHEN NEW.session_id='multi' BEGIN INSERT INTO commit_guard VALUES('missing'); END;`)
+	must(t, err)
+	adapter := codex.NewMigrationAdapter(ResolveRepoPath)
+	files, errs := adapter.ScanFiles(f.root)
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	groups, errs := adapter.BuildMigrationIndex(f.root, files, "now")
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	result := &MigrationResult{SnapshotSHA256: digest}
+	must(t, replaceMigrationGroups(db, []migrationInput{{Input: f.inputs[0], Groups: groups}}, adapter, "now", result))
+	if result.GroupsReplaced != 1 || result.GroupsFailed != 1 {
+		t.Fatalf("result=%+v", result)
+	}
+	if !strings.Contains(result.Errors[0].Error(), "FOREIGN KEY") {
+		t.Fatalf("not commit FK: %v", result.Errors)
+	}
+	for _, q := range []string{`SELECT count(*) FROM sessions WHERE session_id='multi'`, `SELECT count(*) FROM messages WHERE identity='["multi"]'`, `SELECT count(*) FROM import_state WHERE jsonl_path LIKE '%multi.jsonl'`, `SELECT count(*) FROM commit_guard`} {
+		var n int
+		must(t, db.db.QueryRow(q).Scan(&n))
+		if n != 0 {
+			t.Fatalf("partial state %s=%d", q, n)
+		}
+	}
+	var n int
+	must(t, db.db.QueryRow(`SELECT count(*) FROM legacy_messages WHERE session_id='multi'`).Scan(&n))
+	if n != 2 {
+		t.Fatalf("legacy=%d", n)
+	}
+	if got := migrationQueryStrings(t, db, `SELECT content FROM messages WHERE membership='body'`); !reflect.DeepEqual(got, []string{"child own"}) {
+		t.Fatalf("prior success=%v", got)
+	}
+	_, err = db.db.Exec(`DROP TRIGGER fail_multi`)
+	must(t, err)
+	result = &MigrationResult{SnapshotSHA256: digest}
+	must(t, replaceMigrationGroups(db, []migrationInput{{Input: f.inputs[0], Groups: groups}}, adapter, "now", result))
+	if result.GroupsFailed != 0 {
+		t.Fatalf("recovery=%+v", result)
+	}
+	assertMigrationSourceUnchanged(t, f)
 }

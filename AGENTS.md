@@ -10,7 +10,7 @@ somniloq は複数の coding agent のセッションログ（JSONL）を SQLite
 - 横断する設計判断とその理由: `decisions/` の `status: current` の ADR
 - CLI の参照・出力形式: `docs/cli-contract.md`。利用方法は README と help
 - JSONL 入力形状: `docs/jsonl-format.md`。版別の観測は `cache/` として時点を確認する
-- 旧 SQLite 履歴の移行: `docs/migration.md` と ADR 0024
+- 旧 SQLite 履歴の移行: `docs/migration.md` と ADR 0025
 - 開発時の言語・操作: `docs/development.md`
 - 検証方法と必須 gate: `docs/verification.md`
 - 版を切る作業: `docs/release.md`

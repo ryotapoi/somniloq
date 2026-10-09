@@ -20,7 +20,7 @@ Usage:
 
 Commands:
   import    Import Claude Code, Codex, and Cursor Agent session logs from JSONL files
-  migrate   Copy a fixed legacy snapshot and replace proven Codex conversations
+  migrate   Copy a fixed legacy snapshot and replace same-ID Codex history
   show      Show original messages with filters and pagination
   search    List work groups or search original message occurrences
   projects  List projects

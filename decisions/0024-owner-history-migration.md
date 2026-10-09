@@ -1,5 +1,6 @@
 ---
-status: current
+status: superseded
+superseded_by: 0025-id-scoped-history-migration.md
 ---
 
 # ADR 0024: 正常解析した本人の旧履歴置換

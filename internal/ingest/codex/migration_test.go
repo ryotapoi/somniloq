@@ -8,7 +8,7 @@ import (
 	"testing"
 )
 
-func TestMigrationIndexRetainsEvidenceWithoutBodies(t *testing.T) {
+func TestMigrationIndexRetainsHashWithoutBodies(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "owner.jsonl")
 	data := []byte("{\"type\":\"session_meta\",\"payload\":{\"id\":\"owner\"}}\n" +
@@ -24,8 +24,8 @@ func TestMigrationIndexRetainsEvidenceWithoutBodies(t *testing.T) {
 	if g.Session.SessionID != "owner" || len(g.Messages) != 0 || len(g.Reports) != 1 || len(g.Reports[0].Data) != 0 {
 		t.Fatalf("index retained body or lost owner: %+v", g)
 	}
-	if g.Reports[0].Hash != sha256.Sum256(data) || len(g.Reports[0].Lines) != 2 || g.Reports[0].Lines[1].UUID != messageUUID(path, 2) {
-		t.Fatalf("index lost snapshot or physical evidence: %+v", g.Reports[0])
+	if g.Reports[0].Hash != sha256.Sum256(data) {
+		t.Fatalf("index lost snapshot hash: %+v", g.Reports[0])
 	}
 }
 
@@ -53,7 +53,7 @@ func TestMigrationAdapterReusesRepositoryAcrossBodyPasses(t *testing.T) {
 	}
 }
 
-func TestMigrationGroupsRetainAllPhysicalEvidenceAndMetadataOnlyRollouts(t *testing.T) {
+func TestMigrationGroupsRetainMetadataOnlyRollouts(t *testing.T) {
 	root := t.TempDir()
 	meta := `{"type":"session_meta","payload":{"id":"owner"}}` + "\n"
 	body := `{"type":"response_item","payload":{"id":"same","type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}` + "\n"
@@ -70,12 +70,6 @@ func TestMigrationGroupsRetainAllPhysicalEvidenceAndMetadataOnlyRollouts(t *test
 	g := groups[0]
 	if g.Err != nil || g.Files != 3 || len(g.Messages) != 1 || len(g.States) != 3 {
 		t.Fatalf("group=%+v", g)
-	}
-	if len(g.Reports[0].Lines) != 3 || len(g.Reports[1].Lines) != 2 || len(g.Reports[2].Lines) != 1 {
-		t.Fatalf("reports=%+v", g.Reports)
-	}
-	if g.Reports[0].Lines[2].UUID != messageUUID(paths[1], 3) || g.Reports[1].Lines[1].UUID != messageUUID(paths[2], 2) {
-		t.Fatal("physical payload duplicates lost their identities")
 	}
 	for _, state := range g.States {
 		if state.LastOffset != state.FileSize {
@@ -162,7 +156,24 @@ func TestMigrationGroupsKeepUnidentifiedFailedRollout(t *testing.T) {
 		t.Fatal(err)
 	}
 	groups, errs := NewAdapter(func(s string) string { return s }).BuildMigrationGroups(root, []string{path}, "")
-	if len(errs) != 0 || len(groups) != 1 || groups[0].Session.SessionID != "" || groups[0].Err == nil || len(groups[0].Reports[0].Lines) != 2 {
+	if len(errs) != 0 || len(groups) != 1 || groups[0].Session.SessionID != "" || groups[0].Err == nil {
 		t.Fatalf("groups=%+v errs=%v", groups, errs)
+	}
+}
+
+func TestMigrationStrictDiagnosticRetainsPhysicalLineNumber(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "owner.jsonl")
+	data := "{\"type\":\"session_meta\",\"payload\":{\"id\":\"owner\"}}\n\n" +
+		"{\"type\":\"session_meta\",\"payload\":{\"id\":\"other\"}}\n"
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	adapter := NewMigrationAdapter(func(s string) string { return s })
+	for _, build := range []func(string, []string, string) ([]Group, []error){adapter.BuildMigrationIndex, adapter.BuildMigrationGroups} {
+		groups, errs := build(root, []string{path}, "")
+		if len(errs) != 0 || len(groups) != 1 || groups[0].Err == nil || !strings.Contains(groups[0].Err.Error(), path+":3:") {
+			t.Fatalf("groups=%+v errors=%v", groups, errs)
+		}
 	}
 }

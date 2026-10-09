@@ -47,11 +47,10 @@
         "new_text": [
           "child own"
         ],
-        "removed_legacy_rowids": [
-          1,
-          2
-        ],
+        "removed_legacy_rowids": [],
         "retained_legacy_rowids": [
+          1,
+          2,
           3
         ],
         "legacy_parent_input": null,
@@ -150,9 +149,12 @@
         "replacement_status": "replaced",
         "copy_skipped": true,
         "removed_legacy_rowids": [
+          9
+        ],
+        "retained_legacy_rowids": [
           1,
           2,
-          9
+          3
         ]
       },
       "mutation": {

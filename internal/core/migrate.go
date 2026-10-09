@@ -2,13 +2,11 @@ package core
 
 import (
 	"crypto/sha256"
-	"database/sql"
 	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"slices"
-	"sort"
 
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
@@ -66,7 +64,7 @@ func Migrate(from, destination string, inputs []Input) (*MigrationResult, error)
 		seen[key] = true
 		files, scanErrors := adapter.ScanFiles(input.Root)
 		groups, readErrors := adapter.BuildMigrationIndex(input.Root, files, importedAt)
-		scan := migrationInput{Input: input, Files: files, Groups: groups}
+		scan := migrationInput{Input: input, Groups: groups}
 		scan.Errors = append(scanErrors, readErrors...)
 		// Unknown-owner failures invalidate the input's complete owner snapshot.
 		for _, group := range groups {
@@ -84,41 +82,29 @@ func Migrate(from, destination string, inputs []Input) (*MigrationResult, error)
 
 type migrationInput struct {
 	Input  Input
-	Files  []string
 	Groups []codex.Group
 	Errors []error
 }
-type migrationEvidence struct {
-	Input int
-	Group int
-	Path  string
-	Line  int
-}
 
 func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapter, importedAt string, result *MigrationResult) error {
-	evidence := map[string][]migrationEvidence{}
 	fileInputs := map[string]map[int]bool{}
 	for i, scan := range scans {
-		for j, g := range scan.Groups {
+		for _, g := range scan.Groups {
 			for _, report := range g.Reports {
 				if fileInputs[report.Path] == nil {
 					fileInputs[report.Path] = map[int]bool{}
 				}
 				fileInputs[report.Path][i] = true
-				for _, line := range report.Lines {
-					evidence[line.UUID] = append(evidence[line.UUID], migrationEvidence{i, j, report.Path, line.Line})
-				}
 			}
 		}
 	}
-	candidates := migrationGroupCandidates(evidence)
-	for i, scan := range scans {
+	for _, scan := range scans {
 		if len(scan.Errors) > 0 {
 			result.Errors = append(result.Errors, scan.Errors...)
 			result.GroupsFailed += max(1, len(scan.Groups))
 			continue
 		}
-		for j, g := range scan.Groups {
+		for _, g := range scan.Groups {
 			err := g.Err
 			if err == nil && g.Session.SessionID == "" {
 				continue
@@ -130,7 +116,7 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 			}
 			var body codex.Group
 			if err == nil {
-				err = checkMigrationSnapshot(adapter, scan, g)
+				err = checkMigrationGroup(g)
 			}
 			if err == nil {
 				paths := make([]string, len(g.Reports))
@@ -149,7 +135,7 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 			}
 			removed := 0
 			if err == nil {
-				removed, err = replaceMigrationGroup(db, scan.Input, body, candidates[[2]int{i, j}], adapter, scan, g, importedAt)
+				removed, err = replaceMigrationGroup(db, scan.Input, body, result.SnapshotSHA256, importedAt)
 			}
 			if err != nil {
 				result.GroupsFailed++
@@ -179,30 +165,8 @@ func sameMigrationReports(index, body []codex.FileReport) bool {
 	return true
 }
 
-// Candidates must be assigned only after evidence from all inputs, including
-// failed groups, is complete. Physical duplicate/context lines remain evidence.
-func migrationGroupCandidates(evidence map[string][]migrationEvidence) map[[2]int][]string {
-	candidates := map[[2]int][]string{}
-	for uuid, matches := range evidence {
-		if len(matches) == 1 {
-			owner := [2]int{matches[0].Input, matches[0].Group}
-			candidates[owner] = append(candidates[owner], uuid)
-		}
-	}
-	return candidates
-}
-
-func checkMigrationSnapshot(adapter codex.Adapter, scan migrationInput, group codex.Group) error {
-	files, errs := adapter.ScanFiles(scan.Input.Root)
-	if len(errs) > 0 {
-		return errs[0]
-	}
-	expected := append([]string(nil), scan.Files...)
-	sort.Strings(expected)
-	sort.Strings(files)
-	if !slices.Equal(files, expected) {
-		return fmt.Errorf("%s: rollout set changed during migration", scan.Input.Root)
-	}
+// Validate only this owner: unrelated rollout changes do not invalidate it.
+func checkMigrationGroup(group codex.Group) error {
 	buf := make([]byte, 32*1024)
 	for _, report := range group.Reports {
 		file, err := os.Open(report.Path)
@@ -223,7 +187,7 @@ func checkMigrationSnapshot(adapter codex.Adapter, scan migrationInput, group co
 	return nil
 }
 
-func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, adapter codex.Adapter, scan migrationInput, index codex.Group, importedAt string) (int, error) {
+func replaceMigrationGroup(db *DB, input Input, g codex.Group, digest, importedAt string) (int, error) {
 	tx, err := db.Begin()
 	if err != nil {
 		return 0, err
@@ -254,8 +218,8 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, a
 		}
 	}
 	// A successfully parsed owner replaces all same-ID Codex history, including
-	// rows without surviving physical evidence. Other IDs still require evidence.
-	deleted, err := tx.Exec(`DELETE FROM legacy_messages WHERE source='codex' AND session_id=?`, g.Session.SessionID)
+	// rows without surviving physical evidence. Other IDs remain legacy history.
+	deleted, err := tx.Exec(`DELETE FROM legacy_messages WHERE snapshot_sha256=? AND source='codex' AND session_id=?`, digest, g.Session.SessionID)
 	if err != nil {
 		return 0, err
 	}
@@ -263,28 +227,10 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, a
 	if err != nil {
 		return 0, err
 	}
-	if _, err = tx.Exec(`DELETE FROM legacy_sessions WHERE source='codex' AND session_id=?`, g.Session.SessionID); err != nil {
+	if _, err = tx.Exec(`DELETE FROM legacy_sessions WHERE snapshot_sha256=? AND source='codex' AND session_id=?`, digest, g.Session.SessionID); err != nil {
 		return 0, err
 	}
-	for _, uuid := range uuids {
-		var rowid int64
-		var sessionID string
-		err = tx.QueryRow(`SELECT legacy_rowid,session_id FROM legacy_messages WHERE uuid=? AND source='codex'`, uuid).Scan(&rowid, &sessionID)
-		if err == sql.ErrNoRows {
-			continue
-		}
-		if err != nil {
-			return 0, err
-		}
-		if _, err = tx.Exec(`DELETE FROM legacy_messages WHERE legacy_rowid=?`, rowid); err != nil {
-			return 0, err
-		}
-		removed++
-		if _, err = tx.Exec(`DELETE FROM legacy_sessions WHERE source='codex' AND session_id=? AND NOT EXISTS(SELECT 1 FROM legacy_messages WHERE source='codex' AND session_id=?)`, sessionID, sessionID); err != nil {
-			return 0, err
-		}
-	}
-	if err = checkMigrationSnapshot(adapter, scan, index); err != nil {
+	if err = checkMigrationGroup(g); err != nil {
 		return 0, err
 	}
 	if err = tx.Commit(); err != nil {
