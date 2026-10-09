@@ -1,0 +1,97 @@
+[
+  {
+    "name": "baseline tests",
+    "command": [
+      "go",
+      "test",
+      "-count=1",
+      "./..."
+    ],
+    "cwd": "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/performance-refresh-20261009/before-source",
+    "exit_code": 0,
+    "seconds": 5.299452083003416,
+    "stdout": "ok  \tgithub.com/ryotapoi/somniloq/cmd/somniloq\t4.557s\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t3.232s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest\t0.274s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/claudecode\t0.281s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/codex\t0.286s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/cursoragent\t0.577s\n",
+    "stderr": ""
+  },
+  {
+    "name": "format",
+    "command": [
+      "zsh",
+      "-c",
+      "unformatted=\"$(find . -name '*.go' -type f -print0 | xargs -0 gofmt -l)\"; test -z \"$unformatted\" || { echo \"$unformatted\"; exit 1; }"
+    ],
+    "cwd": "/Users/ryota/Sources/ryotapoi/somniloq",
+    "exit_code": 0,
+    "seconds": 1.230339665999054,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "tests",
+    "command": [
+      "go",
+      "test",
+      "-count=1",
+      "./..."
+    ],
+    "cwd": "/Users/ryota/Sources/ryotapoi/somniloq",
+    "exit_code": 0,
+    "seconds": 3.010408333000669,
+    "stdout": "ok  \tgithub.com/ryotapoi/somniloq/cmd/somniloq\t1.913s\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t2.712s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest\t0.229s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/claudecode\t0.244s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/codex\t0.246s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/cursoragent\t0.228s\n",
+    "stderr": ""
+  },
+  {
+    "name": "vet",
+    "command": [
+      "go",
+      "vet",
+      "./..."
+    ],
+    "cwd": "/Users/ryota/Sources/ryotapoi/somniloq",
+    "exit_code": 0,
+    "seconds": 0.19989154200447956,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "build",
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "bin/somniloq",
+      "./cmd/somniloq"
+    ],
+    "cwd": "/Users/ryota/Sources/ryotapoi/somniloq",
+    "exit_code": 0,
+    "seconds": 0.37545466700248653,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "licenses install",
+    "command": [
+      "go",
+      "install",
+      "github.com/google/go-licenses/v2@v2.0.1"
+    ],
+    "cwd": "/Users/ryota/Sources/ryotapoi/somniloq",
+    "exit_code": 0,
+    "seconds": 1.276532583993685,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "name": "notices",
+    "command": [
+      "python3",
+      "scripts/update-third-party-notices.py",
+      "--check"
+    ],
+    "cwd": "/Users/ryota/Sources/ryotapoi/somniloq",
+    "exit_code": 0,
+    "seconds": 2.82848599999852,
+    "stdout": "",
+    "stderr": "W1009 14:00:55.195589   68418 library.go:141] \"golang.org/x/sys/unix\" contains non-Go code that can't be inspected for further dependencies:\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/asm_bsd_amd64.s\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/zsyscall_darwin_amd64.s\nW1009 14:00:55.602779   68463 library.go:141] \"golang.org/x/sys/unix\" contains non-Go code that can't be inspected for further dependencies:\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/asm_bsd_arm64.s\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/zsyscall_darwin_arm64.s\nW1009 14:00:55.985566   68479 library.go:141] \"golang.org/x/sys/unix\" contains non-Go code that can't be inspected for further dependencies:\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/asm_linux_amd64.s\nW1009 14:00:56.370176   68490 library.go:141] \"golang.org/x/sys/unix\" contains non-Go code that can't be inspected for further dependencies:\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/asm_linux_arm64.s\n"
+  }
+]
