@@ -217,26 +217,21 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 	}
 	for i := range groups {
 		g := &groups[i]
-		seen := map[string]string{}
+		seen := map[string]int{}
 		number := 0
 		messages := g.Messages[:0]
 		for _, m := range g.Messages {
 			// Context and unresolved records retain their physical provenance. Only
 			// owner body participates in payload-ID deduplication and numbering.
 			if m.Membership == "body" {
-				signature, _ := json.Marshal(struct {
-					Role      string
-					Blocks    []string
-					Timestamp string
-				}{m.Role, m.Blocks, m.Timestamp})
 				if m.PayloadID != "" {
-					if old, ok := seen[m.PayloadID]; ok {
-						if old != string(signature) {
+					if index, ok := seen[m.PayloadID]; ok {
+						if !samePayload(messages[index], m) {
 							g.Err = fmt.Errorf("%s: conflicting payload ID %q", g.Session.SessionID, m.PayloadID)
 						}
 						continue
 					}
-					seen[m.PayloadID] = string(signature)
+					seen[m.PayloadID] = len(messages)
 				}
 				number++
 				m.Number = number
@@ -248,6 +243,18 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 		g.Messages = messages
 	}
 	return groups, errs
+}
+
+func samePayload(a, b ingest.NormalizedMessage) bool {
+	if a.Role != b.Role || a.Timestamp != b.Timestamp || (a.Blocks == nil) != (b.Blocks == nil) || len(a.Blocks) != len(b.Blocks) {
+		return false
+	}
+	for i := range a.Blocks {
+		if a.Blocks[i] != b.Blocks[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // Diagnostics reports only newly encountered failures when an unchanged prefix

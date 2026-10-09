@@ -1,0 +1,91 @@
+[
+  {
+    "command": [
+      "goimports",
+      "-w",
+      "internal/ingest/codex/group.go",
+      "internal/ingest/codex/group_test.go"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.026,
+    "output": ""
+  },
+  {
+    "command": [
+      "bash",
+      "-c",
+      "unformatted=\"$(find . -name \"*.go\" -type f -print0 | xargs -0 gofmt -l)\"; test -z \"$unformatted\" || { echo \"$unformatted\"; exit 1; }"
+    ],
+    "exit_code": 0,
+    "duration_s": 1.138,
+    "output": ""
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-count=1",
+      "./..."
+    ],
+    "exit_code": 0,
+    "duration_s": 2.999,
+    "output": "ok  \tgithub.com/ryotapoi/somniloq/cmd/somniloq\t1.886s\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t2.485s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest\t0.063s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/claudecode\t0.070s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/codex\t0.081s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/cursoragent\t0.068s\n"
+  },
+  {
+    "command": [
+      "go",
+      "vet",
+      "./..."
+    ],
+    "exit_code": 0,
+    "duration_s": 0.204,
+    "output": ""
+  },
+  {
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "bin/somniloq",
+      "./cmd/somniloq"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.234,
+    "output": ""
+  },
+  {
+    "command": [
+      "go",
+      "install",
+      "github.com/google/go-licenses/v2@v2.0.1"
+    ],
+    "exit_code": 1,
+    "duration_s": 0.011,
+    "output": "go: github.com/google/go-licenses/v2@v2.0.1: loading deprecation for github.com/google/go-licenses/v2: module github.com/google/go-licenses/v2: Get \"https://proxy.golang.org/github.com/google/go-licenses/v2/@v/list\": dial tcp: lookup proxy.golang.org: no such host\n"
+  },
+  {
+    "command": [
+      "env",
+      "GOBIN=/Users/ryota/Sources/ryotapoi/somniloq/.tmp/payload-signature/bin",
+      "GOCACHE=/Users/ryota/Sources/ryotapoi/somniloq/.tmp/migration-cumulative-performance/go-cache",
+      "GOFLAGS=-buildvcs=false",
+      "go",
+      "install",
+      "github.com/google/go-licenses/v2@v2.0.1"
+    ],
+    "sandbox": "require_escalated",
+    "exit_code": 0,
+    "duration_s": 4.0,
+    "output": ""
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/update-third-party-notices.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "duration_s": 2.402,
+    "output": "go-licenses emitted non-Go code inspection warnings for golang.org/x/sys/unix"
+  }
+]

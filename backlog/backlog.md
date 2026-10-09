@@ -27,7 +27,7 @@
 
 - [x] **一連の移行改善の累積効果を比較し、単一巨大会話のRSS増加を切り分ける。** [累積比較](../cache/migration-cumulative-performance-20261009/README.md) と [RSS増加の調査・GC対照](../cache/migration-rss-regression-20261009/README.md) を保存した。総量16倍の初回は10.80→2.84秒、RSS 98.08→48.81 MiB。一方、単一64 MiB会話ではRSSが増加し、変更ごとの比較で本文読み込み版354.67 MiB→現在466.34 MiBを確認した。GC設定による対照は改善余地の根拠であり、コード・既定設定は変更していない。
 
-- [ ] **payload IDの重複判定で本文の全文JSON署名を複製しない方式を評価し、効果があれば採用する。** 入口は `internal/ingest/codex/group.go` の `seen` と署名生成。[RSS調査の入力・予算・保存検証](../cache/migration-rss-regression-20261009/README.md) を再利用し、単一64 MiB会話を主対象、16会話への分割・短い本文を対照にする。既に保持する代表メッセージとの正確比較を候補とし、role・timestamp・block境界、重複排除・衝突検出・番号・context除外を保つ。hashだけの比較で同一性保証を変えない。通常importと移行の回帰を確認し、直前の採用版と同条件で時間・ピークRSSを比較する。
+- [x] **payload IDの重複判定で本文の全文JSON署名を複製しない方式を評価し、効果があれば採用する。** [比較結果・再実行手順](../cache/payload-signature-performance-20261009/README.md)を保存した。既存メッセージとの正確比較を採用し、単一64 MiB会話の初回RSS中央値465.59→356.66 MiB、再実行461.69→353.00 MiB。時間の改善は確定しない。16会話分割ではRSSが下がり、短本文では測定可能な差がない。role・timestamp・block境界、重複排除・衝突検出・番号・context除外、通常importと移行の保存・失敗時保持・再実行を確認した。
 
 - [ ] **migration本文passの元ファイルbytes保持を省く価値を評価し、効果があれば採用する。** 前タスクの採否・計測結果を読み、残るRSSへの寄与を確認してから進める。入口は `internal/ingest/codex/group.go` の `FileReport.Data`。migrationで使わない全文の保持を省く候補とし、通常importの差分診断に必要なData、物理行・hash・cursor・所属証拠は維持する。既存の単一/複数会話入力と予算で、直前の採用版との時間・ピークRSS比較と保存・失敗時保持・再実行の検証を行う。
 

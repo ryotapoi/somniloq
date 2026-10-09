@@ -6,7 +6,71 @@ import (
 	"path/filepath"
 	"reflect"
 	"testing"
+
+	"github.com/ryotapoi/somniloq/internal/ingest"
 )
+
+func TestSamePayloadPreservesSignatureFields(t *testing.T) {
+	base := ingest.NormalizedMessage{Role: "assistant", Timestamp: "time", Blocks: []string{"a", "b"}}
+	for _, tc := range []struct {
+		name string
+		edit func(*ingest.NormalizedMessage)
+		want bool
+	}{
+		{"equal", func(*ingest.NormalizedMessage) {}, true},
+		{"role", func(m *ingest.NormalizedMessage) { m.Role = "user" }, false},
+		{"timestamp", func(m *ingest.NormalizedMessage) { m.Timestamp = "other" }, false},
+		{"block boundary", func(m *ingest.NormalizedMessage) { m.Blocks = []string{"a\n\nb"} }, false},
+		{"block content", func(m *ingest.NormalizedMessage) { m.Blocks = []string{"a", "c"} }, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			other := base
+			tc.edit(&other)
+			if got := samePayload(base, other); got != tc.want {
+				t.Fatalf("samePayload=%t, want %t", got, tc.want)
+			}
+		})
+	}
+	if samePayload(ingest.NormalizedMessage{}, ingest.NormalizedMessage{Blocks: []string{}}) {
+		t.Fatal("nil and empty blocks have distinct JSON signatures")
+	}
+}
+
+func TestCodexPayloadDedupKeepsFirstMessageAndNumbers(t *testing.T) {
+	const meta = `{"type":"session_meta","payload":{"id":"owner"}}` + "\n"
+	line := func(id, text string) string {
+		return `{"type":"response_item","timestamp":"time","payload":{"type":"message","role":"assistant","id":"` + id + `","content":[{"type":"output_text","text":"` + text + `"}]}}` + "\n"
+	}
+	path := filepath.Join(t.TempDir(), "rollout.jsonl")
+	data := meta + line("a", "first") + line("a", "first") + line("b", "second") + line("b", "second") + line("c", "third")
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	adapter := NewAdapter(func(s string) string { return s })
+	for _, build := range []struct {
+		name string
+		fn   func(string, []string, string) ([]Group, []error)
+	}{
+		{"import", adapter.BuildGroups},
+		{"migration", adapter.BuildMigrationGroups},
+	} {
+		t.Run(build.name, func(t *testing.T) {
+			groups, errs := build.fn(filepath.Dir(path), []string{path}, "")
+			if len(errs) != 0 || len(groups) != 1 || groups[0].Err != nil {
+				t.Fatalf("groups=%+v errors=%v", groups, errs)
+			}
+			messages := groups[0].Messages
+			if len(messages) != 3 {
+				t.Fatalf("messages=%+v", messages)
+			}
+			for i, want := range []string{"first", "second", "third"} {
+				if messages[i].Content != want || messages[i].Number != i+1 || messages[i].OriginLine != 2*i+2 {
+					t.Fatalf("message %d: %+v", i, messages[i])
+				}
+			}
+		})
+	}
+}
 
 func TestCodexFixtureOracle(t *testing.T) {
 	root := filepath.Join("..", "testdata", "v0.14.0")
