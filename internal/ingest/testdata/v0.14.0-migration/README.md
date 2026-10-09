@@ -19,3 +19,5 @@
 `missing` は metadata-only の旧会話であり、本文件数0でも参照対象として保持する。`unattributed_old_same_id` は別caseの初期変種として未照合の旧 `child` 会話を追加する（本文・role・時刻は新本文と一致し、UUID は残存 path と異なる旧 `/fixture/old/01-child.jsonl` の4行目由来）。新 `child` の正常保存で同名旧行を削除し、別 ID の未照合旧行は保持する。`inherited_only_no_prior_history` は ordinal 3 が本人境界82未満で、本人本文0件・継承文脈ありの正常置換として初回/再実行とも会話と移行 cursor を保存する。`all_normal_records_ignored` は metadata-only の正常0件として同名旧本文を削除する。invalid JSON、前metadata本文、入力競合、同payload ID不一致は失敗時保持の境界例で、元ログにすべて存在したとの主張ではない。
 
 本 fixture の確認は SQL が現行 exact schema と一致すること、全JSON/JSONLがcaseの意図どおり読めること、物理行と旧UUIDが一致すること、ordinal 7/8 と本人境界8の対応、m1の全文一致と m2の順序を対象とする。production の原子性と再実行は core/CLI の合成 fixture テストで確認する。実 DB 全体、性能、実使用は対象外。
+
+移行中の追記は `internal/core/migrate_append_test.go` の合成 fixture で確認する。metadata 後、保存中、先行会話の保存後の追記と新しい子ログを通常 import で回収し、静止入力の本文・文脈・親子関係・cursor に一致させる。本文読み取り後の削除・移動・置換・縮小・同サイズ編集は保存失敗時保持を検証する。

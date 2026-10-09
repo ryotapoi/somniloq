@@ -1,0 +1,105 @@
+[
+  {
+    "command": [
+      "goimports",
+      "-w",
+      "internal/core/migrate.go",
+      "internal/core/migrate_memory_test.go",
+      "internal/core/migrate_append_test.go",
+      "internal/ingest/codex/group.go",
+      "internal/ingest/codex/migration_test.go",
+      "cmd/somniloq/migrate.go"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.015636500000255182,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "python3",
+      "-c",
+      "import pathlib,subprocess; fs=[str(p) for p in pathlib.Path(\".\").rglob(\"*.go\")]; r=subprocess.run([\"gofmt\",\"-l\",*fs],capture_output=True,text=True,check=True); print(r.stdout,end=\"\"); raise SystemExit(bool(r.stdout))"
+    ],
+    "exit_code": 1,
+    "duration_s": 1.0993902499903925,
+    "stdout": ".tmp/log-memory-estimate/main.go\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-count=1",
+      "./..."
+    ],
+    "exit_code": 0,
+    "duration_s": 4.173450540998601,
+    "stdout": "ok  \tgithub.com/ryotapoi/somniloq/cmd/somniloq\t2.098s\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t3.579s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest\t0.241s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/claudecode\t0.251s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/codex\t0.077s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/cursoragent\t0.245s\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "go",
+      "vet",
+      "./..."
+    ],
+    "exit_code": 0,
+    "duration_s": 1.5993822909949813,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "bin/somniloq",
+      "./cmd/somniloq"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.373341333004646,
+    "stdout": "",
+    "stderr": "go: writing stat cache: open /Users/ryota/go/pkg/mod/cache/download/github.com/ryotapoi/somniloq/@v/v0.14.2-0.20261009170507-36834052e81f.info935281633.tmp: operation not permitted\n"
+  },
+  {
+    "command": [
+      "go",
+      "install",
+      "github.com/google/go-licenses/v2@v2.0.1"
+    ],
+    "exit_code": 1,
+    "duration_s": 0.020274959009839222,
+    "stdout": "",
+    "stderr": "go: github.com/google/go-licenses/v2@v2.0.1: loading deprecation for github.com/google/go-licenses/v2: module github.com/google/go-licenses/v2: Get \"https://proxy.golang.org/github.com/google/go-licenses/v2/@v/list\": dial tcp: lookup proxy.golang.org: no such host\n"
+  },
+  {
+    "command": "repository-wide gofmt -l check (retry)",
+    "exit_code": 0,
+    "duration_s": 0.6575429590011481,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "go",
+      "install",
+      "github.com/google/go-licenses/v2@v2.0.1"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.6830690000060713,
+    "stdout": "",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/update-third-party-notices.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "duration_s": 3.0097412090108264,
+    "stdout": "",
+    "stderr": "W1010 02:18:08.891031   75541 library.go:141] \"golang.org/x/sys/unix\" contains non-Go code that can't be inspected for further dependencies:\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/asm_bsd_amd64.s\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/zsyscall_darwin_amd64.s\nW1010 02:18:09.315015   75572 library.go:141] \"golang.org/x/sys/unix\" contains non-Go code that can't be inspected for further dependencies:\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/asm_bsd_arm64.s\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/zsyscall_darwin_arm64.s\nW1010 02:18:09.721562   75607 library.go:141] \"golang.org/x/sys/unix\" contains non-Go code that can't be inspected for further dependencies:\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/asm_linux_amd64.s\nW1010 02:18:10.127575   75622 library.go:141] \"golang.org/x/sys/unix\" contains non-Go code that can't be inspected for further dependencies:\n/Users/ryota/go/pkg/mod/golang.org/x/sys@v0.16.0/unix/asm_linux_arm64.s\n"
+  }
+]

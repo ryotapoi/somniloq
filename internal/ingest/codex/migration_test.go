@@ -1,14 +1,13 @@
 package codex
 
 import (
-	"crypto/sha256"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 )
 
-func TestMigrationIndexRetainsHashWithoutBodies(t *testing.T) {
+func TestMigrationIndexRetainsOnlyOwnerMetadata(t *testing.T) {
 	root := t.TempDir()
 	path := filepath.Join(root, "owner.jsonl")
 	data := []byte("{\"type\":\"session_meta\",\"payload\":{\"id\":\"owner\"}}\n" +
@@ -24,8 +23,8 @@ func TestMigrationIndexRetainsHashWithoutBodies(t *testing.T) {
 	if g.Session.SessionID != "owner" || len(g.Messages) != 0 || len(g.Reports) != 1 || len(g.Reports[0].Data) != 0 {
 		t.Fatalf("index retained body or lost owner: %+v", g)
 	}
-	if g.Reports[0].Hash != sha256.Sum256(data) {
-		t.Fatalf("index lost snapshot hash: %+v", g.Reports[0])
+	if len(g.States) != 0 || len(g.Reports[0].Failures) != 0 {
+		t.Fatalf("index retained body evidence: %+v", g)
 	}
 }
 
@@ -170,10 +169,28 @@ func TestMigrationStrictDiagnosticRetainsPhysicalLineNumber(t *testing.T) {
 		t.Fatal(err)
 	}
 	adapter := NewMigrationAdapter(func(s string) string { return s })
-	for _, build := range []func(string, []string, string) ([]Group, []error){adapter.BuildMigrationIndex, adapter.BuildMigrationGroups} {
+	for _, build := range []func(string, []string, string) ([]Group, []error){adapter.BuildMigrationGroups} {
 		groups, errs := build(root, []string{path}, "")
 		if len(errs) != 0 || len(groups) != 1 || groups[0].Err == nil || !strings.Contains(groups[0].Err.Error(), path+":3:") {
 			t.Fatalf("groups=%+v errors=%v", groups, errs)
 		}
+	}
+}
+
+func TestMigrationIndexUsesFirstValidMetadataAndDefersBodyValidation(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "owner.jsonl")
+	data := `{"type":"session_meta","payload":{"id":""}}` + "\n" + `{"type":"session_meta","payload":{"id":"child","source":{"subagent":{"thread_spawn":{"parent_thread_id":"parent"}}}}}` + "\n" + `{"type":"session_meta","payload":{"id":"parent"}}` + "\ninvalid\n"
+	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
+		t.Fatal(err)
+	}
+	a := NewMigrationAdapter(func(s string) string { return s })
+	groups, errs := a.BuildMigrationIndex(root, []string{path}, "")
+	if len(errs) != 0 || len(groups) != 1 || groups[0].Session.SessionID != "child" || groups[0].Session.ParentSessionID != "parent" || groups[0].Err != nil {
+		t.Fatalf("%+v %v", groups, errs)
+	}
+	body, errs := a.BuildMigrationGroups(root, []string{path}, "")
+	if len(errs) != 0 || len(body) != 1 || body[0].Err == nil {
+		t.Fatalf("body failed to validate: %+v %v", body, errs)
 	}
 }

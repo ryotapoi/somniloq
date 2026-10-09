@@ -1,12 +1,9 @@
 package core
 
 import (
-	"crypto/sha256"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
-	"slices"
 
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
@@ -116,9 +113,6 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 			}
 			var body codex.Group
 			if err == nil {
-				err = checkMigrationGroup(g)
-			}
-			if err == nil {
 				paths := make([]string, len(g.Reports))
 				for k, report := range g.Reports {
 					paths[k] = report.Path
@@ -158,29 +152,24 @@ func sameMigrationReports(index, body []codex.FileReport) bool {
 		return false
 	}
 	for i := range index {
-		if index[i].Path != body[i].Path || index[i].Hash != body[i].Hash {
+		if index[i].Path != body[i].Path {
 			return false
 		}
 	}
 	return true
 }
 
-// Validate only this owner: unrelated rollout changes do not invalidate it.
+// Appends can be recovered by import using the parsed bytes' hash and cursor.
+// Missing, replaced, truncated, or same-size edited files are not appends.
+// Compare against parsed length because reads may include an append after fstat;
+// compare mtime at the original size so a same-size edit cannot pass as growth.
 func checkMigrationGroup(group codex.Group) error {
-	buf := make([]byte, 32*1024)
 	for _, report := range group.Reports {
-		file, err := os.Open(report.Path)
+		info, err := os.Stat(report.Path)
 		if err != nil {
 			return fmt.Errorf("%s: %w", report.Path, err)
 		}
-		hash := sha256.New()
-		// Hide File.WriteTo so CopyBuffer reuses the buffer across files.
-		_, err = io.CopyBuffer(hash, struct{ io.Reader }{file}, buf)
-		file.Close()
-		if err != nil {
-			return fmt.Errorf("%s: %w", report.Path, err)
-		}
-		if !slices.Equal(hash.Sum(nil), report.Hash[:]) {
+		if report.Info == nil || !os.SameFile(report.Info, info) || info.Size() < int64(len(report.Data)) || (info.Size() == report.Info.Size() && !info.ModTime().Equal(report.Info.ModTime())) {
 			return fmt.Errorf("%s: rollout changed during migration", report.Path)
 		}
 	}

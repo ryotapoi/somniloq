@@ -1,11 +1,13 @@
 package codex
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"sort"
@@ -20,6 +22,7 @@ type ParseFailure struct {
 
 type FileReport struct {
 	Path     string
+	Info     os.FileInfo
 	Data     []byte
 	Hash     [sha256.Size]byte
 	Failures []ParseFailure
@@ -39,11 +42,9 @@ type Group struct {
 }
 
 type collector struct {
-	meta           *ingest.SessionMeta
-	messages       []ingest.NormalizedMessage
-	state          ingest.ImportState
-	indexOnly      bool
-	unresolvedLine int
+	meta     *ingest.SessionMeta
+	messages []ingest.NormalizedMessage
+	state    ingest.ImportState
 }
 
 func (c *collector) UpsertSession(meta ingest.SessionMeta, _ string) error {
@@ -56,12 +57,6 @@ func (c *collector) UpsertSession(meta ingest.SessionMeta, _ string) error {
 	return nil
 }
 func (c *collector) InsertMessage(m ingest.NormalizedMessage) error {
-	if c.indexOnly {
-		if m.Membership == "unresolved" && c.unresolvedLine == 0 {
-			c.unresolvedLine = m.OriginLine
-		}
-		return nil
-	}
 	c.messages = append(c.messages, m)
 	return nil
 }
@@ -72,22 +67,79 @@ func (c *collector) Rollback() error                              { return nil }
 // BuildGroups reads full snapshots so edits to earlier rollouts renumber the
 // entire owner rather than append records in import encounter order.
 func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]Group, []error) {
-	return a.buildGroups(root, paths, importedAt, false, false)
+	return a.buildGroups(root, paths, importedAt, false)
 }
 
 // BuildMigrationGroups preserves every rollout and rejects incomplete ownership evidence.
 // Ordinary imports intentionally continue to accept partially parsed snapshots.
 func (a Adapter) BuildMigrationGroups(root string, paths []string, importedAt string) ([]Group, []error) {
-	return a.buildGroups(root, paths, importedAt, true, false)
+	return a.buildGroups(root, paths, importedAt, true)
 }
 
-// BuildMigrationIndex retains owner and hash evidence, but releases
-// each file's body before the next file is read.
+// BuildMigrationIndex reads only through the first valid owner metadata.
+// Body validation and content hashes belong to the later per-owner snapshot.
 func (a Adapter) BuildMigrationIndex(root string, paths []string, importedAt string) ([]Group, []error) {
-	return a.buildGroups(root, paths, importedAt, true, true)
+	paths = append([]string(nil), paths...)
+	sort.Strings(paths)
+	var groups []Group
+	var errs []error
+	indexes := map[string]int{}
+	resolve := memoizeRepoResolver(a.resolveRepoPath)
+	for _, path := range paths {
+		meta, err := readMigrationOwner(path)
+		if err != nil {
+			errs = append(errs, err)
+			continue
+		}
+		if meta == nil {
+			continue
+		}
+		meta.RepoPath = resolve(meta.CWD)
+		index, ok := indexes[meta.SessionID]
+		if !ok {
+			index = len(groups)
+			indexes[meta.SessionID] = index
+			groups = append(groups, Group{Session: *meta})
+		}
+		g := &groups[index]
+		g.Files++
+		g.Reports = append(g.Reports, FileReport{Path: path})
+	}
+	return groups, errs
 }
 
-func (a Adapter) buildGroups(root string, paths []string, importedAt string, strict, indexOnly bool) ([]Group, []error) {
+func readMigrationOwner(path string) (*ingest.SessionMeta, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
+	defer file.Close()
+	reader := bufio.NewReader(file)
+	nonempty := false
+	for {
+		line, readErr := reader.ReadBytes('\n')
+		if len(bytes.TrimSpace(line)) != 0 {
+			nonempty = true
+			rec, parseErr := ParseRecord(line)
+			if parseErr == nil && rec.Type == "session_meta" {
+				if meta, err := parseSessionMeta(rec); err == nil {
+					return meta, nil
+				}
+			}
+		}
+		if readErr != nil {
+			if readErr != io.EOF {
+				return nil, fmt.Errorf("%s: %w", path, readErr)
+			}
+			if nonempty {
+				return nil, fmt.Errorf("%s: message_owner_unknown: no valid owner metadata", path)
+			}
+			return nil, nil
+		}
+	}
+}
+
+func (a Adapter) buildGroups(root string, paths []string, importedAt string, strict bool) ([]Group, []error) {
 	resolveRepoPath := memoizeRepoResolver(a.resolveRepoPath)
 	paths = append([]string(nil), paths...)
 	boundaries := map[string]*int{}
@@ -100,12 +152,32 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 	indexes := map[string]int{}
 	var errs []error
 	for _, path := range paths {
-		data, err := os.ReadFile(path)
+		var info os.FileInfo
+		var data []byte
+		var err error
+		if strict {
+			file, openErr := os.Open(path)
+			if openErr != nil {
+				errs = append(errs, fmt.Errorf("%s: %w", path, openErr))
+				continue
+			}
+			info, err = file.Stat()
+			if err == nil {
+				// Keep ReadFile's size-based allocation while recording the
+				// identity of the same open file whose bytes we parse.
+				buffer := bytes.NewBuffer(make([]byte, 0, info.Size()+bytes.MinRead))
+				_, err = buffer.ReadFrom(file)
+				data = buffer.Bytes()
+			}
+			file.Close()
+		} else {
+			data, err = os.ReadFile(path)
+		}
 		if err != nil {
 			errs = append(errs, fmt.Errorf("%s: %w", path, err))
 			continue
 		}
-		c := &collector{indexOnly: indexOnly}
+		c := &collector{}
 		h := &fileHandler{resolveRepoPath: resolveRepoPath, importedAt: importedAt}
 		h.path = path
 		hasBody := false
@@ -155,10 +227,8 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 			strictErr = h.failures[0].Diagnostic
 		}
 		sum := sha256.Sum256(data)
-		report := FileReport{Path: path, Hash: sum, Failures: h.failures}
-		if !indexOnly {
-			report.Data = data
-		}
+		report := FileReport{Path: path, Info: info, Hash: sum, Failures: h.failures}
+		report.Data = data
 		if c.meta == nil || (!strict && c.state.JSONLPath == "" && len(h.failures) > 0) {
 			groups = append(groups, Group{Files: 1, Err: strictErr, Reports: []FileReport{report}})
 			continue
@@ -194,9 +264,6 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 			g.EmptyPaths = append(g.EmptyPaths, path)
 		}
 		g.Reports = append(g.Reports, report)
-		if c.unresolvedLine != 0 {
-			g.Err = fmt.Errorf("%s:%d: explicit inheritance boundary with missing ordinal", path, c.unresolvedLine)
-		}
 		for _, m := range c.messages {
 			if strict && m.Membership == "unresolved" {
 				g.Err = fmt.Errorf("%s:%d: explicit inheritance boundary with missing ordinal", path, m.OriginLine)
@@ -205,9 +272,6 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 			m.OriginPath = filepath.ToSlash(rel)
 			g.Messages = append(g.Messages, m)
 		}
-	}
-	if indexOnly {
-		return groups, errs
 	}
 	for i := range groups {
 		g := &groups[i]

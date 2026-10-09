@@ -1,0 +1,53 @@
+[
+  {
+    "command": [
+      "migrate",
+      "--config",
+      "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/migration-cli-final/config.toml",
+      "--from",
+      "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/migration-cli-final/old.db"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.36661266699957196,
+    "stdout": "{\"snapshot_sha256\":\"ce9a8af917d59590ffef70bc1b9eecb34c86a28787283b713d32918dc3e1b207\",\"copy_performed\":true,\"groups_replaced\":2,\"groups_skipped\":0,\"groups_failed\":0,\"legacy_messages_removed\":2,\"legacy_messages_retained\":6,\"legacy_conversations_retained\":5,\"legacy_replacement_failures\":0,\"legacy_retention_warnings\":0}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "migrate",
+      "--config",
+      "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/migration-cli-final/config.toml",
+      "--from",
+      "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/migration-cli-final/old.db"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.009701750008389354,
+    "stdout": "{\"snapshot_sha256\":\"ce9a8af917d59590ffef70bc1b9eecb34c86a28787283b713d32918dc3e1b207\",\"copy_performed\":false,\"groups_replaced\":2,\"groups_skipped\":0,\"groups_failed\":0,\"legacy_messages_removed\":0,\"legacy_messages_retained\":6,\"legacy_conversations_retained\":5,\"legacy_replacement_failures\":0,\"legacy_retention_warnings\":0}\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "migrate",
+      "--config",
+      "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/migration-cli-final/config.toml",
+      "--from",
+      "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/migration-cli-final/old.db"
+    ],
+    "exit_code": 1,
+    "duration_s": 0.010540207993471995,
+    "stdout": "{\"snapshot_sha256\":\"ce9a8af917d59590ffef70bc1b9eecb34c86a28787283b713d32918dc3e1b207\",\"copy_performed\":false,\"groups_replaced\":1,\"groups_skipped\":0,\"groups_failed\":1,\"legacy_messages_removed\":0,\"legacy_messages_retained\":6,\"legacy_conversations_retained\":5,\"legacy_replacement_failures\":0,\"legacy_retention_warnings\":0}\n",
+    "stderr": "migrate: error: /Users/ryota/Sources/ryotapoi/somniloq/.tmp/migration-cli-final/logs/03-multi.jsonl:4: unexpected end of JSON input\n"
+  },
+  {
+    "command": [
+      "migrate",
+      "--config",
+      "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/migration-cli-final/config.toml",
+      "--help"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.006226625002454966,
+    "stdout": "",
+    "stderr": "Migrate a legacy snapshot without changing it\n\nUsage:\n  somniloq migrate [--config NAME_OR_PATH] --from PATH\n\nFlags:\n  -config NAME_OR_PATH\n    \tTOML configuration name or path (default: default)\n  -from string\n    \tfixed standalone legacy SQLite snapshot (required)\n\nThe configured database must be new, empty, or a completed copy of the same snapshot.\nAll configured Codex inputs are processed; missing logs and other sources retain their saved history.\nOutput is one JSON summary. Successfully parsed owners replace same-ID Codex history, including empty bodies.\nHistory with other IDs is retained even when physical lines match; other sources are retained.\nSuccessful replacements allow exit 0. Failed groups retain their saved owner state and cause exit 1.\nRun a successful import afterward to capture later appends and new child logs.\nDo not edit, delete, or move existing logs during migration.\n"
+  }
+]

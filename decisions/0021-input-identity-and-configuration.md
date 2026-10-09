@@ -16,4 +16,4 @@ project alias は検索時に完全一致で展開し、保存した repository 
 
 異なる source や root に同名の ID が現れ、表示名も変更できる。保存や REF の identity を ID・表示名だけに結びつけると、別の履歴が潰れたり、改名で参照が変わったりする。設定と選択範囲を明示すると、通常取り込みや `--full` が別入力の履歴を消すことを防げる。alias を保存時に反映すると、設定変更が過去の保存値の意味を変えてしまう。
 
-専用 `backfill` は提供しない。既知の旧形式の履歴保持だけを [ADR 0025](0025-id-scoped-history-migration.md) の限定 `migrate` で扱う。
+専用 `backfill` は提供しない。既知の旧形式の履歴保持だけを [ADR 0026](0026-metadata-indexed-history-migration.md) の限定 `migrate` で扱う。

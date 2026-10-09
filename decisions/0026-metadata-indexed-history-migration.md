@@ -1,9 +1,8 @@
 ---
-status: superseded
-superseded_by: 0026-metadata-indexed-history-migration.md
+status: current
 ---
 
-# ADR 0025: 本人 ID に限定した旧履歴置換
+# ADR 0026: metadata 所属確認と単一本文読み取りによる旧履歴置換
 
 ## Context
 
@@ -15,7 +14,11 @@ superseded_by: 0026-metadata-indexed-history-migration.md
 
 別 ID の旧行は物理行が一致しても残す。現ログに本人 ID がない旧履歴と他 source は入力未知の legacy namespace に保持し、入力・親子関係・実日時を推測で補わない。
 
-root は開始時に列挙し、本人 index の後は一 group ずつ全文を読む。各 group の読み取り前・commit 前にはその rollout の内容だけを照合し、無関係なログの追加・削除で独立 group を失敗させない。初期走査・解析失敗、入力競合、対象 rollout の変化、保存済み rollout の欠落では該当入力または group の既存状態を保持する。index で全件本文を常駐させないのは大きな移行のメモリ境界を保つためである。
+root は開始時に列挙し、最初の有効な session metadata まで読んでファイルを本人 ID にまとめる。全文検証は一 group ずつ1回だけ行い、その時点の正常な解析結果を置換する。後続の埋込 metadata は所属を変えない。全件の本文や元 bytes を常駐させず、本文を捨てるための初回全文解析と全内容ハッシュ再照合を省くのは、大きな移行の時間とメモリを抑えるためである。
+
+稼働中ログは既存 prefix を変更しない正常な追記を受理する。commit 前には解析時の file identity・size・mtime と現在の stat を照合し、削除・移動・別ファイルへの置換・解析 bytes 未満への縮小・同サイズ編集を失敗とする。全文検証の不完全入力・所属競合・保存済み rollout の欠落も既存状態を保持する。stat だけでは prefix の書換えと伸長を組み合わせた変更や mtime を戻した編集を証明できないため、それらを含む編集・削除・移動は移行中に行わず、必要なら静止ログで再実行する。
+
+cursor と内容 hash は実際に解析した bytes に限定する。解析後の正常な追記と開始時にない新しい子ログは、移行後の成功した通常 import で取り込み、静止ログの結果へ収束させる。migrate だけで実行終了時点のログ全件を取り込んだとは約束しない。
 
 本人全文・文脈・関係・移行 cursor の保存と旧履歴削除は一 transaction で確定する。保存・commit 失敗でも部分確定せず、独立した先行成功 group は保持する。元 DB と元ログは変更しない。snapshot bytes の digest と完了 receipt を照合し、同じ snapshot の再実行でコピーを繰り返さない。別の旧 DB を同じ移行先へ混ぜる危険を防ぐためである。
 

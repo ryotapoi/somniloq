@@ -34,13 +34,21 @@ digest は snapshot ファイル全 bytes の SHA-256、小文字 64 桁 hex。p
 
 残存ログを正常に解析できた Codex 本人 group は、本人本文0件も含めて置換する。同じ本人 ID の Codex 旧本文と旧会話を削除し、旧 UUID の一致は要求しない。削除対象は今回の snapshot と同じ本人 ID の Codex 履歴だけであり、別 ID の旧行は物理行が一致しても保持する。ログに本人 ID がない旧履歴・他 source は legacy として残す。同じ snapshot と完了 receipt がある移行先には再実行できる。移行元と元ログは変更しない。
 
+## 移行中のログ更新
+
+ログへの正常な追記を止める必要はない。最初の有効な `session_meta.payload.id` で所属を決めた後、同じ ID のファイルをまとめて読む。その読み取り時点の全文を検証して置換し、本文を解放する。hash と cursor は実際に解析した bytes だけを記録する。
+
+migrate の後には同じ設定で `somniloq import --config archive` を正常終了させる。本文の読み取り後に増えた追記、先に保存した会話への追記、開始時に存在しなかった新しい子ログはこの import で回収する。migrate が終了0でも終了時点の全ログを保存したとは限らない。
+
+移行中は既存 prefix の編集、削除、移動を行わない。全文解析の破損・不完全入力と、commit 前の stat で検出できる削除・移動・置換・縮小・同サイズ変更では、その group の旧履歴・保存済み本文・cursor を保持して失敗する。全内容の再ハッシュは行わないため、prefix を書き換えながらサイズを増やす変更や mtime を戻す変更は検出を保証しない。そのような変更を含む入力ではログを静止させて migrate を再実行する。後続 import を破損や欠落の修復の代用にはしない。
+
 ## 成功・失敗と出力
 
 正常な初回コピー後は独立した本人 group を最後まで処理し、一つの group の失敗で成功済み group を巻き戻さない。stdout は一つの JSON object、stderr は `migrate: error:` の診断（本文を含めない）。summary field は `snapshot_sha256`, `copy_performed`, `groups_replaced`, `groups_skipped`, `groups_failed`, `legacy_messages_removed`, `legacy_messages_retained`, `legacy_conversations_retained`, `legacy_retention_warnings`, `legacy_replacement_failures`。正常な本人本文0件 group も `groups_replaced` に数える。互換性のため残す `groups_skipped`, `legacy_retention_warnings`, `legacy_replacement_failures` は0。removed はその実行で実際に消した旧本文行数、retained は移行先に残る旧本文・旧会話数である。
 
 本人本文0件の正常結果でも、会話・文脈・関係・移行 cursor を保存し、保存済み本人本文を空結果へ置換する。継承文脈は通常の新規 import と同じく本人本文へ昇格させない。同じ snapshot の再実行ではコピーを繰り返さず、その解析結果を再確定する。
 
-処理失敗がなければ終了0。初回コピー/再実行先拒否、対象 group の解析・保存・不完全入力、対象 rollout 内容の変化、所属証拠競合は終了1。root の列挙は開始時に一度行い、各 group の読み取り前と commit 前は対象 rollout の内容だけを確認する。無関係なログの追加・削除や、ログが全くない履歴の単純保持は失敗ではない。引数・設定エラー、非対応の移行元/先 schema は終了2。I/O、snapshot/receipt 不一致、既存移行先の拒否は終了1。copy 前の拒否では stdout は空。
+処理失敗がなければ終了0。初回コピー/再実行先拒否、対象 group の解析・保存・不完全入力、対象 rollout の削除・移動・置換・縮小・同サイズ編集、所属証拠競合は終了1。root の列挙は開始時に一度行い、最初の有効な session metadata で所属を確認する。各 group の全文検証は1回で、正常な解析結果を保存し、commit 前に対象 rollout の file identity・size・mtime を確認する。無関係なログの追加・削除や、ログが全くない履歴の単純保持は失敗ではない。引数・設定エラー、非対応の移行元/先 schema は終了2。I/O、snapshot/receipt 不一致、既存移行先の拒否は終了1。copy 前の拒否では stdout は空。
 
 ```text
 somniloq migrate --config archive --from ./archive-snapshot.db
