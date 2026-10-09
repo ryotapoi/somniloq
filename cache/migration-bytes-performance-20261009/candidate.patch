@@ -1,0 +1,11 @@
+diff --git a/internal/ingest/codex/group.go b/internal/ingest/codex/group.go
+--- a/internal/ingest/codex/group.go
++++ b/internal/ingest/codex/group.go
+@@ -162,6 +162,6 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, strict, indexOnly bool) ([]Group, []error) {
+ 		sum := sha256.Sum256(data)
+ 		report := FileReport{Path: path, Hash: sum, Failures: h.failures, Lines: lines}
+-		if !indexOnly {
++		if !strict {
+ 			report.Data = data
+ 		}
+ 		if c.meta == nil || (!strict && c.state.JSONLPath == "" && len(h.failures) > 0) {

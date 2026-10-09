@@ -29,6 +29,6 @@
 
 - [x] **payload IDの重複判定で本文の全文JSON署名を複製しない方式を評価し、効果があれば採用する。** [比較結果・再実行手順](../cache/payload-signature-performance-20261009/README.md)を保存した。既存メッセージとの正確比較を採用し、単一64 MiB会話の初回RSS中央値465.59→356.66 MiB、再実行461.69→353.00 MiB。時間の改善は確定しない。16会話分割ではRSSが下がり、短本文では測定可能な差がない。role・timestamp・block境界、重複排除・衝突検出・番号・context除外、通常importと移行の保存・失敗時保持・再実行を確認した。
 
-- [ ] **migration本文passの元ファイルbytes保持を省く価値を評価し、効果があれば採用する。** 前タスクの採否・計測結果を読み、残るRSSへの寄与を確認してから進める。入口は `internal/ingest/codex/group.go` の `FileReport.Data`。migrationで使わない全文の保持を省く候補とし、通常importの差分診断に必要なData、物理行・hash・cursor・所属証拠は維持する。既存の単一/複数会話入力と予算で、直前の採用版との時間・ピークRSS比較と保存・失敗時保持・再実行の検証を行う。
+- [x] **migration本文passの元ファイルbytes保持を省く価値を評価し、効果があれば採用する。** [比較結果・再実行手順](../cache/migration-bytes-performance-20261009/README.md) を保存した。単一64 MiB会話の初回ピークRSS中央値は355.50→356.22 MiBで改善せず、16分割64 MiBの小さい改善傾向は各3回のばらつきと重なる。通常importのDataと移行の保存・失敗時保持・再実行を検証し、候補コードは採用しなかった。
 
 - [ ] **migrationのsnapshot hash計算で全文を再確保しない方式を評価し、効果があれば採用する。** 前タスクまでの結果から残る費用を確認する。入口は `internal/core/migrate.go` の `checkMigrationSnapshot`。buffer付き読み込みによるhash計算を候補とし、置換前/commit前のfile集合・hash確認と読み取り失敗時の保持を省かない。既存入力・予算で直前の採用版と比較し、時間・ピークRSS・保存結果を確認する。各候補は別セッションで一つずつ扱い、効果が小さい、未確定、または保証を保てない場合は実装を見送った根拠を記録する。GC設定の一律変更や強制GC追加はこれらのタスクに含めない。
