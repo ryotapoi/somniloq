@@ -1,0 +1,285 @@
+{
+  "commit": "c37343cd083f376852517ebfaa34570690beb31c",
+  "spec": {
+    "name": "giant_group",
+    "groups": 1,
+    "files": 1,
+    "messages": 1024,
+    "lines": 1025,
+    "bytes": 67279941,
+    "max_group_bytes": 67279941,
+    "cwd": 1,
+    "old_messages": 257,
+    "snapshot_bytes": 16973824
+  },
+  "initial_environment": {
+    "GOGC": null,
+    "GOMEMLIMIT": null
+  },
+  "runs": [
+    {
+      "retry": false,
+      "instrumented": false,
+      "wall_s": 0.81,
+      "user_s": 0.56,
+      "system_s": 0.25,
+      "peak_rss_bytes": 488636416,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": true,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 256,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 100,
+      "repetition": 0,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": true,
+      "instrumented": false,
+      "wall_s": 1.03,
+      "user_s": 0.58,
+      "system_s": 0.42,
+      "peak_rss_bytes": 483786752,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": false,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 0,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 100,
+      "repetition": 0,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": false,
+      "instrumented": false,
+      "wall_s": 0.85,
+      "user_s": 0.62,
+      "system_s": 0.26,
+      "peak_rss_bytes": 304644096,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": true,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 256,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 50,
+      "repetition": 0,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": true,
+      "instrumented": false,
+      "wall_s": 1.02,
+      "user_s": 0.59,
+      "system_s": 0.41,
+      "peak_rss_bytes": 299794432,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": false,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 0,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 50,
+      "repetition": 0,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": false,
+      "instrumented": false,
+      "wall_s": 0.82,
+      "user_s": 0.59,
+      "system_s": 0.25,
+      "peak_rss_bytes": 304824320,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": true,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 256,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 50,
+      "repetition": 1,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": true,
+      "instrumented": false,
+      "wall_s": 1.07,
+      "user_s": 0.64,
+      "system_s": 0.42,
+      "peak_rss_bytes": 300023808,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": false,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 0,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 50,
+      "repetition": 1,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": false,
+      "instrumented": false,
+      "wall_s": 0.83,
+      "user_s": 0.57,
+      "system_s": 0.26,
+      "peak_rss_bytes": 489259008,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": true,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 256,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 100,
+      "repetition": 1,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": true,
+      "instrumented": false,
+      "wall_s": 1.05,
+      "user_s": 0.59,
+      "system_s": 0.43,
+      "peak_rss_bytes": 484605952,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": false,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 0,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 100,
+      "repetition": 1,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": false,
+      "instrumented": false,
+      "wall_s": 0.83,
+      "user_s": 0.57,
+      "system_s": 0.26,
+      "peak_rss_bytes": 488030208,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": true,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 256,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 100,
+      "repetition": 2,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": true,
+      "instrumented": false,
+      "wall_s": 1.08,
+      "user_s": 0.63,
+      "system_s": 0.43,
+      "peak_rss_bytes": 484294656,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": false,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 0,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 100,
+      "repetition": 2,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": false,
+      "instrumented": false,
+      "wall_s": 0.83,
+      "user_s": 0.58,
+      "system_s": 0.26,
+      "peak_rss_bytes": 305397760,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": true,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 256,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 50,
+      "repetition": 2,
+      "exit_code": 0,
+      "preservation_verified": true
+    },
+    {
+      "retry": true,
+      "instrumented": false,
+      "wall_s": 1.06,
+      "user_s": 0.62,
+      "system_s": 0.43,
+      "peak_rss_bytes": 299728896,
+      "summary": {
+        "snapshot_sha256": "835f6c453e0afd711afb98431ddbe92f9d8564ac424e5605a67e99a5aaf757bf",
+        "copy_performed": false,
+        "groups_replaced": 1,
+        "groups_failed": 0,
+        "legacy_messages_removed": 0,
+        "legacy_messages_retained": 1,
+        "legacy_conversations_retained": 1,
+        "legacy_replacement_failures": 0
+      },
+      "gogc": 50,
+      "repetition": 2,
+      "exit_code": 0,
+      "preservation_verified": true
+    }
+  ]
+}
