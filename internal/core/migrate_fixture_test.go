@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -362,7 +363,7 @@ func TestMigrateFixtureReplacementOracle(t *testing.T) {
 }
 
 func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
-	for _, kind := range []string{"partial_tail", "metadata_only_sibling", "save_failure", "changed_rollout", "missing_rollout", "cyclic_parent"} {
+	for _, kind := range []string{"partial_tail", "metadata_only_sibling", "save_failure", "changed_rollout", "missing_rollout", "unreadable_rollout", "cyclic_parent"} {
 		t.Run(kind, func(t *testing.T) {
 			oracle := readMigrationOracle(t)
 			c := migrationOracleCase{Name: "multiple_rollouts", Files: []string{"02-multi.jsonl", "03-multi.jsonl"}}
@@ -430,6 +431,10 @@ func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
 				err = os.WriteFile(files[0], []byte("{}\n"), 0600)
 			case "missing_rollout":
 				err = os.Remove(files[0])
+			case "unreadable_rollout":
+				if err = os.Remove(files[0]); err == nil {
+					err = os.Symlink("missing-target", files[0])
+				}
 			}
 			if err != nil {
 				t.Fatal(err)
@@ -454,6 +459,9 @@ func TestMigrateOwnerFailurePreservesPriorState(t *testing.T) {
 			}
 			if kind == "cyclic_parent" && (len(r.Errors) != 1 || !strings.Contains(r.Errors[0].Error(), "cycle")) {
 				t.Fatalf("expected strict cycle rejection: %+v", r.Errors)
+			}
+			if kind == "unreadable_rollout" && (len(r.Errors) != 1 || !errors.Is(r.Errors[0], os.ErrNotExist) || !strings.Contains(r.Errors[0].Error(), files[0])) {
+				t.Fatalf("expected rollout read error: %+v", r.Errors)
 			}
 			if r.GroupsFailed != 1 || r.GroupsReplaced != 0 {
 				t.Fatalf("failure result=%+v", r)

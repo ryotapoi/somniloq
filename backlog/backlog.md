@@ -31,4 +31,4 @@
 
 - [x] **migration本文passの元ファイルbytes保持を省く価値を評価し、効果があれば採用する。** [比較結果・再実行手順](../cache/migration-bytes-performance-20261009/README.md) を保存した。単一64 MiB会話の初回ピークRSS中央値は355.50→356.22 MiBで改善せず、16分割64 MiBの小さい改善傾向は各3回のばらつきと重なる。通常importのDataと移行の保存・失敗時保持・再実行を検証し、候補コードは採用しなかった。
 
-- [ ] **migrationのsnapshot hash計算で全文を再確保しない方式を評価し、効果があれば採用する。** 前タスクまでの結果から残る費用を確認する。入口は `internal/core/migrate.go` の `checkMigrationSnapshot`。buffer付き読み込みによるhash計算を候補とし、置換前/commit前のfile集合・hash確認と読み取り失敗時の保持を省かない。既存入力・予算で直前の採用版と比較し、時間・ピークRSS・保存結果を確認する。各候補は別セッションで一つずつ扱い、効果が小さい、未確定、または保証を保てない場合は実装を見送った根拠を記録する。GC設定の一律変更や強制GC追加はこれらのタスクに含めない。
+- [x] **migrationのsnapshot hash計算で全文を再確保しない方式を評価し、効果があれば採用する。** [比較結果・再実行手順](../cache/snapshot-hash-performance-20261009/README.md) を保存した。32 KiB bufferを再利用する逐次hashを採用し、単一64 MiB会話の初回ピークRSS中央値355.55→292.20 MiB、再実行351.17→287.27 MiB。時間改善は確認できない。置換前/commit前のfile集合・hash確認、読み取り失敗時の保持、保存結果の一致を確認した。

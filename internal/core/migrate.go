@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"database/sql"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -251,12 +252,20 @@ func checkMigrationSnapshot(adapter codex.Adapter, scan migrationInput, group co
 	if !slices.Equal(files, expected) {
 		return fmt.Errorf("%s: rollout set changed during migration", scan.Input.Root)
 	}
+	buf := make([]byte, 32*1024)
 	for _, report := range group.Reports {
-		data, err := os.ReadFile(report.Path)
+		file, err := os.Open(report.Path)
 		if err != nil {
 			return fmt.Errorf("%s: %w", report.Path, err)
 		}
-		if sha256.Sum256(data) != report.Hash {
+		hash := sha256.New()
+		// Hide File.WriteTo so CopyBuffer reuses the buffer across files.
+		_, err = io.CopyBuffer(hash, struct{ io.Reader }{file}, buf)
+		file.Close()
+		if err != nil {
+			return fmt.Errorf("%s: %w", report.Path, err)
+		}
+		if !slices.Equal(hash.Sum(nil), report.Hash[:]) {
 			return fmt.Errorf("%s: rollout changed during migration", report.Path)
 		}
 	}
