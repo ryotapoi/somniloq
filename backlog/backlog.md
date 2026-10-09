@@ -4,7 +4,7 @@
 
 ### v0.14.2
 
-- [ ] **import のコミット失敗後の transaction 残留と、初発エラー・途中集計の欠落を修正する。** Codex の差分 import で、Commit が失敗すると SQLite 側に transaction が残り、次の Begin が `cannot start a transaction within a transaction` で失敗する経路を合成入力で再現した。後続の Begin 失敗が初発エラーと集計を捨てるため、実行時は stderr にこの1行だけが出て stdout は空だった。実環境の初発 Commit 失敗理由は未確定。
+- [x] **import のコミット失敗後の transaction 残留と、初発エラー・途中集計の欠落を修正する。** Codex の差分 import で、Commit が失敗すると SQLite 側に transaction が残り、次の Begin が `cannot start a transaction within a transaction` で失敗する経路を合成入力で再現した。後続の Begin 失敗が初発エラーと集計を捨てるため、実行時は stderr にこの1行だけが出て stdout は空だった。実環境の初発 Commit 失敗理由は未確定。
   - 入口は `internal/core/import_codex.go` の Commit / Rollback と Begin 失敗時の返却、`internal/core/db.go` の接続・transaction 管理。Go の `sql.Tx` は Commit 呼び出し後に終了扱いとなるため、Commit エラー後の `tx.Rollback()` だけでは SQLite の残留 transaction を解消できない。共有する transaction 経路への影響を確認し、失敗した接続を残留状態のまま再利用しないようにする。
   - 初発エラーとそれまでの処理結果を保持し、失敗終了時も成功済み件数・失敗理由を CLI から確認できるようにする。失敗した会話の既存本文・関係・cursor と、先に確定した独立会話を保持する。
   - 新規の合成 DB と複数会話の JSONL で、別接続の read transaction による Commit の `SQLITE_BUSY` を再現する。残留 transaction による後続エラーを防ぐこと、初発診断と途中集計、未確定変更の非保存、既存データ保持、競合解消後の再実行を検証し、CLI の stdout・stderr・終了コードと共通 gate を確認する。実 DB は再現 fixture に使わない。

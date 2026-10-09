@@ -1,11 +1,13 @@
 package core
 
 import (
+	"context"
 	"database/sql"
 	"database/sql/driver"
 	"fmt"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"modernc.org/sqlite"
@@ -66,6 +68,12 @@ func openDatabase(path string, readOnly bool) (*DB, error) {
 			}
 		}
 	}
+	// Apply foreign keys to replacement connections as well as the first one.
+	separator := "?"
+	if strings.Contains(dsn, "?") {
+		separator = "&"
+	}
+	dsn += separator + "_pragma=foreign_keys%281%29"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err
@@ -108,8 +116,53 @@ func (d *DB) Close() error {
 	return d.db.Close()
 }
 
-func (d *DB) Begin() (*sql.Tx, error) {
-	return d.db.Begin()
+// writeTx owns its connection until SQLite has ended the transaction.
+// sql.Tx is already done after a failed Commit, although SQLite may not be.
+type writeTx struct {
+	*sql.Tx
+	conn *sql.Conn
+	done bool
+}
+
+func (d *DB) Begin() (*writeTx, error) {
+	conn, err := d.db.Conn(context.Background())
+	if err != nil {
+		return nil, err
+	}
+	tx, err := conn.BeginTx(context.Background(), nil)
+	if err != nil {
+		conn.Close()
+		return nil, err
+	}
+	return &writeTx{Tx: tx, conn: conn}, nil
+}
+
+func (t *writeTx) finish(err error) error {
+	if err != nil {
+		// Keep the connection reserved while clearing a transaction left by the driver.
+		if _, cleanupErr := t.conn.ExecContext(context.Background(), "ROLLBACK"); cleanupErr != nil {
+			// Never return a connection with uncertain transaction state to the pool.
+			t.conn.Raw(func(any) error { return driver.ErrBadConn })
+		}
+	}
+	t.conn.Close()
+	return err
+}
+
+func (t *writeTx) Commit() error {
+	if t.done {
+		return sql.ErrTxDone
+	}
+	t.done = true
+	return t.finish(t.Tx.Commit())
+}
+
+func (t *writeTx) Rollback() error {
+	if t.done {
+		return sql.ErrTxDone
+	}
+	t.done = true
+	return t.finish(t.Tx.Rollback())
 }
 
 func (d *DB) execer() execer {

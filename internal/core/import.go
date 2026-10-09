@@ -151,10 +151,12 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 		} else {
 			r, err = importWithAdapter(db, item.id, item.input.Root, item.adapter, importedAt)
 		}
-		if err != nil {
-			return nil, err
+		if r != nil {
+			result.add(r)
 		}
-		result.add(r)
+		if err != nil {
+			return result, err
+		}
 	}
 	return result, nil
 }

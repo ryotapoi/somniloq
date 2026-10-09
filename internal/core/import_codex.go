@@ -20,7 +20,8 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 		for _, path := range files {
 			old, err := db.GetImportState(inputID, path)
 			if err != nil {
-				return nil, err
+				result.FilesFailed++
+				return result, fmt.Errorf("%s: get state: %w", path, err)
 			}
 			expected[path] = old
 		}
@@ -72,7 +73,8 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 		}
 		tx, err := db.Begin()
 		if err != nil {
-			return nil, err
+			result.FilesFailed += g.Files
+			return result, fmt.Errorf("%s: begin: %w", g.Session.SessionID, err)
 		}
 		t := importTx{tx: tx, inputID: inputID, allowCyclicParents: true}
 		for i, path := range paths {
@@ -139,12 +141,14 @@ func replaceCodexInput(db *DB, inputID int64, groups []codex.Group, result *Impo
 	}
 	tx, err := db.Begin()
 	if err != nil {
-		return nil, err
+		result.FilesFailed = result.FilesScanned
+		return result, err
 	}
 	defer tx.Rollback()
 	for _, table := range []string{"messages", "sessions", "import_state"} {
 		if _, err = tx.Exec("DELETE FROM "+table+" WHERE input_id=?", inputID); err != nil {
-			return nil, err
+			result.FilesFailed = result.FilesScanned
+			return result, err
 		}
 	}
 	t := importTx{tx: tx, inputID: inputID, allowCyclicParents: true}

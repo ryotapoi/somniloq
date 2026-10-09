@@ -337,7 +337,7 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, uuids []string, a
 
 // Saved body and context provenance must still belong to the replacement's
 // rollout set. Checking inside the transaction protects the prior full owner.
-func checkSavedMigrationRollouts(tx *sql.Tx, inputID int64, root string, g codex.Group) error {
+func checkSavedMigrationRollouts(tx *writeTx, inputID int64, root string, g codex.Group) error {
 	paths := make(map[string]bool, len(g.Reports))
 	for _, report := range g.Reports {
 		rel, err := filepath.Rel(root, report.Path)

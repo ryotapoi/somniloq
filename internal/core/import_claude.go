@@ -12,8 +12,16 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
 )
 
-func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecode.Adapter, importedAt string, full bool) (*ImportResult, error) {
+func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecode.Adapter, importedAt string, full bool) (returned *ImportResult, returnedErr error) {
 	paths, scanErrors := adapter.ScanFiles(root)
+	result := &ImportResult{FilesScanned: len(paths), Errors: scanErrors}
+	defer func() {
+		if returnedErr != nil {
+			result.FilesImported = 0
+			result.FilesFailed = result.FilesScanned - result.FilesSkipped
+			returned = result
+		}
+	}()
 	// Bind every scanned path to its cursor before constructing full snapshots.
 	expected := make(map[string]*ImportState, len(paths))
 	if !full {
@@ -26,7 +34,7 @@ func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecod
 		}
 	}
 	files, readErrors, diagnostics := adapter.BuildSnapshots(root, paths, importedAt)
-	result := &ImportResult{FilesScanned: len(paths), Errors: append(scanErrors, readErrors...)}
+	result.Errors = append(result.Errors, readErrors...)
 	result.addUnparsedDiagnostics(diagnostics)
 	result.FilesFailed = len(readErrors)
 	// Owner snapshots are complete only when every physical file was readable.

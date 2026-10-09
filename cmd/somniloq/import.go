@@ -18,6 +18,8 @@ const importHelpDetails = `Output:
   skipped: unchanged files skipped by differential import.
   failed: files that were discovered but could not be imported.
   unparsed lines: broken JSON or malformed payload lines. Deliberately ignored record types are not counted.
+  On failure after scanning starts, the partial summary is printed; only committed files count as imported.
+  Import failure reasons are printed to stderr and the exit code is 1.
   Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.
   Codex records with a boundary but no ordinal are retained as unresolved, without a body number.
 
@@ -101,9 +103,10 @@ func importConfiguredCmd(args []string, openDB func() (*core.DB, error), cfg con
 		InputPaths: inputs,
 		Source:     source,
 	})
-	if err != nil {
+	if result == nil {
 		return 1, err
 	}
+	importErr := err
 
 	if _, err := fmt.Fprintf(out, "Imported %d files (%d scanned, %d skipped, %d failed, %d unparsed lines)\n",
 		result.FilesImported, result.FilesScanned, result.FilesSkipped, result.FilesFailed, result.UnparsedLines); err != nil {
@@ -119,6 +122,10 @@ func importConfiguredCmd(args []string, openDB func() (*core.DB, error), cfg con
 		if _, err := fmt.Fprintf(errOut, "  error: %v\n", diagnostic); err != nil {
 			return 1, err
 		}
+	}
+
+	if importErr != nil {
+		return 1, importErr
 	}
 
 	// Errors covers failed files and non-fatal scan failures alike.

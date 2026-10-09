@@ -1,7 +1,6 @@
 package core
 
 import (
-	"database/sql"
 	"encoding/json"
 	"fmt"
 
@@ -10,7 +9,7 @@ import (
 )
 
 type importTx struct {
-	tx                 *sql.Tx
+	tx                 *writeTx
 	inputID            int64
 	allowCyclicParents bool
 }
