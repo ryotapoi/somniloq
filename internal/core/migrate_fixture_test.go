@@ -245,18 +245,50 @@ func assertMigrationOracle(t *testing.T, db *DB, c migrationOracleCase, result *
 			t.Errorf("context=%v want=%v", got, c.Expected.Context)
 		}
 	}
+	if c.Expected.Status == "warning" && (result.LegacyRetentionWarnings != 1 || len(result.Errors) != 0) {
+		t.Errorf("warning result=%+v", result)
+	}
+	if c.Expected.Status == "skipped" && (result.GroupsSkipped != 1 || result.GroupsReplaced != 0 || len(result.Errors) != 0) {
+		t.Errorf("skip result=%+v", result)
+	}
 	if c.Expected.Status == "failed" && len(result.Errors) == 0 {
 		t.Error("failed replacement reported success")
 	}
 	if c.Expected.Reason != "" {
 		found := false
-		for _, err := range result.Errors {
+		diagnostics := append(append(append([]error{}, result.Errors...), result.Warnings...), result.Skips...)
+		for _, err := range diagnostics {
 			if strings.Contains(err.Error(), c.Expected.Reason) {
 				found = true
 			}
 		}
 		if !found {
 			t.Errorf("errors=%v missing %q", result.Errors, c.Expected.Reason)
+		}
+	}
+	if c.Expected.Status == "skipped" {
+		for _, table := range []string{"sessions", "messages", "import_state", "inputs"} {
+			var n int
+			must(t, db.db.QueryRow("SELECT count(*) FROM "+table).Scan(&n))
+			if n != 0 {
+				t.Errorf("skip created %s: %d", table, n)
+			}
+		}
+	}
+	if c.Expected.Status == "warning" {
+		owners, err := db.LookupSessionsByID("child")
+		must(t, err)
+		if len(owners) != 2 {
+			t.Fatalf("owner REFs=%v", owners)
+		}
+		for _, owner := range owners {
+			session, err := db.LookupSessionREF(owner.REF)
+			must(t, err)
+			messages, err := db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
+			must(t, err)
+			if len(messages) != 1 || messages[0].Content != "child own" || messages[0].Role != "assistant" || messages[0].Timestamp != "" {
+				t.Fatalf("REF %s: %+v", owner.REF, messages)
+			}
 		}
 	}
 	if c.Expected.Saved {
@@ -323,7 +355,7 @@ func TestMigrateFixtureReplacementOracle(t *testing.T) {
 					t.Fatalf("unknown timestamp promoted: %v", timestamp)
 				}
 			}
-			if len(result.Errors) == 0 {
+			if len(result.Errors) == 0 && result.GroupsSkipped == 0 {
 				for _, input := range f.inputs {
 					files, errs := codex.NewAdapter(ResolveRepoPath).ScanFiles(input.Root)
 					if len(errs) > 0 {
@@ -356,6 +388,10 @@ func TestMigrateFixtureReplacementOracle(t *testing.T) {
 				if c.Expected.Reprocessed && again.GroupsReplaced != result.GroupsReplaced {
 					t.Fatalf("retry groups=%d first=%d", again.GroupsReplaced, result.GroupsReplaced)
 				}
+				retryDB, err := OpenDB(f.destination)
+				must(t, err)
+				assertMigrationOracle(t, retryDB, c, again)
+				retryDB.Close()
 				assertMigrationSourceUnchanged(t, f)
 			}
 		})
@@ -551,7 +587,7 @@ func TestMigrateMissingRolloutBeforeRetryPreservesPriorState(t *testing.T) {
 			must(t, os.WriteFile(a, bytes.ReplaceAll(data, []byte(`"text":"first"`), []byte(`"text":"updated first"`)), 0600))
 			must(t, os.WriteFile(peer, []byte(strings.ReplaceAll(peerData, `"text":"peer"`, `"text":"updated peer"`)), 0600))
 			result, err = Migrate(f.from, f.destination, f.inputs)
-			if err != nil || result.CopyPerformed || result.GroupsFailed != 1 || result.GroupsReplaced != 1 || result.LegacyReplacementFailures != 1 || len(result.Errors) != 2 || !strings.Contains(result.Errors[0].Error(), "rollout missing") {
+			if err != nil || result.CopyPerformed || result.GroupsFailed != 1 || result.GroupsReplaced != 1 || result.LegacyRetentionWarnings != 1 || len(result.Errors) != 1 || !strings.Contains(result.Errors[0].Error(), "rollout missing") {
 				t.Fatalf("missing retry: %+v %v", result, err)
 			}
 			for i, query := range queries {
@@ -658,4 +694,55 @@ func TestMigrateDeduplicatedPhysicalEvidenceAndIndependentFailure(t *testing.T) 
 	c.Expected.NewText = []string{"first", "second"}
 	assertMigrationOracle(t, db, c, result)
 	assertMigrationSourceUnchanged(t, f)
+}
+
+func TestMigrateEmptyOwnerProtectsSavedHistory(t *testing.T) {
+	for _, kind := range []string{"body", "cursor", "physical_legacy", "same_id_legacy"} {
+		t.Run(kind, func(t *testing.T) {
+			c := migrationOracleCase{Files: []string{"05-inherited-only.jsonl"}}
+			f := setupMigrationFixture(t, readMigrationOracle(t), c)
+			path := filepath.Join(f.root, "05-inherited-only.jsonl")
+			empty, err := os.ReadFile(path)
+			must(t, err)
+			if kind == "body" || kind == "cursor" {
+				must(t, os.WriteFile(path, bytes.ReplaceAll(empty, []byte(`"subagent_history_start_ordinal":82`), []byte(`"subagent_history_start_ordinal":3`)), 0600))
+			}
+			result, err := Migrate(f.from, f.destination, f.inputs)
+			must(t, err)
+			if len(result.Errors) != 0 {
+				t.Fatalf("seed: %+v", result)
+			}
+			db, err := OpenDB(f.destination)
+			must(t, err)
+			defer db.Close()
+			switch kind {
+			case "body":
+				_, err = db.db.Exec(`DELETE FROM import_state`)
+			case "cursor":
+				_, err = db.db.Exec(`DELETE FROM messages`)
+			case "physical_legacy":
+				_, err = db.db.Exec(`UPDATE legacy_messages SET uuid=? WHERE legacy_rowid=1`, migrationFixtureUUID(path, 2))
+			case "same_id_legacy":
+				_, err = db.db.Exec(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) SELECT snapshot_sha256,'codex','inherited-only','' FROM migration_origin`)
+			}
+			must(t, err)
+			queries := []string{`SELECT json_array(uuid,content,membership) FROM messages ORDER BY uuid`, `SELECT json_array(jsonl_path,last_offset,content_hash) FROM import_state ORDER BY jsonl_path`, `SELECT json_array(legacy_rowid,uuid,content) FROM legacy_messages ORDER BY legacy_rowid`}
+			before := make([][]string, len(queries))
+			for i, q := range queries {
+				before[i] = migrationQueryStrings(t, db, q)
+			}
+			must(t, os.WriteFile(path, empty, 0600))
+			result, err = Migrate(f.from, f.destination, f.inputs)
+			must(t, err)
+			if result.GroupsFailed != 1 || result.GroupsSkipped != 0 || len(result.Errors) != 1 || !strings.Contains(result.Errors[0].Error(), "no_own_messages") {
+				t.Fatalf("protected empty: %+v", result)
+			}
+			for i, q := range queries {
+				if got := migrationQueryStrings(t, db, q); !reflect.DeepEqual(got, before[i]) {
+					t.Fatalf("state changed: %v", got)
+				}
+			}
+			assertMigrationSourceUnchanged(t, f)
+		})
+	}
 }

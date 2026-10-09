@@ -19,11 +19,15 @@ type MigrationResult struct {
 	SnapshotSHA256              string  `json:"snapshot_sha256"`
 	CopyPerformed               bool    `json:"copy_performed"`
 	GroupsReplaced              int     `json:"groups_replaced"`
+	GroupsSkipped               int     `json:"groups_skipped"`
 	GroupsFailed                int     `json:"groups_failed"`
 	LegacyMessagesRemoved       int     `json:"legacy_messages_removed"`
 	LegacyMessagesRetained      int     `json:"legacy_messages_retained"`
 	LegacyConversationsRetained int     `json:"legacy_conversations_retained"`
 	LegacyReplacementFailures   int     `json:"legacy_replacement_failures"`
+	LegacyRetentionWarnings     int     `json:"legacy_retention_warnings"`
+	Skips                       []error `json:"-"`
+	Warnings                    []error `json:"-"`
 	Errors                      []error `json:"-"`
 }
 
@@ -154,7 +158,15 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 					}
 				}
 				if !hasBody {
-					err = fmt.Errorf("%s: no_own_messages", g.Session.SessionID)
+					err = checkEmptyMigrationGroup(db, scan.Input, body)
+					if err == nil {
+						err = checkMigrationSnapshot(adapter, scan, g)
+					}
+					if err == nil {
+						result.GroupsSkipped++
+						result.Skips = append(result.Skips, fmt.Errorf("%s: no_own_messages", g.Session.SessionID))
+						continue
+					}
 				}
 			}
 			removed := 0
@@ -181,6 +193,7 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 		return err
 	}
 	unknown := map[string]bool{}
+	conflicting := map[string]bool{}
 	for rows.Next() {
 		var id, uuid string
 		if err = rows.Scan(&id, &uuid); err != nil {
@@ -192,6 +205,9 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 			continue
 		}
 		matches := evidence[uuid]
+		if len(matches) > 1 {
+			conflicting[id] = true
+		}
 		if len(matches) != 1 || !owners[matches[0].Input] {
 			unknown[id] = true
 		}
@@ -207,13 +223,48 @@ func replaceMigrationGroups(db *DB, scans []migrationInput, adapter codex.Adapte
 	}
 	sort.Strings(ids)
 	for _, id := range ids {
-		result.LegacyReplacementFailures++
-		result.Errors = append(result.Errors, fmt.Errorf("%s: old_input_membership_unknown", id))
+		if conflicting[id] {
+			result.LegacyReplacementFailures++
+			result.Errors = append(result.Errors, fmt.Errorf("%s: input_membership_conflict", id))
+		} else {
+			result.LegacyRetentionWarnings++
+			result.Warnings = append(result.Warnings, fmt.Errorf("%s: old_input_membership_unknown", id))
+		}
 	}
 	if err = db.db.QueryRow(`SELECT count(*) FROM legacy_messages`).Scan(&result.LegacyMessagesRetained); err != nil {
 		return err
 	}
 	return db.db.QueryRow(`SELECT count(*) FROM legacy_sessions`).Scan(&result.LegacyConversationsRetained)
+}
+
+// Empty input is a safe no-op only when neither its physical rows nor its
+// owner has history to protect. Do not create a session or advance a cursor.
+func checkEmptyMigrationGroup(db *DB, input Input, g codex.Group) error {
+	var protected bool
+	err := db.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM legacy_sessions WHERE source='codex' AND session_id=?) OR EXISTS(SELECT 1 FROM messages m JOIN inputs i ON i.id=m.input_id WHERE i.input_key=? AND m.source='codex' AND m.identity=?)`, g.Session.SessionID, InputKey(input.Source, input.Root), rootIdentity(g.Session.SessionID)).Scan(&protected)
+	if err != nil {
+		return err
+	}
+	if protected {
+		return fmt.Errorf("%s: no_own_messages", g.Session.SessionID)
+	}
+	for _, report := range g.Reports {
+		if err = db.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM import_state s JOIN inputs i ON i.id=s.input_id WHERE i.input_key=? AND s.jsonl_path=?)`, InputKey(input.Source, input.Root), report.Path).Scan(&protected); err != nil {
+			return err
+		}
+		if protected {
+			return fmt.Errorf("%s: no_own_messages", g.Session.SessionID)
+		}
+		for _, line := range report.Lines {
+			if err = db.db.QueryRow(`SELECT EXISTS(SELECT 1 FROM legacy_messages WHERE source='codex' AND uuid=?)`, line.UUID).Scan(&protected); err != nil {
+				return err
+			}
+			if protected {
+				return fmt.Errorf("%s: no_own_messages", g.Session.SessionID)
+			}
+		}
+	}
+	return nil
 }
 
 func sameMigrationReports(index, body []codex.FileReport) bool {

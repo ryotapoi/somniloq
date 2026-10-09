@@ -22,7 +22,8 @@ func migrateCmd(args []string, cfg config, out, errOut io.Writer) (int, error) {
 	from := fs.String("from", "", "fixed standalone legacy SQLite snapshot (required)")
 	setUsage(fs, "Migrate a legacy snapshot without changing it", "somniloq migrate [--config NAME_OR_PATH] --from PATH", `The configured database must be new, empty, or a completed copy of the same snapshot.
 All configured Codex inputs are processed; missing logs and other sources retain their saved history.
-Output is one JSON summary. Failed groups retain their previous history and cursors.`)
+Output is one JSON summary. Safe empty groups are skipped; unproven old rows are retained with warnings.
+Skips and warnings allow exit 0. Failed groups retain their previous history and cursors and cause exit 1.`)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		if code != 0 {
 			code = 2
@@ -40,8 +41,18 @@ Output is one JSON summary. Failed groups retain their previous history and curs
 		if encodeErr := json.NewEncoder(out).Encode(result); encodeErr != nil {
 			return 1, encodeErr
 		}
+		for _, diagnostic := range result.Skips {
+			if _, writeErr := fmt.Fprintf(errOut, "migrate: skip: %v\n", diagnostic); writeErr != nil {
+				return 1, writeErr
+			}
+		}
+		for _, diagnostic := range result.Warnings {
+			if _, writeErr := fmt.Fprintf(errOut, "migrate: warning: %v\n", diagnostic); writeErr != nil {
+				return 1, writeErr
+			}
+		}
 		for _, diagnostic := range result.Errors {
-			if _, writeErr := fmt.Fprintf(errOut, "migrate: %v\n", diagnostic); writeErr != nil {
+			if _, writeErr := fmt.Fprintf(errOut, "migrate: error: %v\n", diagnostic); writeErr != nil {
 				return 1, writeErr
 			}
 		}

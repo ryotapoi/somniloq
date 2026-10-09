@@ -36,11 +36,15 @@ digest は snapshot ファイル全 bytes の SHA-256、小文字 64 桁 hex。p
 
 ## 成功・失敗と出力
 
-正常な初回コピー後は独立した本人 group を最後まで処理し、一つの group の失敗で成功済み group を巻き戻さない。stdout は一つの JSON object、stderr は path/物理行と理由の診断（本文を含めない）。summary field は `snapshot_sha256`, `copy_performed`, `groups_replaced`, `groups_failed`, `legacy_messages_removed`, `legacy_messages_retained`, `legacy_conversations_retained`, `legacy_replacement_failures`。入力未知のため旧行を保持した会話も retained に含める。全対象 group 成功かつ所属未知による置換不成功がなければ終了0、初回コピー/再実行先拒否または対象 group/旧行の置換不成功なら終了1。ログが全くない履歴の単純保持は失敗ではない。引数・設定エラー、非対応の移行元/先 schema は終了2。I/O、snapshot/receipt 不一致、既存移行先の拒否は終了1。copy 前の拒否では stdout は空。
+正常な初回コピー後は独立した本人 group を最後まで処理し、一つの group の失敗で成功済み group を巻き戻さない。stdout は一つの JSON object、stderr は `migrate: skip:`, `migrate: warning:`, `migrate: error:` で区別する診断（本文を含めない）。summary field は `snapshot_sha256`, `copy_performed`, `groups_replaced`, `groups_skipped`, `groups_failed`, `legacy_messages_removed`, `legacy_messages_retained`, `legacy_conversations_retained`, `legacy_retention_warnings`, `legacy_replacement_failures`。`groups_skipped` は安全な本人本文なし group、`legacy_retention_warnings` は新本人会話を保存できたが同名旧行の入力所属を証明できず保持した会話、`legacy_replacement_failures` は残存旧行の所属証拠が競合した会話を数える。入力未知のため旧行を保持した会話も retained に含める。
+
+本人本文がなくても、旧同名履歴・当該物理行に対応する旧行・当該入力/本人の保存済み本文や文脈・当該 rollout の保存済み cursor がないこと、解析とログ集合/内容に問題がないことを確認できればスキップする。会話保存・cursor 前進・旧行削除は行わない。既存本文の欠落など保護対象がある本人本文なし group は `no_own_messages` の失敗として保持する。
+
+処理失敗がなく、安全なスキップと保持警告だけなら終了0。初回コピー/再実行先拒否、対象 group の解析・保存・不完全入力、ログ集合/内容の変化、所属証拠競合は終了1。警告と失敗が混在しても終了1。ログが全くない履歴の単純保持は失敗ではない。引数・設定エラー、非対応の移行元/先 schema は終了2。I/O、snapshot/receipt 不一致、既存移行先の拒否は終了1。copy 前の拒否では stdout は空。
 
 ```text
 somniloq migrate --config archive --from ./archive-snapshot.db
-{"snapshot_sha256":"<64 hex>","copy_performed":true,"groups_replaced":2,"groups_failed":0,"legacy_messages_removed":5,"legacy_messages_retained":3,"legacy_conversations_retained":4,"legacy_replacement_failures":0}
+{"snapshot_sha256":"<64 hex>","copy_performed":true,"groups_replaced":2,"groups_skipped":0,"groups_failed":0,"legacy_messages_removed":5,"legacy_messages_retained":3,"legacy_conversations_retained":4,"legacy_retention_warnings":0,"legacy_replacement_failures":0}
 ```
 
-上例は説明用 digest placeholder。旧 parent の未照合残行は、本人 parent の残存 rollout がない限りログ欠落履歴の保持であり失敗にしない。残存本人 ID と同名の旧会話に所属不明行がある場合は `legacy_replacement_failures` を増やし、group の新本文保存と別に置換不成功を診断して終了1になる。再実行で snapshot 不一致なら `migrate: snapshot digest mismatch` を stderr に出し終了1。通常新 DB なら `migrate: destination has no completed copy receipt`。本文や snapshot 全内容を出力しない。
+上例は説明用 digest placeholder。旧 parent の未照合残行は、本人 parent の残存 rollout がない限りログ欠落履歴の保持であり失敗にしない。残存本人 ID と同名の旧会話に所属不明行がある場合は入力間の証拠競合がなければ旧行を残して `legacy_retention_warnings` を増やし、`old_input_membership_unknown` の警告を出す。本文・role・時刻が一致しても旧 path/物理行由来 UUID の証明に代えない。再実行で snapshot 不一致なら `migrate: snapshot digest mismatch` を stderr に出し終了1。通常新 DB なら `migrate: destination has no completed copy receipt`。本文や snapshot 全内容を出力しない。

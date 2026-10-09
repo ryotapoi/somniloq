@@ -147,12 +147,15 @@
       "expected": {
         "legacy_preserved": true,
         "new_conversation_saved": true,
-        "replacement_status": "failed",
-        "reason": "old_input_membership_unknown"
+        "replacement_status": "warning",
+        "reason": "old_input_membership_unknown",
+        "copy_skipped": true
       },
       "mutation": {
-        "sql": "INSERT INTO sessions(source,session_id,imported_at) VALUES ('codex','child','2026-01-01T00:00:00Z'); INSERT INTO messages(uuid,source,session_id,role,content,timestamp) VALUES ('unknown-child-row','codex','child','user','unknown saved value','');"
-      }
+        "sql": "INSERT INTO sessions(source,session_id,imported_at) VALUES ('codex','child','2026-01-01T00:00:00Z'); INSERT INTO messages(uuid,source,session_id,role,content,timestamp) VALUES ('codex:1b22bdda1f2ffa92b1de470c5a35a09d62dd49cf0d015030957a909889563a6e','codex','child','assistant','child own','');"
+      },
+      "old_physical_path": "/fixture/old/01-child.jsonl",
+      "old_physical_line": 4
     },
     {
       "name": "rollout_payload_conflict",
@@ -276,6 +279,18 @@
           5
         ],
         "reason": "no_own_messages"
+      }
+    },
+    {
+      "name": "inherited_only_no_prior_history",
+      "files": [
+        "05-inherited-only.jsonl"
+      ],
+      "expected": {
+        "replacement_status": "skipped",
+        "reason": "no_own_messages",
+        "copy_skipped": true,
+        "new_identity": []
       }
     }
   ]
