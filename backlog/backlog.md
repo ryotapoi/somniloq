@@ -26,3 +26,10 @@
   - 同じ ID の旧本文削除も、会話ごとに旧メッセージ全体を走査しないようにする。現 SQL の `source,session_id` 条件に対して既存 index は `snapshot_sha256,source,session_id` 順で、実 DB の EXPLAIN は `SCAN legacy_messages` だった。条件と index の対応を確認し、ID で対象を絞って置換できるようにする。
   - 変更前後で解析・走査・SQL・保存の所要時間を計測し、会話数・ファイル数・旧履歴件数を増やした入力で反復全体走査がなくなったことと時間短縮を確認する。通常 import の差分スキップと全件置換の処理量の違いを分けて比較し、今回の50分の内訳は未計測であることを踏まえて原因を検証する。専用の合成 fixture と DB を使い、実 DB を変更する再計測は行わない。
   - ID 一致の置換、0件への置換、対象外旧履歴の保持、再実行、保存失敗時の transaction 整合を検証する。変更した動作に合わせてテスト・`docs/migration.md`・関連する current ADR・必要な README/help を同期し、共通 gate を確認する。
+
+- [ ] **migrate の初回走査をセッション metadata の所属確認へ縮小し、全文解析を会話ごとに1回にする。** 全体走査を除去した後の実行ログ `run-7xoskUz8` のファイル時刻では、17,231会話の migrate が約31分20秒、続く差分 import が約1分14秒だった。migrate は初回に全文解析して本文を破棄し、会話ごとの再解析と読み取り前・commit 前の追加ハッシュ確認を行う。各工程の実環境での時間内訳は未計測。全件本文を常駐させず、重複する解析・読み取りを減らす。
+  - 入口は `internal/core/migrate.go` の `BuildMigrationIndex`・`checkMigrationGroup`・group 置換、`internal/ingest/codex/group.go` の index/body pass。最初の有効な `session_meta.payload.id` でファイルの所属を決め、`source.subagent.thread_spawn.parent_thread_id` 等の必要な metadata を集める。後続の埋込 metadata や本文中の ID を本人 ID と誤認しない。同じセッション ID のファイルをまとめて全文解析・保存し、その会話の本文を解放する。親子ツリー順の本文読み込みや会話ごとの root 全体 grep は不要。
+  - metadata の所属確認と保存時の全文検証を分け、初回の全文解析と追加の全内容ハッシュ照合を削減する。再解析時点の正常な内容を置換結果とし、以後の正常な追記と新しい子セッションは後続の成功した通常 import で取り込む。commit 前の内容不変確認は、この後続取り込みを検証できる条件で廃止する。通常 import が変化検出に使う、実際に解析した bytes のハッシュ・取り込み状態の記録は維持する。追記と削除・移動・破損を区別し、後者の回復を後続 import へ無条件に委ねない。
+  - 合成 fixture で、metadata 後の追記、A の保存後に B を処理する間の A への追記、新しい子ログの追加を再現し、migrate と後続 import 後の本文・文脈・親子関係・cursor を静止入力の結果と比較する。同じ ID の複数ファイル、埋込 metadata、本文0件への置換、別 ID の旧履歴保持、所属競合・不完全入力・保存/commit 失敗時保持、再実行も検証する。正常な追記を取りこぼしたまま hash 一致で skip しないことを確認する。
+  - 変更前後の初回所属確認・全文解析・ハッシュ確認・SQL/保存の時間と、読み取り bytes・回数・ピークメモリを専用の合成 DB/ログで比較する。会話数と本文量を増やし、全件本文/元 bytes の常駐や反復全体走査を導入せず、時間短縮を確認する。参考として2026-10-10の対象 Codex JSONL は17,231ファイル・15,947,654,119 bytesだったが、元ログ全件保持や実 DB を変更する再計測は行わない。通常 import の初回全件保存と差分 skip を分けて比較する。
+  - 変更する読み取り時点・後続 import の契約に合わせてテスト・`docs/migration.md`・current ADR・必要な README/help を同期し、共通 gate を確認する。新 CLI フラグ、watch/retry、全件キャッシュ、通常 import の再設計は対象外。
