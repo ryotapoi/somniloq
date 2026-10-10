@@ -42,9 +42,6 @@ Claudeの構造走査では、子1,175のagentIdは全件ファイル名と一�
 
 Codexの明示境界の意味は、当時参照した公式sourceの[値の定義](https://github.com/openai/codex/blob/main/codex-rs/thread-store/src/types.rs#L2371-L2380)と[履歴projection](https://github.com/openai/codex/blob/main/codex-rs/thread-store/src/local/thread_history_materialization.rs#L1404-L1414)でも確認した。境界は本人のprojected history開始ordinalであり、境界未満を継承履歴として扱う根拠となった。リンクは調査時点の参照先である。
 
-同日のGo 1.27.1で標準regexpの大小文字、Unicodeの(?i)、非重複UTF8 byte区間、ゼロ幅、QuoteMetaの挙動を確認した。[regexp](https://pkg.go.dev/regexp)と[構文](https://pkg.go.dev/regexp/syntax)を参照した実験であり、現行の検索仕様・期待値はコードと query fixture を参照する。SQLiteの`:memory:` DBにdeterministic scalar functionを登録し、bindしたpatternを渡す実験も成功した。これは登録・受け渡しの成立確認であり、実データの照合性能を示さない。性能の取得範囲は[検索計測](2026-10-05-search-measurements.md)を参照する。
-
-
 ## 日付が確定していない先行 Cursor 観測
 
 Cursor Agent `2026.09.10-fd3934a` のローカルログ 607 files / 9,259 records では、transcript path、directory と basename の一致、`role=user|assistant`、text / tool_use、`turn_ended` を確認した。prefix を保つ末尾追記は controlled follow-up で確認した。観測日を原文から確定できないため、2026-10-05 の 708 files / 11,280 records と合算しない。独立 timestamp、cwd、repository、version、title、usage、parent は観測されず、slug の可逆性も保証できない。
