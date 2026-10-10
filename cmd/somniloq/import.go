@@ -35,7 +35,8 @@ Notes:
   Claude Code and Codex sessions from existing linked Git worktrees are grouped under the main repository.
   Previously stored invalid IDs or worktree paths are not repaired by differential import; --full
   can rebuild them if the original logs remain. Check selected inputs before rebuilding them.
-  Non-fatal scan/file errors are printed to stderr; import continues and exits 1 if any occurred.
+  Scan/file errors are printed to stderr and exit 1. An incomplete Codex scan or initial
+  read leaves its saved conversations unchanged; later failures preserve affected conversations.
 
 Examples:
   somniloq import --config default
