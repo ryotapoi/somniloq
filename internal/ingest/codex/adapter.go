@@ -26,6 +26,13 @@ func NewMigrationAdapter(resolveRepoPath ingest.RepoResolver) Adapter {
 	return Adapter{resolveRepoPath: memoizeRepoResolver(resolveRepoPath)}
 }
 
+// ForImportPass shares repository lookups across per-owner body loads while
+// keeping a later import free to observe repository changes.
+func (a Adapter) ForImportPass() Adapter {
+	a.resolveRepoPath = memoizeRepoResolver(a.resolveRepoPath)
+	return a
+}
+
 func (a Adapter) ScanFiles(rootDir string) ([]string, []error) {
 	return ingest.ScanFilesRecursive(rootDir, func(path string) bool {
 		return strings.HasSuffix(path, ".jsonl")

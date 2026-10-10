@@ -1,0 +1,574 @@
+{
+  "baseline": "cd4ac1316849fb44d640bc8abe6a9dbb6c7202c9",
+  "go": "go version go1.27.1 darwin/arm64",
+  "os": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "environment": {
+    "GOGC": null,
+    "GOMEMLIMIT": null,
+    "GOMAXPROCS": null,
+    "GOFLAGS": null,
+    "GOCACHE": "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/go-cache"
+  },
+  "cases": [
+    {
+      "name": "owners16",
+      "owners": 16,
+      "max_owner_bytes": 524595,
+      "input_bytes": 8393500,
+      "runs": [
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 0,
+          "wall_s": 0.19199849999858998,
+          "peak_rss_bytes": 33947648,
+          "input_bytes": 8393500,
+          "read_bytes": 8393500,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 0,
+          "wall_s": 0.022100333007983863,
+          "peak_rss_bytes": 33046528,
+          "input_bytes": 8393500,
+          "read_bytes": 8393500,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 0,
+          "wall_s": 0.14574566698865965,
+          "peak_rss_bytes": 23724032,
+          "input_bytes": 8393500,
+          "read_bytes": 16787000,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 0,
+          "wall_s": 0.050284750002902,
+          "peak_rss_bytes": 23527424,
+          "input_bytes": 8393500,
+          "read_bytes": 16787000,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 1,
+          "wall_s": 0.03593620902393013,
+          "peak_rss_bytes": 23953408,
+          "input_bytes": 8393500,
+          "read_bytes": 16787000,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 1,
+          "wall_s": 0.02440562500851229,
+          "peak_rss_bytes": 23691264,
+          "input_bytes": 8393500,
+          "read_bytes": 16787000,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 1,
+          "wall_s": 0.028066666971426457,
+          "peak_rss_bytes": 34095104,
+          "input_bytes": 8393500,
+          "read_bytes": 8393500,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 1,
+          "wall_s": 0.023259624984348193,
+          "peak_rss_bytes": 33751040,
+          "input_bytes": 8393500,
+          "read_bytes": 8393500,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 2,
+          "wall_s": 0.028849624999566004,
+          "peak_rss_bytes": 33128448,
+          "input_bytes": 8393500,
+          "read_bytes": 8393500,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 2,
+          "wall_s": 0.02295749998302199,
+          "peak_rss_bytes": 33685504,
+          "input_bytes": 8393500,
+          "read_bytes": 8393500,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 2,
+          "wall_s": 0.030795958009548485,
+          "peak_rss_bytes": 24182784,
+          "input_bytes": 8393500,
+          "read_bytes": 16787000,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 2,
+          "wall_s": 0.026402332994621247,
+          "peak_rss_bytes": 23756800,
+          "input_bytes": 8393500,
+          "read_bytes": 16787000,
+          "rows_sha256": "0f0f31d3497c4bdf6285d584e4b4b0d90ad48cda22264264142bea2299e00005",
+          "stdout": "Imported 16 files (16 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        }
+      ]
+    },
+    {
+      "name": "owners64",
+      "owners": 64,
+      "max_owner_bytes": 524595,
+      "input_bytes": 33574060,
+      "runs": [
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 0,
+          "wall_s": 0.08827929198741913,
+          "peak_rss_bytes": 72105984,
+          "input_bytes": 33574060,
+          "read_bytes": 33574060,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 0,
+          "wall_s": 0.062273874995298684,
+          "peak_rss_bytes": 73269248,
+          "input_bytes": 33574060,
+          "read_bytes": 33574060,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 0,
+          "wall_s": 0.10274912501336075,
+          "peak_rss_bytes": 26394624,
+          "input_bytes": 33574060,
+          "read_bytes": 67148120,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 0,
+          "wall_s": 0.07039495898061432,
+          "peak_rss_bytes": 26984448,
+          "input_bytes": 33574060,
+          "read_bytes": 67148120,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 1,
+          "wall_s": 0.09882366599049419,
+          "peak_rss_bytes": 26394624,
+          "input_bytes": 33574060,
+          "read_bytes": 67148120,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 1,
+          "wall_s": 0.07306587501079775,
+          "peak_rss_bytes": 26329088,
+          "input_bytes": 33574060,
+          "read_bytes": 67148120,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 1,
+          "wall_s": 0.08485537499655038,
+          "peak_rss_bytes": 75612160,
+          "input_bytes": 33574060,
+          "read_bytes": 33574060,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 1,
+          "wall_s": 0.06258774999878369,
+          "peak_rss_bytes": 74629120,
+          "input_bytes": 33574060,
+          "read_bytes": 33574060,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 2,
+          "wall_s": 0.08864091700525023,
+          "peak_rss_bytes": 73220096,
+          "input_bytes": 33574060,
+          "read_bytes": 33574060,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 2,
+          "wall_s": 0.05948654099483974,
+          "peak_rss_bytes": 76726272,
+          "input_bytes": 33574060,
+          "read_bytes": 33574060,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 2,
+          "wall_s": 0.09510037500876933,
+          "peak_rss_bytes": 26509312,
+          "input_bytes": 33574060,
+          "read_bytes": 67148120,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 2,
+          "wall_s": 0.07153516699327156,
+          "peak_rss_bytes": 26476544,
+          "input_bytes": 33574060,
+          "read_bytes": 67148120,
+          "rows_sha256": "65aa29ce4cae260f2702f9f13fe7b9b8b7eddb37feb7921928cc5e8e395cef76",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        }
+      ]
+    },
+    {
+      "name": "owners64_body",
+      "owners": 64,
+      "max_owner_bytes": 525783,
+      "input_bytes": 33650012,
+      "runs": [
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 0,
+          "wall_s": 0.28684941699611954,
+          "peak_rss_bytes": 150962176,
+          "input_bytes": 33650012,
+          "read_bytes": 33650012,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 0,
+          "wall_s": 0.3846155000210274,
+          "peak_rss_bytes": 159449088,
+          "input_bytes": 33650012,
+          "read_bytes": 33650012,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 0,
+          "wall_s": 0.31764824999845587,
+          "peak_rss_bytes": 33390592,
+          "input_bytes": 33650012,
+          "read_bytes": 67300024,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 0,
+          "wall_s": 0.4127809170167893,
+          "peak_rss_bytes": 33767424,
+          "input_bytes": 33650012,
+          "read_bytes": 67300024,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 1,
+          "wall_s": 0.3076787919853814,
+          "peak_rss_bytes": 33603584,
+          "input_bytes": 33650012,
+          "read_bytes": 67300024,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 1,
+          "wall_s": 0.42414137499872595,
+          "peak_rss_bytes": 33374208,
+          "input_bytes": 33650012,
+          "read_bytes": 67300024,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 1,
+          "wall_s": 0.2955795830057468,
+          "peak_rss_bytes": 164249600,
+          "input_bytes": 33650012,
+          "read_bytes": 33650012,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 1,
+          "wall_s": 0.39531720799277537,
+          "peak_rss_bytes": 158957568,
+          "input_bytes": 33650012,
+          "read_bytes": 33650012,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 2,
+          "wall_s": 0.3088533750269562,
+          "peak_rss_bytes": 160055296,
+          "input_bytes": 33650012,
+          "read_bytes": 33650012,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 2,
+          "wall_s": 0.40604204099508934,
+          "peak_rss_bytes": 153862144,
+          "input_bytes": 33650012,
+          "read_bytes": 33650012,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 2,
+          "wall_s": 0.3602056670060847,
+          "peak_rss_bytes": 33292288,
+          "input_bytes": 33650012,
+          "read_bytes": 67300024,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 2,
+          "wall_s": 0.5668853749812115,
+          "peak_rss_bytes": 33619968,
+          "input_bytes": 33650012,
+          "read_bytes": 67300024,
+          "rows_sha256": "950ce8480dfe3a8c0baf2cb8a1ca4d29d9d11c6ea827f649e7e15e87d2845416",
+          "stdout": "Imported 64 files (64 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        }
+      ]
+    },
+    {
+      "name": "one_large",
+      "owners": 1,
+      "max_owner_bytes": 33560533,
+      "input_bytes": 33560533,
+      "runs": [
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 0,
+          "wall_s": 0.06521949998568743,
+          "peak_rss_bytes": 86097920,
+          "input_bytes": 33560533,
+          "read_bytes": 33560533,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 0,
+          "wall_s": 0.06057779100956395,
+          "peak_rss_bytes": 86540288,
+          "input_bytes": 33560533,
+          "read_bytes": 33560533,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 0,
+          "wall_s": 0.06380995901417919,
+          "peak_rss_bytes": 84836352,
+          "input_bytes": 33560533,
+          "read_bytes": 67121066,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 0,
+          "wall_s": 0.06436408299487084,
+          "peak_rss_bytes": 84770816,
+          "input_bytes": 33560533,
+          "read_bytes": 67121066,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 1,
+          "wall_s": 0.06393891602056101,
+          "peak_rss_bytes": 85360640,
+          "input_bytes": 33560533,
+          "read_bytes": 67121066,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 1,
+          "wall_s": 0.06180266599403694,
+          "peak_rss_bytes": 86228992,
+          "input_bytes": 33560533,
+          "read_bytes": 67121066,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 1,
+          "wall_s": 0.060048207989893854,
+          "peak_rss_bytes": 86065152,
+          "input_bytes": 33560533,
+          "read_bytes": 33560533,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 1,
+          "wall_s": 0.055661500024143606,
+          "peak_rss_bytes": 85999616,
+          "input_bytes": 33560533,
+          "read_bytes": 33560533,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "initial",
+          "repetition": 2,
+          "wall_s": 0.06070704199373722,
+          "peak_rss_bytes": 85786624,
+          "input_bytes": 33560533,
+          "read_bytes": 33560533,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "baseline",
+          "phase": "full",
+          "repetition": 2,
+          "wall_s": 0.05617954200715758,
+          "peak_rss_bytes": 86261760,
+          "input_bytes": 33560533,
+          "read_bytes": 33560533,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "initial",
+          "repetition": 2,
+          "wall_s": 0.06174758399720304,
+          "peak_rss_bytes": 84049920,
+          "input_bytes": 33560533,
+          "read_bytes": 67121066,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        },
+        {
+          "version": "candidate",
+          "phase": "full",
+          "repetition": 2,
+          "wall_s": 0.06334908399730921,
+          "peak_rss_bytes": 84787200,
+          "input_bytes": 33560533,
+          "read_bytes": 67121066,
+          "rows_sha256": "522e2f70ff0f8dfaf99226524dd3178164dd3c98d32f73285b6e0c31357f5793",
+          "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+        }
+      ]
+    }
+  ]
+}

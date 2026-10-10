@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
 
 func copyCodexFixture(t *testing.T, root, name string) {
@@ -250,6 +252,81 @@ func TestCodexSameSizeEditAndEarlierNewRolloutMatchFreshImport(t *testing.T) {
 	want, _ := fresh.GetMessages(freshID, SourceCodex, "child")
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("incremental=%+v fresh=%+v", got, want)
+	}
+}
+
+func TestCodexImportKeepsSavedOwnersWhenReadIsIncomplete(t *testing.T) {
+	line := func(id, body string) string {
+		return `{"type":"session_meta","payload":{"id":"` + id + `","cwd":"/fixture"}}` + "\n" +
+			`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"` + body + `"}]}}` + "\n"
+	}
+	for _, phase := range []string{"preflight", "later_normal", "later_full"} {
+		t.Run(phase, func(t *testing.T) {
+			db := testDB(t)
+			root := testTempDir(t)
+			a, b := filepath.Join(root, "a.jsonl"), filepath.Join(root, "b.jsonl")
+			must(t, os.WriteFile(a, []byte(line("a", "old-a")), 0600))
+			must(t, os.WriteFile(b, []byte(line("b", "old-b")), 0600))
+			runCodexImport(t, db, root, false)
+			id, err := db.EnsureInput(Input{Source: SourceCodex, Root: root})
+			must(t, err)
+			oldState, err := db.GetImportState(id, b)
+			must(t, err)
+			must(t, os.WriteFile(a, []byte(line("a", "new-a")), 0600))
+			if phase == "preflight" {
+				must(t, os.Remove(b))
+				must(t, os.Symlink(filepath.Join(root, "missing"), b))
+			}
+			resolver := func(string) string {
+				if phase != "preflight" {
+					must(t, os.Remove(b))
+				}
+				return ""
+			}
+			r, err := importCodexGroups(db, id, root, codex.NewAdapter(resolver), "2026-01-01T00:00:00Z", phase == "later_full")
+			must(t, err)
+			if len(r.Errors) == 0 || r.FilesFailed == 0 {
+				t.Fatalf("result=%+v", r)
+			}
+			got, err := db.GetMessages(id, SourceCodex, "b")
+			must(t, err)
+			if len(got) != 1 || got[0].Content != "old-b" {
+				t.Fatalf("saved b=%+v", got)
+			}
+			state, err := db.GetImportState(id, b)
+			must(t, err)
+			if !reflect.DeepEqual(state, oldState) {
+				t.Fatalf("b cursor changed: %+v", state)
+			}
+			if phase != "later_normal" {
+				got, err := db.GetMessages(id, SourceCodex, "a")
+				must(t, err)
+				if len(got) != 1 || got[0].Content != "old-a" {
+					t.Fatalf("saved a=%+v", got)
+				}
+			}
+		})
+	}
+}
+
+func TestCodexImportResolvesSharedRepositoryOncePerPass(t *testing.T) {
+	db := testDB(t)
+	root := testTempDir(t)
+	for _, id := range []string{"a", "b"} {
+		data := `{"type":"session_meta","payload":{"id":"` + id + `","cwd":"/same"}}` + "\n" +
+			`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"body"}]}}` + "\n"
+		must(t, os.WriteFile(filepath.Join(root, id+".jsonl"), []byte(data), 0600))
+	}
+	id, err := db.EnsureInput(Input{Source: SourceCodex, Root: root})
+	must(t, err)
+	calls := 0
+	adapter := codex.NewAdapter(func(string) string { calls++; return "/same" })
+	for pass := 1; pass <= 2; pass++ {
+		r, err := importCodexGroups(db, id, root, adapter, "2026-01-01T00:00:00Z", false)
+		must(t, err)
+		if len(r.Errors) != 0 || calls != pass {
+			t.Fatalf("pass=%d result=%+v resolver calls=%d", pass, r, calls)
+		}
 	}
 }
 

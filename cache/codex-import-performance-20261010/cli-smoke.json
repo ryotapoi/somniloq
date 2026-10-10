@@ -1,0 +1,23 @@
+[
+  {
+    "label": "initial",
+    "exit_code": 0,
+    "duration_s": 0.335,
+    "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)",
+    "stderr": ""
+  },
+  {
+    "label": "refusal",
+    "exit_code": 1,
+    "duration_s": 0.009,
+    "stdout": "",
+    "stderr": "error: --full requires confirmation; use --yes to skip in non-interactive mode"
+  },
+  {
+    "label": "full",
+    "exit_code": 0,
+    "duration_s": 0.021,
+    "stdout": "Imported 1 files (1 scanned, 0 skipped, 0 failed, 0 unparsed lines)",
+    "stderr": ""
+  }
+]

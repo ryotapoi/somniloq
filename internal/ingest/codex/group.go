@@ -70,6 +70,67 @@ func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]
 	return a.buildGroups(root, paths, importedAt, false)
 }
 
+// BuildImportIndex identifies owners and checks that every discovered file can
+// be read before an ordinary import changes any saved conversation. Reports
+// contain paths only; body bytes are loaded later, one owner at a time.
+func (a Adapter) BuildImportIndex(paths []string) ([]Group, []error) {
+	paths = append([]string(nil), paths...)
+	sort.Strings(paths)
+	var groups []Group
+	var errs []error
+	indexes := map[string]int{}
+	for _, path := range paths {
+		id, err := readImportOwner(path)
+		if err != nil {
+			errs = append(errs, fmt.Errorf("%s: %w", path, err))
+			continue
+		}
+		index, ok := indexes[id]
+		if id == "" || !ok {
+			index = len(groups)
+			if id != "" {
+				indexes[id] = index
+			}
+			groups = append(groups, Group{Session: ingest.SessionMeta{SessionID: id}})
+		}
+		groups[index].Reports = append(groups[index].Reports, FileReport{Path: path})
+	}
+	return groups, errs
+}
+
+func readImportOwner(path string) (string, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer f.Close()
+	r := bufio.NewReader(f)
+	var id string
+	for {
+		line, readErr := r.ReadBytes('\n')
+		if readErr != nil && readErr != io.EOF {
+			return "", readErr
+		}
+		if id == "" && len(bytes.TrimSpace(line)) > 0 {
+			if rec, err := ParseRecord(line); err == nil && rec.Type == "session_meta" {
+				if meta, err := parseSessionMeta(rec); err == nil {
+					id = meta.SessionID
+				}
+			}
+		}
+		if id != "" {
+			_, err := io.Copy(io.Discard, r)
+			return id, err
+		}
+		if readErr != nil {
+			if readErr == io.EOF {
+				return "", nil
+			}
+			return "", readErr
+		}
+	}
+}
+
 // BuildMigrationGroups preserves every rollout and rejects incomplete ownership evidence.
 // Ordinary imports intentionally continue to accept partially parsed snapshots.
 func (a Adapter) BuildMigrationGroups(root string, paths []string, importedAt string) ([]Group, []error) {

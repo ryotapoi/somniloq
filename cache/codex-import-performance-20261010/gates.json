@@ -1,0 +1,56 @@
+[
+  {
+    "command": "go test -count=1 ./internal/core ./internal/ingest/codex (baseline cd4ac1316849fb44d640bc8abe6a9dbb6c7202c9)",
+    "exit_code": 0,
+    "duration_s": 3.707,
+    "output_tail": ""
+  },
+  {
+    "command": "goimports -w internal/core/import_codex.go internal/core/import_codex_group_test.go internal/ingest/codex/adapter.go internal/ingest/codex/group.go internal/ingest/codex/group_test.go",
+    "exit_code": 0,
+    "duration_s": 0.021,
+    "output_tail": ""
+  },
+  {
+    "command": "sh -c unformatted=\"$(find . -name \"*.go\" -type f -print0 | xargs -0 gofmt -l)\"; test -z \"$unformatted\" || { echo \"$unformatted\"; exit 1; }",
+    "exit_code": 0,
+    "duration_s": 0.927,
+    "output_tail": ""
+  },
+  {
+    "command": "go test -count=1 ./...",
+    "exit_code": 0,
+    "duration_s": 4.068,
+    "output_tail": ""
+  },
+  {
+    "command": "go vet ./...",
+    "exit_code": 0,
+    "duration_s": 0.203,
+    "output_tail": ""
+  },
+  {
+    "command": "go build -o bin/somniloq ./cmd/somniloq",
+    "exit_code": 0,
+    "duration_s": 0.394,
+    "output_tail": ""
+  },
+  {
+    "command": "python3 scripts/update-third-party-notices.py --check",
+    "exit_code": 0,
+    "duration_s": 2.668,
+    "output_tail": ""
+  },
+  {
+    "command": "git diff --check",
+    "exit_code": 0,
+    "duration_s": 0.013,
+    "output_tail": ""
+  },
+  {
+    "command": "GOBIN=$PWD/.tmp/bin GOCACHE=$PWD/.tmp/go-cache go install github.com/google/go-licenses/v2@v2.0.1 (escalated network)",
+    "exit_code": 0,
+    "duration_s": 1.294,
+    "output_tail": ""
+  }
+]

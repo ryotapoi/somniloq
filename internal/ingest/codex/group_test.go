@@ -72,6 +72,35 @@ func TestCodexPayloadDedupKeepsFirstMessageAndNumbers(t *testing.T) {
 	}
 }
 
+func TestImportIndexGroupsLateOwnersWithoutBodyBytes(t *testing.T) {
+	root := t.TempDir()
+	contents := map[string]string{
+		"a.jsonl": "{broken}\n" + `{"type":"session_meta","payload":{"id":"shared"}}` + "\n",
+		"b.jsonl": `{"type":"session_meta","payload":{"id":"shared"}}` + "\n",
+		"c.jsonl": "{broken}\n",
+		"d.jsonl": "",
+	}
+	var paths []string
+	for name, content := range contents {
+		path := filepath.Join(root, name)
+		if err := os.WriteFile(path, []byte(content), 0600); err != nil {
+			t.Fatal(err)
+		}
+		paths = append(paths, path)
+	}
+	groups, errs := NewAdapter(func(s string) string { return s }).BuildImportIndex(paths)
+	if len(errs) != 0 || len(groups) != 3 || groups[0].Session.SessionID != "shared" || len(groups[0].Reports) != 2 || groups[1].Session.SessionID != "" || groups[2].Session.SessionID != "" {
+		t.Fatalf("groups=%+v errors=%v", groups, errs)
+	}
+	for _, group := range groups {
+		for _, report := range group.Reports {
+			if report.Data != nil {
+				t.Fatal("index retained rollout body")
+			}
+		}
+	}
+}
+
 func TestCodexFixtureOracle(t *testing.T) {
 	root := filepath.Join("..", "testdata", "v0.14.0")
 	data, err := os.ReadFile(filepath.Join(root, "expected.json"))

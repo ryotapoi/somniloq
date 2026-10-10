@@ -15,7 +15,7 @@
 
 ### v0.14.3 import の高速化
 
-- [ ] Codex import の本文を会話単位で読み込み、全会話の本文・元 bytes の同時保持をなくす
+- [x] Codex import の本文を会話単位で読み込み、全会話の本文・元 bytes の同時保持をなくす
 
   v0.14.1 の会話単位本文ロード（`488636f`）と v0.14.2 の metadata index による所属確認（`2f2c6a0`）を通常 import に取り入れる。現在の `internal/core/import_codex.go` → `internal/ingest/codex/group.go` の `BuildGroups` は全会話の本文と `FileReport.Data` を保存前に保持する。所属を確認して同じ本人 ID の rollout をまとめ、会話の全文解析・保存後に本文と元 bytes を解放する。親子ツリー順の本文ロードや会話ごとの root 全体走査は導入しない。
 
