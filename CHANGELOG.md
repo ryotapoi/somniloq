@@ -2,6 +2,14 @@
 
 English · [日本語](CHANGELOG.ja.md)
 
+## v0.14.3 — 2026-10-10
+
+### Changed
+
+- Codex import now loads and saves message bodies one conversation at a time instead of retaining all conversations' bodies and source bytes in memory. Peak memory still depends on the largest conversation; original messages, inherited context, ordering, diagnostics, concurrent-import checks, and input-wide atomicity for `--full` are preserved.
+- Incremental Codex import now checks complete rollout content hashes and skips body parsing for unchanged conversations. Changed conversations are rebuilt from all their rollouts; `--full` always parses all selected conversations. Synthetic 64-conversation benchmarks reduced unchanged-import time by about 72% and partial-update time by about 65–68%. Initial import and `--full` do not show a consistent speedup, and logical reads increase. See the [benchmark results](cache/codex-import-cumulative-performance-20261010/README.md).
+- Clarified import failure handling in help and README: an incomplete Codex scan or initial read preserves the input's saved conversations; later failures preserve affected conversations.
+
 ## v0.14.2 — 2026-10-10
 
 ### Changed
