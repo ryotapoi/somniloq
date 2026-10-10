@@ -12,3 +12,21 @@
 - グループが大きい場合は、`####` 見出しでさらに分割してよい。
 
 ## タスク
+
+### v0.14.3 import の高速化
+
+- [ ] Codex import の本文を会話単位で読み込み、全会話の本文・元 bytes の同時保持をなくす
+
+  v0.14.1 の会話単位本文ロード（`488636f`）と v0.14.2 の metadata index による所属確認（`2f2c6a0`）を通常 import に取り入れる。現在の `internal/core/import_codex.go` → `internal/ingest/codex/group.go` の `BuildGroups` は全会話の本文と `FileReport.Data` を保存前に保持する。所属を確認して同じ本人 ID の rollout をまとめ、会話の全文解析・保存後に本文と元 bytes を解放する。親子ツリー順の本文ロードや会話ごとの root 全体走査は導入しない。
+
+  本人原文・継承文脈・物理順・発言番号・payload 重複排除・親 metadata の後着を維持する。通常 import の部分解析と診断、本文0件・空ファイルの扱いを migrate の strict 検証へ置き換えない。元 bytes を解放しても、追記時の未解析診断は既存 prefix hash・offset に基づいて重複を避ける。走査・読み取りが不完全な場合の既存保存保護、読み取り前に取得する期待 cursor と同時 import の競合検出、会話単位の transaction、`--full` の input 全体の原子性を維持する。
+
+  専用の合成 DB/ログで変更前後の初回 import・`--full` の時間、読み取り bytes、ピークメモリを比較する。最大会話サイズを固定して会話数を増やすケースと巨大単一会話を分け、全会話の本文・元 bytes の常駐がなくなることを確認する。同じ ID の複数ファイル、親 metadata の後着、部分解析・未完了末尾、所属競合、不完全な走査、保存/commit 失敗、同時 import で本文・関係・cursor・診断と失敗時保持を検証する。[既存の移行計測](../cache/migration-metadata-performance-20261010/README.md)は通常 import の改善を示すものではないため、import 自体の対比較で採否を決める。実 DB を変更する計測は行わず、共通 gate を通す。
+
+- [ ] Codex の変更なし会話を本文解析前にスキップし、差分 import の解析・メモリ負荷を減らす
+
+  現在は `BuildGroups` で全文解析した後に `ContentHash` を比較している。上の会話単位ロードと組み合わせ、v0.14.1 の再利用 buffer による streaming hash（`8e970dc`）の手法を変化検出に取り入れ、同一本人の rollout 集合と全内容が不変な場合は本文の構築・JSONL 解析を省く。`--full` はスキップ対象にしない。変更のある会話はその会話の全 rollout を再構築し、変更ファイルの追記だけで済ませない。repository 判定の pass 内再利用（`3b0107e`）と payload 比較の軽量化（`1c3698b`）は import に適用済みなので再実装しない。
+
+  内容 hash による検出を維持し、size・mtime だけでスキップしない。同じ size の本文/metadata 編集、新しい rollout・親 metadata の追加、空ファイル・本文0件、未完了末尾の完成を検出する。変更検出の読み取りと本文解析の間の追記で未読 bytes の hash を保存しない。実際に解析した bytes と cursor を対応させ、後続 import で追記を取り込めることを確認する。既存の集計・診断・取り込み日時と、通常 import / `--full` の最終結果の一致を維持する。
+
+  全件変更なし・一部会話の追記・同じ size の編集・rollout 追加を合成入力で計測し、変更なし会話の本文解析が省かれることと差分 import の時間・allocation の削減を確認する。hash 用の読み取りが増える変更会話と初回 import / `--full` の費用も分けて比較する。読み取り中の追記、未完了末尾、読み取り失敗、cursor 競合を検証し、共通 gate を通す。
