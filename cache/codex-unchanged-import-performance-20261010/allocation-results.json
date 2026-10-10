@@ -1,0 +1,32 @@
+[
+  {
+    "version": "baseline",
+    "repetition": 0,
+    "output": "goos: darwin\ngoarch: arm64\npkg: github.com/ryotapoi/somniloq/internal/core\ncpu: Apple M4 Pro\nBenchmarkCodexUnchangedImportAlloc-14    \t       5\t  10922142 ns/op\t17458488 B/op\t   42334 allocs/op\nPASS\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t0.669s\n"
+  },
+  {
+    "version": "candidate",
+    "repetition": 0,
+    "output": "goos: darwin\ngoarch: arm64\npkg: github.com/ryotapoi/somniloq/internal/core\ncpu: Apple M4 Pro\nBenchmarkCodexUnchangedImportAlloc-14    \t       5\t   2308208 ns/op\t  343550 B/op\t    2593 allocs/op\nPASS\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t0.641s\n"
+  },
+  {
+    "version": "candidate",
+    "repetition": 1,
+    "output": "goos: darwin\ngoarch: arm64\npkg: github.com/ryotapoi/somniloq/internal/core\ncpu: Apple M4 Pro\nBenchmarkCodexUnchangedImportAlloc-14    \t       5\t   2096342 ns/op\t  345604 B/op\t    2594 allocs/op\nPASS\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t0.544s\n"
+  },
+  {
+    "version": "baseline",
+    "repetition": 1,
+    "output": "goos: darwin\ngoarch: arm64\npkg: github.com/ryotapoi/somniloq/internal/core\ncpu: Apple M4 Pro\nBenchmarkCodexUnchangedImportAlloc-14    \t       5\t  11748983 ns/op\t17459444 B/op\t   42332 allocs/op\nPASS\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t0.611s\n"
+  },
+  {
+    "version": "baseline",
+    "repetition": 2,
+    "output": "goos: darwin\ngoarch: arm64\npkg: github.com/ryotapoi/somniloq/internal/core\ncpu: Apple M4 Pro\nBenchmarkCodexUnchangedImportAlloc-14    \t       5\t  11880450 ns/op\t17458344 B/op\t   42325 allocs/op\nPASS\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t0.596s\n"
+  },
+  {
+    "version": "candidate",
+    "repetition": 2,
+    "output": "goos: darwin\ngoarch: arm64\npkg: github.com/ryotapoi/somniloq/internal/core\ncpu: Apple M4 Pro\nBenchmarkCodexUnchangedImportAlloc-14    \t       5\t   2412150 ns/op\t  346052 B/op\t    2595 allocs/op\nPASS\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t0.532s\n"
+  }
+]

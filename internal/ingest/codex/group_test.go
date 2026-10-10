@@ -1,6 +1,8 @@
 package codex
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -9,6 +11,41 @@ import (
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
 )
+
+func TestHashBeforeAppendDoesNotBecomeParsedCursor(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "rollout.jsonl")
+	before := []byte(`{"type":"session_meta","payload":{"id":"owner","cwd":""}}` + "\n" +
+		`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"first"}]}}` + "\n")
+	if err := os.WriteFile(path, before, 0600); err != nil {
+		t.Fatal(err)
+	}
+	previousHash, err := HashFile(path, make([]byte, 32*1024))
+	if err != nil {
+		t.Fatal(err)
+	}
+	beforeSum := sha256.Sum256(before)
+	if previousHash != hex.EncodeToString(beforeSum[:]) {
+		t.Fatal("streamed hash differs from file content")
+	}
+	appendix := []byte(`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"second"}]}}` + "\n")
+	after := append(before, appendix...)
+	if err := os.WriteFile(path, after, 0600); err != nil {
+		t.Fatal(err)
+	}
+	groups, errs := NewAdapter(func(string) string { return "" }).BuildGroups(root, []string{path}, "now")
+	if len(errs) != 0 || len(groups) != 1 || len(groups[0].States) != 1 || len(groups[0].Messages) != 2 {
+		t.Fatalf("groups=%+v errors=%v", groups, errs)
+	}
+	state := groups[0].States[0]
+	fullHash := sha256.Sum256(after)
+	if state.ContentHash != hex.EncodeToString(fullHash[:]) || state.ContentHash == previousHash || state.FileSize != int64(len(after)) || state.LastOffset != state.FileSize {
+		t.Fatalf("cursor=%+v preflight hash=%s", state, previousHash)
+	}
+	if _, err := HashFile(filepath.Join(root, "missing.jsonl"), make([]byte, 32*1024)); err == nil {
+		t.Fatal("missing rollout must fail hash preflight")
+	}
+}
 
 func TestSamePayloadPreservesSignatureFields(t *testing.T) {
 	base := ingest.NormalizedMessage{Role: "assistant", Timestamp: "time", Blocks: []string{"a", "b"}}

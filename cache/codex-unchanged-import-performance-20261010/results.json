@@ -1,0 +1,342 @@
+{
+  "baseline_commit": "c4af9909e4499860c8289db76d1909042a860373",
+  "candidate": "working tree",
+  "go": "go version go1.27.1 darwin/arm64",
+  "os": "macOS-27.0.1-arm64-arm-64bit-Mach-O",
+  "input_bytes": 1735574,
+  "owners": 32,
+  "messages_per_owner": 80,
+  "max_owner_bytes": 54287,
+  "environment": {
+    "GOGC": null,
+    "GOMEMLIMIT": null,
+    "GOMAXPROCS": null,
+    "GOFLAGS": null
+  },
+  "runs": [
+    {
+      "version": "baseline",
+      "phase": "unchanged",
+      "repetition": 0,
+      "wall_s": 0.046125958004267886,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 0 files (32 scanned, 32 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "unchanged",
+      "repetition": 0,
+      "wall_s": 0.012189708999358118,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 0 files (32 scanned, 32 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "unchanged",
+      "repetition": 1,
+      "wall_s": 0.013923584017902613,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 0 files (32 scanned, 32 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "unchanged",
+      "repetition": 1,
+      "wall_s": 0.024980625021271408,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 0 files (32 scanned, 32 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "unchanged",
+      "repetition": 2,
+      "wall_s": 0.021447040984639898,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 0 files (32 scanned, 32 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "unchanged",
+      "repetition": 2,
+      "wall_s": 0.01221300000906922,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 0 files (32 scanned, 32 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "append",
+      "repetition": 0,
+      "wall_s": 0.04453729098895565,
+      "messages": 2561,
+      "db_sha256": "aa00ea993edc76a4693251651346da94dd8ff5a8db60cd02a98bd4c0fecfa7ea",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "append",
+      "repetition": 0,
+      "wall_s": 0.022262708022026345,
+      "messages": 2561,
+      "db_sha256": "aa00ea993edc76a4693251651346da94dd8ff5a8db60cd02a98bd4c0fecfa7ea",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "append",
+      "repetition": 1,
+      "wall_s": 0.022162207984365523,
+      "messages": 2561,
+      "db_sha256": "aa00ea993edc76a4693251651346da94dd8ff5a8db60cd02a98bd4c0fecfa7ea",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "append",
+      "repetition": 1,
+      "wall_s": 0.03542320799897425,
+      "messages": 2561,
+      "db_sha256": "aa00ea993edc76a4693251651346da94dd8ff5a8db60cd02a98bd4c0fecfa7ea",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "append",
+      "repetition": 2,
+      "wall_s": 0.03292266698554158,
+      "messages": 2561,
+      "db_sha256": "aa00ea993edc76a4693251651346da94dd8ff5a8db60cd02a98bd4c0fecfa7ea",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "append",
+      "repetition": 2,
+      "wall_s": 0.021599458996206522,
+      "messages": 2561,
+      "db_sha256": "aa00ea993edc76a4693251651346da94dd8ff5a8db60cd02a98bd4c0fecfa7ea",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "same_size_edit",
+      "repetition": 0,
+      "wall_s": 0.030534250021446496,
+      "messages": 2560,
+      "db_sha256": "84486cebe110212bfe91860cc34329534c1c905451f6e6c10df5490a4f2227cb",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "same_size_edit",
+      "repetition": 0,
+      "wall_s": 0.02336579200346023,
+      "messages": 2560,
+      "db_sha256": "84486cebe110212bfe91860cc34329534c1c905451f6e6c10df5490a4f2227cb",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "same_size_edit",
+      "repetition": 1,
+      "wall_s": 0.020090459001949057,
+      "messages": 2560,
+      "db_sha256": "84486cebe110212bfe91860cc34329534c1c905451f6e6c10df5490a4f2227cb",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "same_size_edit",
+      "repetition": 1,
+      "wall_s": 0.04442000002018176,
+      "messages": 2560,
+      "db_sha256": "84486cebe110212bfe91860cc34329534c1c905451f6e6c10df5490a4f2227cb",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "same_size_edit",
+      "repetition": 2,
+      "wall_s": 0.02931270800763741,
+      "messages": 2560,
+      "db_sha256": "84486cebe110212bfe91860cc34329534c1c905451f6e6c10df5490a4f2227cb",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "same_size_edit",
+      "repetition": 2,
+      "wall_s": 0.023832834005588666,
+      "messages": 2560,
+      "db_sha256": "84486cebe110212bfe91860cc34329534c1c905451f6e6c10df5490a4f2227cb",
+      "stdout": "Imported 1 files (32 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "new_rollout",
+      "repetition": 0,
+      "wall_s": 0.030559958977391943,
+      "messages": 2561,
+      "db_sha256": "88c9c8b64b60c51d2ec439fa833fbdd625cd09a42d5ae6ea28305043c08794f3",
+      "stdout": "Imported 2 files (33 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "new_rollout",
+      "repetition": 0,
+      "wall_s": 0.022060791990952566,
+      "messages": 2561,
+      "db_sha256": "88c9c8b64b60c51d2ec439fa833fbdd625cd09a42d5ae6ea28305043c08794f3",
+      "stdout": "Imported 2 files (33 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "new_rollout",
+      "repetition": 1,
+      "wall_s": 0.022418167005525902,
+      "messages": 2561,
+      "db_sha256": "88c9c8b64b60c51d2ec439fa833fbdd625cd09a42d5ae6ea28305043c08794f3",
+      "stdout": "Imported 2 files (33 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "new_rollout",
+      "repetition": 1,
+      "wall_s": 0.03929174999939278,
+      "messages": 2561,
+      "db_sha256": "88c9c8b64b60c51d2ec439fa833fbdd625cd09a42d5ae6ea28305043c08794f3",
+      "stdout": "Imported 2 files (33 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "new_rollout",
+      "repetition": 2,
+      "wall_s": 0.029167417000280693,
+      "messages": 2561,
+      "db_sha256": "88c9c8b64b60c51d2ec439fa833fbdd625cd09a42d5ae6ea28305043c08794f3",
+      "stdout": "Imported 2 files (33 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "new_rollout",
+      "repetition": 2,
+      "wall_s": 0.03599900001427159,
+      "messages": 2561,
+      "db_sha256": "88c9c8b64b60c51d2ec439fa833fbdd625cd09a42d5ae6ea28305043c08794f3",
+      "stdout": "Imported 2 files (33 scanned, 31 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "initial",
+      "repetition": 0,
+      "wall_s": 0.2798984590044711,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "initial",
+      "repetition": 0,
+      "wall_s": 0.25484112501726486,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "initial",
+      "repetition": 1,
+      "wall_s": 0.2985410419933032,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "initial",
+      "repetition": 1,
+      "wall_s": 0.24272270800429396,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "initial",
+      "repetition": 2,
+      "wall_s": 0.2615504580026027,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "initial",
+      "repetition": 2,
+      "wall_s": 0.22984545800136402,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "full",
+      "repetition": 0,
+      "wall_s": 0.20966083300299942,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "full",
+      "repetition": 0,
+      "wall_s": 0.20960616701631807,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "full",
+      "repetition": 1,
+      "wall_s": 0.20664058299735188,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "full",
+      "repetition": 1,
+      "wall_s": 0.1991672090080101,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "baseline",
+      "phase": "full",
+      "repetition": 2,
+      "wall_s": 0.22493383300025016,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    },
+    {
+      "version": "candidate",
+      "phase": "full",
+      "repetition": 2,
+      "wall_s": 0.19752795802196488,
+      "messages": 2560,
+      "db_sha256": "1ea6203c23cb64390cf205c2ab7829e88217702e50bdbb70fb048247f1713899",
+      "stdout": "Imported 32 files (32 scanned, 0 skipped, 0 failed, 0 unparsed lines)"
+    }
+  ]
+}

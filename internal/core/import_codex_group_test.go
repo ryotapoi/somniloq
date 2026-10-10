@@ -233,6 +233,18 @@ func TestCodexSameSizeEditAndEarlierNewRolloutMatchFreshImport(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	metadataEdited := strings.Replace(string(data), "/fixtures/project", "/fixtures/projecX", 1)
+	if len(metadataEdited) != len(data) {
+		t.Fatal("metadata edit must keep size")
+	}
+	must(t, os.WriteFile(path, []byte(metadataEdited), 0600))
+	runCodexImport(t, db, root, false)
+	id, _ := db.EnsureInput(Input{Source: SourceCodex, Root: root})
+	meta, err := db.GetSession(id, SourceCodex, "child")
+	if err != nil || meta.CWD != "/fixtures/projecX" {
+		t.Fatalf("same-size metadata edit: %+v %v", meta, err)
+	}
+	data = []byte(metadataEdited)
 	edited := strings.Replace(string(data), "Child follow-up", "Other follow-up", 1)
 	if len(edited) != len(data) {
 		t.Fatal("test edit must keep size")
@@ -241,7 +253,6 @@ func TestCodexSameSizeEditAndEarlierNewRolloutMatchFreshImport(t *testing.T) {
 	runCodexImport(t, db, root, false)
 	copyCodexFixture(t, root, "child-extra.jsonl")
 	runCodexImport(t, db, root, false)
-	id, _ := db.EnsureInput(Input{Source: SourceCodex, Root: root})
 	got, _ := db.GetMessages(id, SourceCodex, "child")
 	if len(got) != 3 || got[2].Content != "Other follow-up" {
 		t.Fatalf("edit/new rollout=%+v", got)
@@ -309,7 +320,7 @@ func TestCodexImportKeepsSavedOwnersWhenReadIsIncomplete(t *testing.T) {
 	}
 }
 
-func TestCodexImportResolvesSharedRepositoryOncePerPass(t *testing.T) {
+func TestCodexImportSkipsUnchangedGroupBeforeRepositoryResolution(t *testing.T) {
 	db := testDB(t)
 	root := testTempDir(t)
 	for _, id := range []string{"a", "b"} {
@@ -324,9 +335,40 @@ func TestCodexImportResolvesSharedRepositoryOncePerPass(t *testing.T) {
 	for pass := 1; pass <= 2; pass++ {
 		r, err := importCodexGroups(db, id, root, adapter, "2026-01-01T00:00:00Z", false)
 		must(t, err)
-		if len(r.Errors) != 0 || calls != pass {
+		if len(r.Errors) != 0 || calls != 1 || (pass == 2 && r.FilesSkipped != 2) {
 			t.Fatalf("pass=%d result=%+v resolver calls=%d", pass, r, calls)
 		}
+	}
+}
+
+func TestCodexImportDoesNotEarlySkipWhenSavedRolloutIsMissing(t *testing.T) {
+	db := testDB(t)
+	root := testTempDir(t)
+	for _, owner := range []string{"a", "b"} {
+		data := `{"type":"session_meta","payload":{"id":"` + owner + `","cwd":"/same"}}` + "\n" +
+			`{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"body"}]}}` + "\n"
+		must(t, os.WriteFile(filepath.Join(root, owner+".jsonl"), []byte(data), 0600))
+	}
+	runCodexImport(t, db, root, false)
+	id, err := db.EnsureInput(Input{Source: SourceCodex, Root: root})
+	must(t, err)
+	missing := filepath.Join(root, "b.jsonl")
+	oldState, err := db.GetImportState(id, missing)
+	must(t, err)
+	must(t, os.Remove(missing))
+	calls := 0
+	result, err := importCodexGroups(db, id, root, codex.NewAdapter(func(string) string {
+		calls++
+		return ""
+	}), "later", false)
+	must(t, err)
+	if len(result.Errors) != 0 || calls != 1 {
+		t.Fatalf("result=%+v resolver calls=%d", result, calls)
+	}
+	state, err := db.GetImportState(id, missing)
+	must(t, err)
+	if !reflect.DeepEqual(state, oldState) {
+		t.Fatalf("removed rollout state changed: %+v", state)
 	}
 }
 

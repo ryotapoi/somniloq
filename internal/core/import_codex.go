@@ -38,8 +38,45 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 	if full {
 		return replaceCodexInput(db, inputID, root, adapter, groups, result, importedAt)
 	}
+	// A saved rollout missing from the scan has no owner in import_state.
+	// Keep the existing deletion behavior, but do not claim any owner is
+	// unchanged when its previous rollout set cannot be established.
+	missingSavedPath, err := codexImportHasMissingSavedPath(db, inputID, expected)
+	if err != nil {
+		result.FilesFailed = len(files)
+		return result, err
+	}
+	hashBuffer := make([]byte, 32*1024)
 	for _, index := range groups {
 		paths := codexGroupPaths(index)
+		unchanged := !missingSavedPath && len(paths) > 0
+		var hashErr error
+		for _, path := range paths {
+			if expected[path] == nil {
+				unchanged = false
+				break
+			}
+		}
+		for _, path := range paths {
+			if !unchanged {
+				break
+			}
+			var hash string
+			hash, hashErr = codex.HashFile(path, hashBuffer)
+			if hashErr != nil || hash != expected[path].ContentHash {
+				unchanged = false
+				break
+			}
+		}
+		if hashErr != nil {
+			result.Errors = append(result.Errors, fmt.Errorf("%s: %w", index.Session.SessionID, hashErr))
+			result.FilesFailed += len(paths)
+			continue
+		}
+		if unchanged {
+			result.FilesSkipped += len(paths)
+			continue
+		}
 		loaded, readErrs := adapter.BuildGroups(root, paths, importedAt)
 		if len(readErrs) > 0 || !sameCodexImportIndex(index, loaded) {
 			result.Errors = append(result.Errors, readErrs...)
@@ -138,6 +175,28 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 		}
 	}
 	return result, nil
+}
+
+func codexImportHasMissingSavedPath(db *DB, inputID int64, scanned map[string]*ImportState) (bool, error) {
+	rows, err := db.db.Query("SELECT jsonl_path FROM import_state WHERE input_id=?", inputID)
+	if err != nil {
+		return false, fmt.Errorf("list import state: %w", err)
+	}
+	defer rows.Close()
+	missing := false
+	for rows.Next() {
+		var path string
+		if err := rows.Scan(&path); err != nil {
+			return false, fmt.Errorf("list import state: %w", err)
+		}
+		if _, ok := scanned[path]; !ok {
+			missing = true
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("list import state: %w", err)
+	}
+	return missing, nil
 }
 
 // replaceCodexInput validates and writes one owner at a time inside one

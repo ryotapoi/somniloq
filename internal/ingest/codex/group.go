@@ -70,6 +70,22 @@ func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]
 	return a.buildGroups(root, paths, importedAt, false)
 }
 
+// HashFile streams the whole rollout without retaining its body. The caller
+// can reuse buf across files when checking saved import cursors.
+func HashFile(path string, buf []byte) (string, error) {
+	file, err := os.Open(path)
+	if err != nil {
+		return "", err
+	}
+	defer file.Close()
+	hash := sha256.New()
+	// Hide File.WriteTo so CopyBuffer actually reuses the caller's buffer.
+	if _, err := io.CopyBuffer(hash, struct{ io.Reader }{file}, buf); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(hash.Sum(nil)), nil
+}
+
 // BuildImportIndex identifies owners and checks that every discovered file can
 // be read before an ordinary import changes any saved conversation. Reports
 // contain paths only; body bytes are loaded later, one owner at a time.

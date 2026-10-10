@@ -1,0 +1,42 @@
+package core
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+func BenchmarkCodexUnchangedImportAlloc(b *testing.B) {
+	root := filepath.Join(b.TempDir(), "logs")
+	if err := os.Mkdir(root, 0700); err != nil {
+		b.Fatal(err)
+	}
+	for owner := 0; owner < 32; owner++ {
+		var log strings.Builder
+		fmt.Fprintf(&log, "{\"type\":\"session_meta\",\"payload\":{\"id\":\"owner-%d\",\"cwd\":\"\"}}\n", owner)
+		for i := 0; i < 80; i++ {
+			fmt.Fprintf(&log, "{\"type\":\"response_item\",\"timestamp\":\"2026-01-01T00:00:00Z\",\"payload\":{\"type\":\"message\",\"role\":\"user\",\"id\":\"%d-%d\",\"content\":[{\"type\":\"input_text\",\"text\":\"%s\"}]}}\n", owner, i, strings.Repeat("x", 512))
+		}
+		if err := os.WriteFile(filepath.Join(root, fmt.Sprintf("rollout-%03d.jsonl", owner)), []byte(log.String()), 0600); err != nil {
+			b.Fatal(err)
+		}
+	}
+	db, err := OpenDB(filepath.Join(b.TempDir(), "bench.db"))
+	if err != nil {
+		b.Fatal(err)
+	}
+	defer db.Close()
+	opts := ImportOptions{Inputs: []Input{{Source: SourceCodex, Root: root}}}
+	if result, err := Import(db, opts); err != nil || len(result.Errors) != 0 {
+		b.Fatalf("seed: %+v %v", result, err)
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		result, err := Import(db, opts)
+		if err != nil || len(result.Errors) != 0 || result.FilesSkipped != 32 {
+			b.Fatalf("import: %+v %v", result, err)
+		}
+	}
+}
