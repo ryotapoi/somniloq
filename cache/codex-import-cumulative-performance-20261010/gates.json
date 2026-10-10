@@ -1,0 +1,91 @@
+[
+  {
+    "command": [
+      "sh",
+      "-c",
+      "unformatted=\"$(find . -name \"*.go\" -type f -print0 | xargs -0 gofmt -l)\"; test -z \"$unformatted\" || { echo \"$unformatted\"; exit 1; }"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.7039272089896258,
+    "output_tail": "\n"
+  },
+  {
+    "command": [
+      "go",
+      "test",
+      "-count=1",
+      "./..."
+    ],
+    "exit_code": 0,
+    "duration_s": 5.074354125012178,
+    "output_tail": "ok  \tgithub.com/ryotapoi/somniloq/cmd/somniloq\t2.150s\nok  \tgithub.com/ryotapoi/somniloq/internal/core\t3.234s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest\t0.365s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/claudecode\t0.366s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/codex\t0.585s\nok  \tgithub.com/ryotapoi/somniloq/internal/ingest/cursoragent\t0.362s\n\n"
+  },
+  {
+    "command": [
+      "go",
+      "vet",
+      "./..."
+    ],
+    "exit_code": 0,
+    "duration_s": 1.5653054589929525,
+    "output_tail": "\n"
+  },
+  {
+    "command": [
+      "go",
+      "build",
+      "-o",
+      "bin/somniloq",
+      "./cmd/somniloq"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.3508009170182049,
+    "output_tail": "\ngo: writing stat cache: open /Users/ryota/go/pkg/mod/cache/download/github.com/ryotapoi/somniloq/@v/v0.14.3-0.20261010072350-3dec7aa35a28.info547149256.tmp: operation not permitted\n"
+  },
+  {
+    "command": [
+      "go",
+      "install",
+      "github.com/google/go-licenses/v2@v2.0.1"
+    ],
+    "exit_code": 1,
+    "duration_s": 0.01588070800062269,
+    "output_tail": "\ngo: github.com/google/go-licenses/v2@v2.0.1: loading deprecation for github.com/google/go-licenses/v2: module github.com/google/go-licenses/v2: Get \"https://proxy.golang.org/github.com/google/go-licenses/v2/@v/list\": dial tcp: lookup proxy.golang.org: no such host\n",
+    "note": "sandbox DNS制約で失敗。後続の昇格実行は成功（exit 0、約0.6秒）"
+  },
+  {
+    "command": [
+      "go",
+      "install",
+      "github.com/google/go-licenses/v2@v2.0.1"
+    ],
+    "exit_code": 0,
+    "duration_s": 0.600167125,
+    "execution": "require_escalated",
+    "output_tail": ""
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/update-third-party-notices.py",
+      "--check"
+    ],
+    "exit_code": 1,
+    "duration_s": 0.6,
+    "output_tail": "既定 GOCACHE の /Users/ryota/Library/Caches/go-build への書き込みが sandbox で拒否された。",
+    "note": "専用 GOCACHE を指定して再実行し成功"
+  },
+  {
+    "command": [
+      "python3",
+      "scripts/update-third-party-notices.py",
+      "--check"
+    ],
+    "exit_code": 0,
+    "duration_s": 2.434695959003875,
+    "environment": {
+      "GOCACHE": "/Users/ryota/Sources/ryotapoi/somniloq/.tmp/codex-import-cumulative-performance-20261010/go-cache"
+    },
+    "output_tail": "go-licenses の non-Go code 警告と module stat cache 書込警告が出たが、check は exit 0。"
+  }
+]
