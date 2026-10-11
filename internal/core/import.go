@@ -127,19 +127,6 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 			}
 		}
 	}
-	if opts.Full {
-		ids := make([]int64, 0, len(selected))
-		for _, item := range selected {
-			_, codexSnapshot := item.adapter.(codex.Adapter)
-			_, claudeSnapshot := item.adapter.(claudecode.Adapter)
-			if !codexSnapshot && !claudeSnapshot {
-				ids = append(ids, item.id)
-			}
-		}
-		if err := db.DeleteInputs(ids); err != nil {
-			return nil, fmt.Errorf("delete selected inputs: %w", err)
-		}
-	}
 	result := &ImportResult{}
 	for _, item := range selected {
 		var r *ImportResult
@@ -148,6 +135,8 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 			r, err = importCodexGroups(db, item.id, item.input.Root, a, importedAt, opts.Full)
 		} else if a, ok := item.adapter.(claudecode.Adapter); ok {
 			r, err = importClaudeSnapshots(db, item.id, item.input.Root, a, importedAt, opts.Full)
+		} else if opts.Full {
+			r, err = replaceCursorInput(db, item.id, item.input.Root, item.adapter, importedAt)
 		} else {
 			r, err = importWithAdapter(db, item.id, item.input.Root, item.adapter, importedAt)
 		}
@@ -284,4 +273,55 @@ func importWithAdapter(db *DB, inputID int64, rootDir string, adapter ingest.Ada
 // timeNow returns the current time in RFC3339 UTC. Overridable for testing.
 var timeNow = func() string {
 	return time.Now().UTC().Format(time.RFC3339)
+}
+
+// cursorFullTx leaves transaction completion to the input replacement, while
+// ProcessJSONL retains its per-file parsing and cursor bookkeeping.
+type cursorFullTx struct{ importTx }
+
+func (cursorFullTx) Commit() error   { return nil }
+func (cursorFullTx) Rollback() error { return nil }
+
+func replaceCursorInput(db *DB, inputID int64, rootDir string, adapter ingest.Adapter, importedAt string) (*ImportResult, error) {
+	files, scanErrs := adapter.ScanFiles(rootDir)
+	result := &ImportResult{FilesScanned: len(files), Errors: scanErrs}
+	if len(scanErrs) > 0 {
+		result.FilesFailed = len(files)
+		return result, nil
+	}
+	tx, err := db.Begin()
+	if err != nil {
+		return result, fmt.Errorf("%s: begin: %w", rootDir, err)
+	}
+	defer tx.Rollback()
+	fail := func(err error) (*ImportResult, error) {
+		result.FilesFailed = len(files)
+		result.Errors = append(result.Errors, err)
+		return result, nil
+	}
+	for _, table := range []string{"messages", "sessions", "import_state"} {
+		if _, err := tx.Exec("DELETE FROM "+table+" WHERE input_id=?", inputID); err != nil {
+			return fail(fmt.Errorf("%s: delete: %w", rootDir, err))
+		}
+	}
+	newTransaction := func() (ingest.ImportTransaction, error) {
+		return cursorFullTx{importTx{tx: tx, inputID: inputID}}, nil
+	}
+	for _, path := range files {
+		fi, err := os.Stat(path)
+		if err != nil {
+			return fail(fmt.Errorf("%s: stat: %w", path, err))
+		}
+		pr, err := adapter.ProcessFile(newTransaction, path, 0, fi.Size(), importedAt)
+		if err != nil {
+			return fail(fmt.Errorf("%s: %w", path, err))
+		}
+		result.UnparsedLines += pr.UnparsedLines
+		result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
+	}
+	if err := tx.Commit(); err != nil {
+		return fail(fmt.Errorf("%s: commit: %w", rootDir, err))
+	}
+	result.FilesImported = len(files)
+	return result, nil
 }

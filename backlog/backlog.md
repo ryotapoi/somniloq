@@ -35,9 +35,9 @@
 
 #### 保存データの保護
 
-- [ ] Cursor の full 再構築失敗時に旧履歴を保護する
+- [x] Cursor の full 再構築失敗時に旧履歴を保護する
 
-  保存済み入力の走査・読取・保存に失敗した full import が、先行削除した本文・session・cursor を失う。対応方針は、Claude・Codex と同様に、対象入力の削除と再保存を一つの transaction で確定する方式に統一する。`internal/core/import.go` の再構築で、失敗時は旧本文・session・cursor を保持し、成功時は最終ログを反映し、対象外の入力は保持することを確認する。
+  Cursor full を入力単位の transaction で削除・再保存し、走査・読取・保存・最終 commit が失敗した入力の旧本文・session・cursor を保持する。複数ファイルの後半失敗、同サイズ変更、欠落ログ、本文なしファイル、空入力、対象外入力、full 後の追記を回帰テストで確認した。
 
 - [ ] Claude の古い full snapshot による上書きを防ぐ
 

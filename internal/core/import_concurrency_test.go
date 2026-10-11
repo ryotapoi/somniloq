@@ -28,7 +28,7 @@ type pausedImportAdapter struct {
 
 func (a pausedImportAdapter) ScanFiles(root string) ([]string, []error) {
 	if a.phase == "full" {
-		a.wait() // Import has already committed DeleteInputs.
+		a.wait() // The helper has committed an explicit deletion before rebuilding.
 	}
 	return a.Adapter.ScanFiles(root)
 }
@@ -76,7 +76,15 @@ func TestConcurrentImportProcess(t *testing.T) {
 			}}
 		},
 	}}
-	r, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: os.Getenv("SOMNILOQ_IMPORT_TEST_ROOT")}}, Full: phase == "full", Source: ImportSourceClaudeCode})
+	input := Input{Source: SourceClaudeCode, Root: os.Getenv("SOMNILOQ_IMPORT_TEST_ROOT")}
+	if phase == "full" {
+		// Exercise the incremental cursor guard against an independent deletion.
+		// Production full imports now own deletion and rebuilding atomically.
+		id, err := db.EnsureInput(input)
+		must(t, err)
+		must(t, db.DeleteInputs([]int64{id}))
+	}
+	r, err := Import(db, ImportOptions{Inputs: []Input{input}, Source: ImportSourceClaudeCode})
 	must(t, err)
 	outcome := concurrentImportOutcome{Imported: r.FilesImported, Skipped: r.FilesSkipped, Failed: r.FilesFailed}
 	for _, err := range r.Errors {
@@ -137,7 +145,7 @@ func (p *concurrentImportProcess) finish(t *testing.T) concurrentImportOutcome {
 	return outcome
 }
 
-func TestImportConcurrentFull(t *testing.T) {
+func TestImportConcurrentDeletion(t *testing.T) {
 	for _, phase := range []string{"before", "after"} {
 		t.Run(phase, func(t *testing.T) {
 			dir := testTempDir(t)
