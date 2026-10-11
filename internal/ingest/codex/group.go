@@ -302,7 +302,11 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 		report := FileReport{Path: path, Info: info, Hash: sum, Failures: h.failures}
 		report.Data = data
 		if c.meta == nil || (!strict && c.state.JSONLPath == "" && len(h.failures) > 0) {
-			groups = append(groups, Group{Files: 1, Err: strictErr, Reports: []FileReport{report}})
+			g := Group{Files: 1, Err: strictErr, Reports: []FileReport{report}}
+			if c.meta != nil {
+				g.Session.SessionID = c.meta.SessionID
+			}
+			groups = append(groups, g)
 			continue
 		}
 		id := c.meta.SessionID

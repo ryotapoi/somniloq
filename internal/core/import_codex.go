@@ -298,7 +298,7 @@ func sameCodexImportIndex(index codex.Group, loaded []codex.Group) bool {
 	paths := codexGroupPaths(index)
 	seen := make(map[string]bool, len(paths))
 	for _, g := range loaded {
-		if g.Session.SessionID != "" && g.Session.SessionID != index.Session.SessionID {
+		if g.Session.SessionID != index.Session.SessionID {
 			return false
 		}
 		for _, report := range g.Reports {
