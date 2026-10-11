@@ -486,6 +486,69 @@ func TestCodexMetadataOnlyEditRebuildsOwner(t *testing.T) {
 	}
 }
 
+func TestCodexNewMetadataOnlyRolloutUpdatesOwner(t *testing.T) {
+	priorClock := timeNow
+	timeNow = func() string { return "2026-10-01T00:00:00Z" }
+	defer func() { timeNow = priorClock }()
+	db := testDB(t)
+	root := testTempDir(t)
+	bodyPath := filepath.Join(root, "b.jsonl")
+	must(t, os.WriteFile(bodyPath, []byte(`{"type":"session_meta","payload":{"id":"owner","cwd":"/old","cli_version":"old","git":{"branch":"old"}}}`+"\n"+
+		`{"type":"response_item","payload":{"type":"message","id":"body","role":"user","content":[{"type":"input_text","text":"Saved body"}]}}`+"\n"), 0600))
+	runCodexImport(t, db, root, false)
+	id, err := db.EnsureInput(Input{Source: SourceCodex, Root: root})
+	must(t, err)
+	beforeSession, err := db.GetSession(id, SourceCodex, "owner")
+	must(t, err)
+	beforeBody, err := db.GetMessages(id, SourceCodex, "owner")
+	must(t, err)
+	if len(beforeBody) != 1 || beforeBody[0].Content != "Saved body" || beforeBody[0].Number != 1 {
+		t.Fatalf("initial body=%+v", beforeBody)
+	}
+	metaPath := filepath.Join(root, "a.jsonl")
+	must(t, os.WriteFile(metaPath, []byte(`{"type":"session_meta","payload":{"id":"owner","cwd":"/new","cli_version":"new","git":{"branch":"new"}}}`+"\n"), 0600))
+	timeNow = func() string { return "2026-10-02T00:00:00Z" }
+	if result := runCodexImport(t, db, root, false); result.FilesImported != 2 {
+		t.Fatalf("metadata addition=%+v", result)
+	}
+	afterSession, err := db.GetSession(id, SourceCodex, "owner")
+	must(t, err)
+	if afterSession == nil || afterSession.CWD != "/new" || afterSession.Identity != beforeSession.Identity || afterSession.REF != beforeSession.REF {
+		t.Fatalf("metadata addition session=%+v before=%+v", afterSession, beforeSession)
+	}
+	var branch, version, importedAt string
+	must(t, db.db.QueryRow("SELECT git_branch,version,imported_at FROM sessions WHERE input_id=? AND session_id='owner'", id).Scan(&branch, &version, &importedAt))
+	if branch != "new" || version != "new" || importedAt != "2026-10-02T00:00:00Z" {
+		t.Fatalf("metadata branch=%q version=%q imported_at=%q", branch, version, importedAt)
+	}
+	for _, full := range []bool{false, true} {
+		timeNow = func() string { return "2099-01-01T00:00:00Z" }
+		result := runCodexImport(t, db, root, full)
+		if !full && result.FilesSkipped != 2 {
+			t.Fatalf("unchanged=%+v", result)
+		}
+		session, err := db.GetSession(id, SourceCodex, "owner")
+		must(t, err)
+		if !reflect.DeepEqual(session, afterSession) {
+			t.Fatalf("full=%v session=%+v want=%+v", full, session, afterSession)
+		}
+		body, err := db.GetMessages(id, SourceCodex, "owner")
+		must(t, err)
+		if !reflect.DeepEqual(body, beforeBody) {
+			t.Fatalf("full=%v body=%+v want=%+v", full, body, beforeBody)
+		}
+		must(t, db.db.QueryRow("SELECT git_branch,version,imported_at FROM sessions WHERE input_id=? AND session_id='owner'", id).Scan(&branch, &version, &importedAt))
+		if branch != "new" || version != "new" || (!full && importedAt != "2026-10-02T00:00:00Z") {
+			t.Fatalf("full=%v metadata branch=%q version=%q imported_at=%q", full, branch, version, importedAt)
+		}
+		state, err := db.GetImportState(id, metaPath)
+		must(t, err)
+		if state != nil {
+			t.Fatalf("full=%v metadata-only cursor=%+v", full, state)
+		}
+	}
+}
+
 func TestCodexMissingRolloutHistorySurvivesAppendUntilFull(t *testing.T) {
 	for _, missing := range []string{"child-extra.jsonl", "child.jsonl"} {
 		t.Run(missing, func(t *testing.T) {

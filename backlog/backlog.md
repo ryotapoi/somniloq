@@ -91,9 +91,9 @@
 
   通常 import は欠落 rollout の保存済み本文・元ブロック・timestamp・由来・membership と既知の親を保持し、残存 rollout の新規本文と物理順で統合する。payload の重複排除と本文番号を再構成し、full 成功時だけ選択入力を現在ログから作り直す。先頭・後続 rollout の削除、追記、無変更再実行、context / unresolved、保存失敗時の本文・cursor 保持、full と対象外入力の保持を回帰テストで確認した。
 
-- [ ] Codex の本文なし rollout も会話情報の取込判定に含める
+- [x] Codex の本文なし rollout も会話情報の取込判定に含める
 
-  同じ会話 ID の本文あり rollout を取り込んだ後、作業場所などを供給する本文なし rollout が新規追加されても、通常 import が会話情報の保存を省略し full と異なる値を残す。本文なしの有効な rollout を受理する既存ルールを維持し、その情報も会話全体の取込判定に含める方向で対応する。`internal/core/import_codex.go` と `internal/ingest/codex/group.go` で、新規追加された本文なしファイルの会話情報を見落とさず、本文・会話 ID・親や継承境界の既存ルールを変えないことを確認する。任意編集への一般的な追従機能は追加しない。具体的な比較方式は実装時に決める。
+  本文あり会話に有効な本文なし rollout が含まれる場合、保存済み会話 metadata も通常 import の skip 判定で比較する。先行パスへの新規追加による cwd・branch・version の反映、無変更再実行、full との一致、本文・番号・identity・REF の保持、本文なし cursor の非作成を回帰テストで確認した。
 
 #### repository の解決
 

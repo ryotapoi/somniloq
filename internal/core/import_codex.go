@@ -118,6 +118,20 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 					unchanged = false
 				}
 			}
+			if unchanged && len(g.States) > 0 && len(g.EmptyPaths) > 0 {
+				// Bodyless rollouts have no cursor, but can supply the selected
+				// owner metadata. Compare that snapshot before skipping its body.
+				meta := g.Session
+				err := db.db.QueryRow(`SELECT EXISTS(
+				 SELECT 1 FROM sessions WHERE input_id=? AND source=? AND session_id=?
+				 AND parent_session_id=? AND cwd=? AND COALESCE(repo_path,'')=? AND git_branch=? AND version=?)`,
+					inputID, string(ingest.SourceCodex), meta.SessionID, meta.ParentSessionID,
+					meta.CWD, meta.RepoPath, meta.GitBranch, meta.Version).Scan(&unchanged)
+				if err != nil {
+					result.FilesFailed += g.Files
+					return result, fmt.Errorf("%s: compare session metadata: %w", meta.SessionID, err)
+				}
+			}
 			if unchanged {
 				result.FilesSkipped += g.Files
 				continue
