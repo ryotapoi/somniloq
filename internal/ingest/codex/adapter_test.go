@@ -9,7 +9,7 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
-func TestAdapter_ProcessFileMalformedSessionMetaContinues(t *testing.T) {
+func TestAdapter_BuildGroupsMalformedSessionMetaContinues(t *testing.T) {
 	const contents = `{"type":"session_meta","payload":[]}
 {"timestamp":"2026-07-12T00:00:00Z","type":"session_meta","payload":{"id":"s1","cwd":"/repo"}}
 {"timestamp":"2026-07-12T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
@@ -19,31 +19,21 @@ func TestAdapter_ProcessFileMalformedSessionMetaContinues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tx := &recordingTransaction{}
-	result, err := NewAdapter(func(string) string { return "/repo" }).ProcessFile(
-		func() (ingest.ImportTransaction, error) { return tx, nil },
-		path,
-		0,
-		int64(len(contents)),
-		"2026-07-12T00:00:00Z",
-	)
-	if err != nil {
-		t.Fatalf("ProcessFile error = %v, want nil", err)
+	groups, errs := NewAdapter(func(string) string { return "/repo" }).BuildGroups(filepath.Dir(path), []string{path}, "2026-07-12T00:00:00Z")
+	if len(errs) != 0 || len(groups) != 1 || groups[0].Err != nil {
+		t.Fatalf("groups=%+v errors=%v", groups, errs)
 	}
-	if result.UnparsedLines != 1 {
-		t.Errorf("UnparsedLines = %d, want 1", result.UnparsedLines)
+	g := groups[0]
+	if len(g.Reports) != 1 || len(g.Reports[0].Failures) != 1 {
+		t.Fatalf("reports=%+v, want one malformed metadata failure", g.Reports)
 	}
-	if len(tx.messages) != 1 {
-		t.Errorf("InsertMessage calls = %d, want 1", len(tx.messages))
-	}
-	if tx.commits != 1 {
-		t.Errorf("Commit calls = %d, want 1", tx.commits)
+	if g.Session.SessionID != "s1" || len(g.Messages) != 1 || g.Messages[0].Content != "hello" {
+		t.Fatalf("group=%+v, want recovered owner and message", g)
 	}
 }
 
 func TestAdapter_RejectsEmptySessionIDsAcrossRollouts(t *testing.T) {
 	const message = `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}` + "\n"
-	tx := &recordingTransaction{}
 	adapter := NewAdapter(func(string) string { return "/repo" })
 	for _, payload := range []string{`{"cwd":"/repo"}`, `{"id":""}`, `{"id":null}`, `{"id":"valid"}`} {
 		path := filepath.Join(t.TempDir(), "rollout.jsonl")
@@ -51,52 +41,26 @@ func TestAdapter_RejectsEmptySessionIDsAcrossRollouts(t *testing.T) {
 		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		result, err := adapter.ProcessFile(func() (ingest.ImportTransaction, error) { return tx, nil }, path, 0, int64(len(contents)), "2026-07-12T00:00:00Z")
-		if err != nil {
-			t.Fatal(err)
+		groups, errs := adapter.BuildGroups(filepath.Dir(path), []string{path}, "2026-07-12T00:00:00Z")
+		if len(errs) != 0 || len(groups) != 1 || groups[0].Err != nil {
+			t.Fatalf("groups=%+v errors=%v", groups, errs)
 		}
+		g := groups[0]
 		if payload == `{"id":"valid"}` {
-			if result.UnparsedLines != 0 {
-				t.Errorf("valid metadata: unparsed = %d, want 0", result.UnparsedLines)
+			if g.Session.SessionID != "valid" || len(g.Messages) != 1 || g.Messages[0].SessionID != "valid" || len(g.Reports[0].Failures) != 0 {
+				t.Fatalf("valid group=%+v", g)
 			}
 			continue
 		}
-		if result.UnparsedLines != 1 || len(result.UnparsedDiagnostics) != 1 {
-			t.Fatalf("payload %s: unparsed = %d, diagnostics = %v", payload, result.UnparsedLines, result.UnparsedDiagnostics)
+		if len(g.Reports) != 1 || len(g.Reports[0].Failures) != 1 {
+			t.Fatalf("payload %s: reports=%+v", payload, g.Reports)
 		}
-		if got, want := result.UnparsedDiagnostics[0].Error(), path+":2: session_meta payload.id is missing or empty"; got != want {
+		if got, want := g.Reports[0].Failures[0].Diagnostic.Error(), path+":2: session_meta payload.id is missing or empty"; got != want {
 			t.Errorf("diagnostic = %q, want %q", got, want)
 		}
-		if len(tx.sessions) != 0 || len(tx.messages) != 0 {
-			t.Fatalf("invalid rollout persisted sessions/messages: %v / %v", tx.sessions, tx.messages)
+		if g.Session.SessionID != "" || len(g.Messages) != 0 {
+			t.Fatalf("invalid rollout has owner/messages: %+v", g)
 		}
-	}
-	if len(tx.sessions) != 1 || tx.sessions[0].SessionID != "valid" || len(tx.messages) != 1 || tx.messages[0].SessionID != "valid" {
-		t.Fatalf("persisted sessions/messages = %v / %v, want only valid session", tx.sessions, tx.messages)
-	}
-}
-
-func TestAdapter_InvalidSessionMetaPrefixRecoversAtValidMetadata(t *testing.T) {
-	const prefix = `{"type":"session_meta","payload":{"id":""}}
-`
-	const suffix = `{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"ignored"}]}}
-{"type":"session_meta","payload":{"id":"valid"}}
-{"type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"kept"}]}}
-`
-	path := filepath.Join(t.TempDir(), "rollout.jsonl")
-	if err := os.WriteFile(path, []byte(prefix+suffix), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	tx := &recordingTransaction{}
-	result, err := NewAdapter(func(string) string { return "/repo" }).ProcessFile(func() (ingest.ImportTransaction, error) { return tx, nil }, path, int64(len(prefix)), int64(len(prefix+suffix)), "2026-07-12T00:00:00Z")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if result.UnparsedLines != 0 || len(result.UnparsedDiagnostics) != 0 {
-		t.Errorf("prefix metadata diagnosed again: %+v", result)
-	}
-	if len(tx.sessions) != 1 || tx.sessions[0].SessionID != "valid" || len(tx.messages) != 1 || tx.messages[0].Content != "kept" || tx.messages[0].SessionID != "valid" {
-		t.Fatalf("persisted sessions/messages = %v / %v, want only message after valid metadata", tx.sessions, tx.messages)
 	}
 }
 
@@ -110,27 +74,18 @@ func TestAdapter_MissingRecordTimestampRemainsUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	tx := &recordingTransaction{}
-	result, err := NewAdapter(func(string) string { return "/repo" }).ProcessFile(
-		func() (ingest.ImportTransaction, error) { return tx, nil },
-		path,
-		0,
-		int64(len(contents)),
-		"2026-07-12T01:00:00Z",
-	)
-	if err != nil {
-		t.Fatalf("ProcessFile error = %v", err)
+	groups, errs := NewAdapter(func(string) string { return "/repo" }).BuildGroups(filepath.Dir(path), []string{path}, "2026-07-12T01:00:00Z")
+	if len(errs) != 0 || len(groups) != 1 || groups[0].Err != nil {
+		t.Fatalf("groups=%+v errors=%v", groups, errs)
 	}
-	if result.UnparsedLines != 0 {
-		t.Errorf("UnparsedLines = %d, want 0", result.UnparsedLines)
+	messages := groups[0].Messages
+	if len(groups[0].Reports[0].Failures) != 0 || len(messages) != 2 {
+		t.Fatalf("group=%+v, want two parsed messages", groups[0])
 	}
-	if len(tx.messages) != 2 {
-		t.Fatalf("messages = %d, want 2", len(tx.messages))
-	}
-	if got, want := tx.messages[0].Timestamp, "2026-07-12T00:00:01Z"; got != want {
+	if got, want := messages[0].Timestamp, "2026-07-12T00:00:01Z"; got != want {
 		t.Errorf("first message timestamp = %q, want %q", got, want)
 	}
-	if got := tx.messages[1].Timestamp; got != "" {
+	if got := messages[1].Timestamp; got != "" {
 		t.Errorf("second message timestamp = %q, want unknown", got)
 	}
 }
@@ -157,7 +112,7 @@ func TestFileHandler_HandleLineReportsMalformedPayloads(t *testing.T) {
 				resolveRepoPath: func(string) string { return "/repo" },
 			}
 
-			result, err := h.HandleLine(&recordingTransaction{}, []byte(tt.line))
+			result, err := h.HandleLine(&collector{}, []byte(tt.line))
 			if err != nil {
 				t.Fatalf("HandleLine error = %v, want nil", err)
 			}
@@ -172,28 +127,3 @@ func TestFileHandler_HandleLineReportsMalformedPayloads(t *testing.T) {
 		})
 	}
 }
-
-type recordingTransaction struct {
-	sessions []ingest.SessionMeta
-	messages []ingest.NormalizedMessage
-	commits  int
-}
-
-func (t *recordingTransaction) UpsertSession(meta ingest.SessionMeta, _ string) error {
-	t.sessions = append(t.sessions, meta)
-	return nil
-}
-
-func (t *recordingTransaction) InsertMessage(message ingest.NormalizedMessage) error {
-	t.messages = append(t.messages, message)
-	return nil
-}
-
-func (*recordingTransaction) UpsertImportState(ingest.ImportState) error { return nil }
-
-func (t *recordingTransaction) Commit() error {
-	t.commits++
-	return nil
-}
-
-func (*recordingTransaction) Rollback() error { return nil }

@@ -3,10 +3,7 @@ package codex
 import (
 	"bytes"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
-	"os"
 	"strings"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
@@ -39,7 +36,7 @@ func (a Adapter) ScanFiles(rootDir string) ([]string, []error) {
 	})
 }
 
-// fileHandler holds the per-file state of one ProcessFile pass. Line numbers
+// fileHandler holds per-file state while building an owner group. Line numbers
 // count every physical line (blank ones included) because message UUIDs are
 // derived from file path + line number.
 type fileHandler struct {
@@ -52,64 +49,6 @@ type fileHandler struct {
 	number          int
 	byteOffset      int64
 	failures        []ingest.ParseFailure
-}
-
-func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, path string, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
-	if a.resolveRepoPath == nil {
-		return ingest.ProcessResult{}, errors.New("resolve repo path is nil")
-	}
-	h := &fileHandler{
-		resolveRepoPath: memoizeRepoResolver(a.resolveRepoPath),
-		importedAt:      importedAt,
-	}
-	return ingest.ProcessJSONL(newTransaction, ingest.SourceCodex, h, path, offset, fileSize, importedAt)
-}
-
-// Begin recovers session_meta from the already-imported prefix so incremental
-// imports can normalize messages that appear after the offset. Parse failures
-// in this prefix are intentionally ignored: the initial import already counted
-// them as unparsed, so resuming must not count them again (ADR 0023).
-func (h *fileHandler) Begin(path string, offset int64) error {
-	h.path = path
-	h.byteOffset = offset
-	if offset <= 0 {
-		return nil
-	}
-
-	f, err := os.Open(path)
-	if err != nil {
-		return err
-	}
-	defer f.Close()
-
-	_, err = ingest.ForEachLine(io.LimitReader(f, offset), -1, func(line []byte) error {
-		h.lineNumber += bytes.Count(line, []byte{'\n'})
-		trimmed := bytes.TrimSpace(line)
-		if len(trimmed) == 0 {
-			return nil
-		}
-		rec, perr := ParseRecord(trimmed)
-		if perr != nil {
-			return nil
-		}
-		if rec.Type == "session_meta" {
-			_ = h.applySessionMeta(rec)
-			return nil
-		}
-		if rec.Type != "response_item" || h.meta == nil {
-			return nil
-		}
-		payload, err := parseResponseItem(rec)
-		if err != nil || !isConversationMessage(payload) {
-			return nil
-		}
-		content, err := ExtractText(payload.Content)
-		if err == nil && strings.TrimSpace(content) != "" && (h.historyStart == nil || (rec.Ordinal != nil && *rec.Ordinal >= *h.historyStart)) {
-			h.number++
-		}
-		return nil
-	})
-	return err
 }
 
 func (h *fileHandler) HandleLine(tx ingest.ImportTransaction, line []byte) (ingest.LineResult, error) {

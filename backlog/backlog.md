@@ -133,9 +133,9 @@
 
   通常の Claude import が通らない旧 importer に別の保存規則と専用テストが残り、一部 concurrency wrapper も旧経路を実行する。二重管理をなくすため、旧 per-file 保存処理とその専用の付属処理・検証を除去する方針で確定する。必要な検証は現行 snapshot 経路へ合わせ、通常経路の保存・並行処理の保証を維持する。共通 adapter 契約を現在の呼出しに合わせて整理し、Cursor の現役 per-file 処理と共有 parser・旧入力形式の対応を維持する。残る concurrency 検証が通常経路を対象とすることを確認する。
 
-- [ ] 不要な旧 Codex offset 再開実装を除去する
+- [x] 不要な旧 Codex offset 再開実装を除去する
 
-  通常 import・移行が owner group を使う一方、到達しない per-file offset 再開実装と専用テストが重複規則を維持する。二重管理をなくすため、旧再開入口とその専用処理・検証を除去する方針で確定する。現行 group・移行が共有する handler・parser は残し、必要な検証は現行経路へ合わせる。Claude の旧処理除去と共通 adapter 契約の整理を整合させ、Cursor の現役 offset 再開と rollout 統合・継承境界・重複排除・番号・owner 置換の保証を維持する。
+  Codex の旧 per-file 再開入口と prefix 復元処理・専用検証を除去した。metadata 回復・無効 ID の物理行付き診断・unknown timestamp の検証を owner group 経路へ移し、共有 handler・parser、Cursor の offset 再開と既存の group・移行の保証を維持した。
 
 #### improve-performance で検討するもの
 

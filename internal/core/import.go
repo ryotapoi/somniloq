@@ -200,9 +200,6 @@ func (r *ImportResult) addUnparsedDiagnostics(diagnostics []error) {
 }
 
 func importWithAdapter(db *DB, inputID int64, rootDir string, adapter ingest.FileAdapter, importedAt string) (*ImportResult, error) {
-	if a, ok := adapter.(codex.Adapter); ok {
-		return importCodexGroups(db, inputID, rootDir, a, importedAt, false)
-	}
 	files, scanErrs := adapter.ScanFiles(rootDir)
 
 	// Scan errors already carry their "scan <path>:" context from the adapter.

@@ -91,7 +91,7 @@ func TestCodexImport_ReportsDiagnosticOnUnterminatedPrefixLine(t *testing.T) {
 	}
 }
 
-func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
+func TestCodexImport_IncrementalPreservesMetadataAndPhysicalLines(t *testing.T) {
 	db := testDB(t)
 	root := testTempDir(t)
 	nested := filepath.Join(root, "2026", "05", "01")
@@ -108,7 +108,7 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	if err := os.WriteFile(path, []byte(first), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
-	if _, err := importWithAdapter(db, testInput(t, db, SourceCodex), root, codex.NewAdapter(ResolveRepoPath), "2026-03-28T15:00:00Z"); err != nil {
+	if _, err := importCodexGroups(db, testInput(t, db, SourceCodex), root, codex.NewAdapter(ResolveRepoPath), "2026-03-28T15:00:00Z", false); err != nil {
 		t.Fatalf("first import failed: %v", err)
 	}
 
@@ -117,7 +117,7 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	if err := os.WriteFile(path, []byte(second), 0o644); err != nil {
 		t.Fatalf("WriteFile failed: %v", err)
 	}
-	result, err := importWithAdapter(db, testInput(t, db, SourceCodex), root, codex.NewAdapter(ResolveRepoPath), "2026-03-28T15:00:00Z")
+	result, err := importCodexGroups(db, testInput(t, db, SourceCodex), root, codex.NewAdapter(ResolveRepoPath), "2026-03-28T15:00:00Z", false)
 	if err != nil {
 		t.Fatalf("second import failed: %v", err)
 	}
@@ -126,7 +126,7 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 	}
 
 	// Pin the UUIDs, not just the count: they are derived from path + line
-	// number, so a regression in prefix-replay line counting would silently
+	// number, so a regression in snapshot line counting would silently
 	// shift them (or collide with already-imported rows).
 	rows, err := db.db.Query("SELECT uuid FROM messages WHERE source='codex' AND session_id='codex-incremental' ORDER BY timestamp")
 	if err != nil {
