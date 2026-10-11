@@ -255,7 +255,7 @@ func prepareMigration(from, destination string) (*DB, string, bool, error) {
 			return nil, "", false, err
 		}
 	}
-	target, err := sql.Open("sqlite", destination)
+	target, err := sql.Open("sqlite", (&url.URL{Scheme: "file", Path: destination}).String())
 	if err != nil {
 		return nil, "", false, err
 	}

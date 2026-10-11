@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"net/url"
 	"os"
-	"strings"
+	"path/filepath"
 	"time"
 
 	"modernc.org/sqlite"
@@ -56,7 +56,6 @@ func openDatabase(path string, readOnly bool) (*DB, error) {
 		if _, err := os.Stat(path); err != nil {
 			return nil, err
 		}
-		dsn = (&url.URL{Scheme: "file", Path: path, RawQuery: "mode=ro"}).String()
 	} else if path != ":memory:" && path != "" {
 		file, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 		if err != nil && !os.IsExist(err) {
@@ -68,12 +67,26 @@ func openDatabase(path string, readOnly bool) (*DB, error) {
 			}
 		}
 	}
-	// Apply foreign keys to replacement connections as well as the first one.
-	separator := "?"
-	if strings.Contains(dsn, "?") {
-		separator = "&"
+	// Encode filesystem paths separately from SQLite connection options.
+	// Preserve the existing empty and in-memory DSNs.
+	query := url.Values{"_pragma": {"foreign_keys(1)"}}
+	if path != ":memory:" && path != "" {
+		absolute := path
+		if !filepath.IsAbs(path) {
+			cwd, err := os.Getwd()
+			if err != nil {
+				return nil, err
+			}
+			// Do not clean symlink/.. components before SQLite resolves the path.
+			absolute = cwd + string(filepath.Separator) + path
+		}
+		if readOnly {
+			query.Set("mode", "ro")
+		}
+		dsn = (&url.URL{Scheme: "file", Path: absolute, RawQuery: query.Encode()}).String()
+	} else {
+		dsn += "?" + query.Encode()
 	}
-	dsn += separator + "_pragma=foreign_keys%281%29"
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
 		return nil, err

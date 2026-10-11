@@ -51,7 +51,7 @@
 
   共通の書込み排他を移行先 DB の変更と元ログの走査・読取より前から migrate の終了まで保持する。同一 snapshot・移行先への再実行でも実プロセスの後発を拒否し、本文読取後の追記に対する後発 import 相当の lock 取得と migrate の busy、解放後の import による新本文・cursor（サイズ・offset・hash）の反映を回帰テストで確認した。元 snapshot の bytes・sidecar 不変と、再実行時のコピー非重複も維持する。
 
-- [ ] 特殊文字を含む DB パスで指定先と権限を守る
+- [x] 特殊文字を含む DB パスで指定先と権限を守る
 
   DB 名に `?` を含むと未 escape の DSN が別ファイルを選び、明示した 0600 作成や移行先の identity 検査を迂回する。対応方針は、DB パスを SQLite の file URI に標準の URL エンコードで組み込み、ファイル名の文字を接続オプションとして解釈させない方式で確定する。`internal/core/db.go` と `internal/core/migrate_snapshot.go` の接続文字列生成を整合させ、import・読取・移行が同じ指定ファイルを扱い、新規 DB の 0600 権限を維持することを確認する。
 
