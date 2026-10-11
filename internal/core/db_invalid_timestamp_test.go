@@ -53,7 +53,7 @@ func TestInvalidSavedTimestampsRemainReadable(t *testing.T) {
 	must(t, err)
 	invalid, err := db.GetSession(testInput(t, db, SourceClaudeCode), SourceClaudeCode, "invalid")
 	must(t, err)
-	hits, err := db.SearchOccurrences(invalid.REF, SessionFilter{}, matcher, false, SearchCandidates{})
+	hits, err := db.SearchOccurrences(requireResolution(t, db, invalid.REF), SessionFilter{}, matcher, false, SearchCandidates{})
 	must(t, err)
 	if len(hits) != 3 || hits[0].Timestamp == nil || *hits[0].Timestamp != "bad-message" {
 		t.Fatalf("unfiltered occurrences = %+v", hits)
@@ -73,7 +73,7 @@ func TestInvalidSavedTimestampsRemainReadable(t *testing.T) {
 		if !reflect.DeepEqual(projects, []ProjectRow{{RepoPath: "/valid", SessionCount: 1}}) {
 			t.Fatalf("filter %+v projects = %+v", filter, projects)
 		}
-		hits, err = db.SearchOccurrences(invalid.REF, filter, matcher, false, SearchCandidates{})
+		hits, err = db.SearchOccurrences(requireResolution(t, db, invalid.REF), filter, matcher, false, SearchCandidates{})
 		must(t, err)
 		expected := 0
 		if filter.Since == "" {

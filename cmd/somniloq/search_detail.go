@@ -48,12 +48,12 @@ func searchDetailCmd(fs *flag.FlagSet, f searchFlags, openDB func() (*core.DB, e
 	var items []core.SearchOccurrence
 	code := 0
 	err = db.ReadSnapshot(func(snapshot *core.DB) error {
-		if c, e := resolveSessionREF(snapshot, *f.session, errOut); c != 0 {
+		resolved, c, e := resolveSessionREF(snapshot, *f.session, errOut)
+		if c != 0 {
 			code = c
 			return e
 		}
-		var e error
-		items, e = snapshot.SearchOccurrences(*f.session, filter, matcher, *f.all, candidates)
+		items, e = snapshot.SearchOccurrences(resolved, filter, matcher, *f.all, candidates)
 		return e
 	})
 	if code != 0 {

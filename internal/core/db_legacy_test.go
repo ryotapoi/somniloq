@@ -54,12 +54,12 @@ func TestLegacyHistoryReadAndCoexistence(t *testing.T) {
 	}
 	matcher, err := CompilePatterns([]string{"legacy"}, false)
 	must(t, err)
-	results, err := db.SearchOccurrences(ref, SessionFilter{}, matcher, false, SearchCandidates{})
+	results, err := db.SearchOccurrences(requireResolution(t, db, ref), SessionFilter{}, matcher, false, SearchCandidates{})
 	must(t, err)
 	if len(results) != 1 || results[0].REF != ref {
 		t.Fatalf("search %+v", results)
 	}
-	results, err = db.SearchOccurrences(ref, SessionFilter{Since: "2020-01-01T00:00:00Z"}, matcher, false, SearchCandidates{})
+	results, err = db.SearchOccurrences(requireResolution(t, db, ref), SessionFilter{Since: "2020-01-01T00:00:00Z"}, matcher, false, SearchCandidates{})
 	must(t, err)
 	if len(results) != 0 {
 		t.Fatalf("unknown timestamp matched %+v", results)

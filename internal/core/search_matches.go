@@ -87,15 +87,9 @@ type SearchOccurrence struct {
 }
 
 // SearchOccurrences reads one selected conversation and confirmed descendants.
-// Callers use ReadSnapshot to keep resolution, filters and bodies consistent.
-func (d *DB) SearchOccurrences(ref string, filter SessionFilter, matcher *PatternMatcher, all bool, candidates SearchCandidates) ([]SearchOccurrence, error) {
-	scope, err := d.ResolveSession(ref)
-	if err != nil {
-		return nil, err
-	}
-	if scope == nil {
-		return nil, fmt.Errorf("session not found: %s", ref)
-	}
+// Resolve scope inside the same ReadSnapshot callback so relations, filters and
+// bodies use one saved database state. The scope must include descendants.
+func (d *DB) SearchOccurrences(scope *SessionResolution, filter SessionFilter, matcher *PatternMatcher, all bool, candidates SearchCandidates) ([]SearchOccurrence, error) {
 	owners, err := d.searchOwners()
 	if err != nil {
 		return nil, err

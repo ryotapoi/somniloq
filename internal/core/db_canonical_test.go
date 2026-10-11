@@ -53,7 +53,7 @@ func TestCanonicalStorageParentAndBodyBoundary(t *testing.T) {
 	}
 	matcher, err := CompilePatterns([]string{"inherited"}, false)
 	must(t, err)
-	search, err := db.SearchOccurrences(readChild().REF, SessionFilter{}, matcher, false, SearchCandidates{})
+	search, err := db.SearchOccurrences(requireResolution(t, db, readChild().REF), SessionFilter{}, matcher, false, SearchCandidates{})
 	must(t, err)
 	if len(search) != 0 {
 		t.Fatalf("context matched search: %+v", search)

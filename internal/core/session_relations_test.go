@@ -66,14 +66,14 @@ func TestResolutionCodexParentArrivalAndScope(t *testing.T) {
 	}
 	matcher, err := CompilePatterns([]string{"Inherited question"}, false)
 	must(t, err)
-	hits, err := db.SearchOccurrences(child, SessionFilter{}, matcher, false, SearchCandidates{})
+	hits, err := db.SearchOccurrences(requireResolution(t, db, child), SessionFilter{}, matcher, false, SearchCandidates{})
 	must(t, err)
 	if len(hits) != 0 {
 		t.Fatalf("ancestor/context hit: %+v", hits)
 	}
 	matcher, err = CompilePatterns([]string{"answer"}, false)
 	must(t, err)
-	hits, err = db.SearchOccurrences(child, SessionFilter{}, matcher, false, SearchCandidates{})
+	hits, err = db.SearchOccurrences(requireResolution(t, db, child), SessionFilter{}, matcher, false, SearchCandidates{})
 	must(t, err)
 	if len(hits) < 2 || hits[0].REF != child || hits[1].REF != grand {
 		t.Fatalf("scope order: %+v", hits)
