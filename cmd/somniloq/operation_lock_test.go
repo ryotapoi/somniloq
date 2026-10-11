@@ -29,16 +29,23 @@ func TestImportLockProcessHelper(t *testing.T) {
 		}
 		return openDB(path)
 	}
-	code, err := importConfiguredCmd(nil, open, config{DB: path}, strings.NewReader(""), io.Discard, io.Discard, false)
+	var args []string
+	if os.Getenv("SOMNILOQ_IMPORT_LOCK_CODEX_FULL") == "1" {
+		args = []string{"--source", "codex", "--full", "--yes"}
+	}
+	code, err := importConfiguredCmd(args, open, config{DB: path}, strings.NewReader(""), io.Discard, io.Discard, false)
 	if code != 0 || err != nil {
 		t.Fatalf("import: %d %v", code, err)
 	}
 }
 
-func startImportLockProcess(t *testing.T, path string) (*exec.Cmd, io.WriteCloser) {
+func startImportLockProcess(t *testing.T, path string, codexFull bool) (*exec.Cmd, io.WriteCloser) {
 	t.Helper()
 	cmd := exec.Command(os.Args[0], "-test.run=^TestImportLockProcessHelper$")
 	cmd.Env = append(os.Environ(), "SOMNILOQ_IMPORT_LOCK_DB="+path)
+	if codexFull {
+		cmd.Env = append(cmd.Env, "SOMNILOQ_IMPORT_LOCK_CODEX_FULL=1")
+	}
 	stdin, err := cmd.StdinPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -80,15 +87,21 @@ func startImportLockProcess(t *testing.T, path string) (*exec.Cmd, io.WriteClose
 
 func TestImportOperationLockBeforeOpenAcrossProcesses(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "new", "history.db")
-	cmd, release := startImportLockProcess(t, path)
+	cmd, release := startImportLockProcess(t, path, true)
 	if _, err := os.Stat(path); !os.IsNotExist(err) {
 		t.Fatalf("DB already touched: %v", err)
 	}
-	for _, args := range [][]string{nil, {"--source", "codex"}, {"--source", "cursor-agent", "--full", "--yes"}, {"--source", "claude-code", "--full", "--yes"}} {
-		opened := false
-		code, err := importConfiguredCmd(args, func() (*core.DB, error) { opened = true; return nil, errors.New("must not open") }, config{DB: path}, strings.NewReader(""), io.Discard, io.Discard, false)
-		if code != 1 || !errors.Is(err, core.ErrOperationBusy) || opened {
-			t.Fatalf("args=%v code=%d err=%v opened=%v", args, code, err, opened)
+	for _, source := range core.ImportSourceChoices() {
+		for _, full := range []bool{false, true} {
+			args := []string{"--source", source}
+			if full {
+				args = append(args, "--full", "--yes")
+			}
+			opened := false
+			code, err := importConfiguredCmd(args, func() (*core.DB, error) { opened = true; return nil, errors.New("must not open") }, config{DB: path}, strings.NewReader(""), io.Discard, io.Discard, false)
+			if code != 1 || !errors.Is(err, core.ErrOperationBusy) || opened {
+				t.Fatalf("args=%v code=%d err=%v opened=%v", args, code, err, opened)
+			}
 		}
 	}
 	code, err := migrateCmd([]string{"--from", filepath.Join(t.TempDir(), "missing")}, config{DB: path}, io.Discard, io.Discard)
@@ -109,7 +122,7 @@ func TestImportOperationLockBeforeOpenAcrossProcesses(t *testing.T) {
 	if code != 0 || err != nil {
 		t.Fatalf("after success: %d %v", code, err)
 	}
-	cmd, _ = startImportLockProcess(t, path)
+	cmd, _ = startImportLockProcess(t, path, false)
 	if err := cmd.Process.Kill(); err != nil {
 		t.Fatal(err)
 	}

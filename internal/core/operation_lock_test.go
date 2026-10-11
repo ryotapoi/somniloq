@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
+	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
 
 func TestMigrationLockProcessHelper(t *testing.T) {
@@ -164,5 +165,86 @@ func TestClaudeFullOperationLockPreservesLaterAppend(t *testing.T) {
 	must(t, db.db.QueryRow(`SELECT imported_at FROM sessions WHERE input_id=?`, id).Scan(&at))
 	if at != state.ImportedAt || strings.TrimSpace(at) == "" || at == "2026-01-01T00:00:02Z" {
 		t.Fatalf("metadata time %q cursor %+v", at, state)
+	}
+}
+
+func TestCodexFullOperationLockPreservesLaterRollout(t *testing.T) {
+	dir, err := CanonicalPath(t.TempDir(), "")
+	must(t, err)
+	root := filepath.Join(dir, "input")
+	must(t, os.MkdirAll(root, 0700))
+	rollout := func(id, body string) string {
+		return `{"type":"session_meta","payload":{"id":"` + id + `","cwd":"/test"}}` + "\n" +
+			`{"timestamp":"2026-01-01T00:00:01Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"` + body + `"}]}}` + "\n"
+	}
+	must(t, os.WriteFile(filepath.Join(root, "rollout-original.jsonl"), []byte(rollout("original", "original")), 0600))
+	destination := filepath.Join(dir, "history.db")
+	lock, err := LockOperation(destination)
+	must(t, err)
+	defer lock.Close()
+	db, err := OpenDB(destination)
+	must(t, err)
+	defer db.Close()
+	input := Input{Source: SourceCodex, Root: root}
+	id, err := db.EnsureInput(input)
+	must(t, err)
+	ready, release := make(chan struct{}), make(chan struct{})
+	var resume sync.Once
+	defer resume.Do(func() { close(release) })
+	done := make(chan error, 1)
+	go func() {
+		// Repository resolution occurs during body loading, after the full file list and owner index.
+		result, err := importCodexGroups(db, id, root, codex.NewAdapter(func(string) string { close(ready); <-release; return "" }), "2026-01-01T00:00:02Z", true)
+		if err == nil && (result.FilesScanned != 1 || result.FilesImported != 1 || len(result.Errors) > 0) {
+			err = fmt.Errorf("full import: %+v", result)
+		}
+		done <- err
+	}()
+	select {
+	case <-ready:
+	case <-time.After(10 * time.Second):
+		t.Fatal("full did not reach body loading after scan")
+	}
+	path := filepath.Join(root, "rollout-later.jsonl")
+	later := rollout("later", "later")
+	must(t, os.WriteFile(path, []byte(later), 0600))
+	if _, err := LockOperation(destination); !errors.Is(err, ErrOperationBusy) {
+		t.Fatalf("later import: %v", err)
+	}
+	resume.Do(func() { close(release) })
+	must(t, <-done)
+	state, err := db.GetImportState(id, path)
+	must(t, err)
+	if state != nil {
+		t.Fatalf("full imported rollout outside its scan: %+v", state)
+	}
+	must(t, lock.Close())
+	lock, err = LockOperation(destination)
+	must(t, err)
+	defer lock.Close()
+	result, err := Import(db, ImportOptions{Inputs: []Input{input}, Source: ImportSourceCodex})
+	must(t, err)
+	if result.FilesImported != 1 || result.FilesSkipped != 1 || len(result.Errors) > 0 {
+		t.Fatalf("later import: %+v", result)
+	}
+	rows, err := db.db.Query(`SELECT content FROM messages ORDER BY content`)
+	must(t, err)
+	var bodies []string
+	for rows.Next() {
+		var body string
+		must(t, rows.Scan(&body))
+		bodies = append(bodies, body)
+	}
+	must(t, rows.Err())
+	must(t, rows.Close())
+	if !reflect.DeepEqual(bodies, []string{"later", "original"}) {
+		t.Fatalf("bodies: %v", bodies)
+	}
+	state, err = db.GetImportState(id, path)
+	must(t, err)
+	hash, err := codex.HashFile(path, make([]byte, 4096))
+	must(t, err)
+	if state == nil || state.FileSize != int64(len(later)) || state.LastOffset != int64(len(later)) || state.ContentHash != hash {
+		t.Fatalf("cursor: %+v", state)
 	}
 }

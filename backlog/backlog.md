@@ -43,9 +43,9 @@
 
   DB の canonical path に対応する `.lock` sidecar の OS 排他を、通常・full・source を問わず import の DB open 前と migrate の移行元検査前に取得し、終了まで保持する。後発は待機せず終了1。実プロセス間の競合拒否、別 DB、正常終了・open 失敗・強制終了後の再取得、canonical alias、および Claude full の読取中の後発拒否と解放後の本文・metadata・cursor の追記反映を回帰テストで確認した。
 
-- [ ] Codex の古い full 走査結果による削除を防ぐ
+- [x] Codex の古い full 走査結果による削除を防ぐ
 
-  full の走査後に別 import が新しい rollout を保存すると、古い走査結果がその本文と cursor を削除する。対応方針は、前項の Claude と次項の migrate に共通の書込み排他で確定する。Codex のファイル一覧取得より前から排他を保持し、後発 import・migrate が通常・full や source の違いにかかわらず待機せず非成功終了することで、この競合を防ぐことを確認する。Codex 専用の並行 import 許容方式は追加しない。
+  共通の書込み排他で Codex full のファイル一覧取得前から終了まで保護する。実プロセスの先発 Codex full に対し、全 source の通常・full import と migrate が DB open 前に busy・終了1となることを確認した。一覧確定後に新 rollout を追加し、後発の拒否、full 完了・解放後の再 import による新 rollout の本文と cursor（サイズ・offset・hash）の保存を回帰テストで確認した。
 
 - [ ] 古い移行 snapshot による上書きを防ぐ
 
