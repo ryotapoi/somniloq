@@ -21,7 +21,7 @@ Notes:
   Full REF values are required. Selectors are expanded in input order and duplicates removed.
   --descendants includes confirmed descendants in parent-first order.
   Filter original messages by role, inclusive number range A:B (A: and :B allowed), and their own timestamp.
-  Dates use the local day boundary; --until dates include that day. Datetimes require RFC3339 with timezone.
+  Dates use the local day boundary; --until dates include that day. Datetimes require RFC3339 with timezone (offset hours 00-23, minutes 00-59).
   Page after filtering, then --one-line keeps text before the first LF; blocks stay original.
   --tail selects the final N messages and cannot be combined with explicit --limit or --offset.
 Examples:
@@ -277,9 +277,24 @@ func parseShowTime(value string, upper bool, boundary dayBoundary, loc *time.Loc
 		}
 		return boundary.onDate(date, offset, loc), nil
 	}
-	t, err := time.Parse(time.RFC3339Nano, value)
+	t, err := parseRFC3339Time(value)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("invalid show datetime %q: require date or RFC3339 with timezone", value)
+	}
+	return t, nil
+}
+func parseRFC3339Time(value string) (time.Time, error) {
+	t, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}, err
+	}
+	// time.Parse normalizes offset hours of 24 and minutes of 60.
+	// Inspect the original offset only after its syntax has been parsed.
+	if !strings.HasSuffix(value, "Z") {
+		offset := value[len(value)-6:]
+		if offset[1:3] >= "24" || offset[4:6] >= "60" {
+			return time.Time{}, fmt.Errorf("invalid RFC3339 offset %q", offset)
+		}
 	}
 	return t, nil
 }

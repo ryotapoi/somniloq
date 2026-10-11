@@ -69,9 +69,9 @@
 
   `cmd/somniloq/config_init.go` のコマンド検証で相対指定と親 symlink を解決し、DB 先が設定自身またはその親ディレクトリ（祖先を含む）になる指定を生成前に終了2で拒否する。未存在の設定親も生成しないこと、類似 prefix の別パスを受理すること、正常指定では読込可能な設定だけを生成して DB を作成しないことを回帰テストで確認した。help と README 両言語も同期した。
 
-- [ ] search と show の不正な日時 offset を拒否する
+- [x] search と show の不正な日時 offset を拒否する
 
-  search・show の日時引数が無効な RFC3339 offset を受理し、正規化した別の境界で結果を選ぶ。対応方針は、不正な日時入力を補正して受理せず、引数検証で拒否する方式で確定する。`--since`・`--until` と search の `--imported-since` で無効入力を拒否し、projects と整合した境界検証と正常日時の選択結果を確認する。
+  `--since`・`--until` と search の `--imported-since` で原文の RFC3339 offset を検査し、時24・分60を補正受理せず DB open 前の引数エラー終了2で拒否する。projects と同じ境界、正常 offset・小数秒・等価 instant の選択と下限包含・日時上限排他を回帰テストで確認した。help と README 両言語も同期した。
 
 - [ ] projects に表示した full-path alias で検索できるようにする
 

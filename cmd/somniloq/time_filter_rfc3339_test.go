@@ -179,3 +179,65 @@ func timeFilterHasResults(t *testing.T, command string, out *bytes.Buffer) bool 
 	}
 	return metadata.Total > 0
 }
+
+func TestRFC3339OffsetValidation(t *testing.T) {
+	for _, offset := range []string{"Z", "+00:00", "-05:00", "+23:59", "-23:59", "+24:00", "-24:00", "+09:60", "-09:60"} {
+		for _, seconds := range []string{"37", "37.123"} {
+			value := "2026-03-28T10:00:" + seconds + offset
+			t.Run(value, func(t *testing.T) {
+				wantError := strings.Contains(offset, "24:") || strings.HasSuffix(offset, ":60")
+				_, err := parseShowTime(value, false, dayBoundary{}, time.UTC)
+				if (err != nil) != wantError {
+					t.Fatalf("parseShowTime(%q): %v, wantError=%v", value, err, wantError)
+				}
+				_, flags := newSearchFlagSet()
+				*flags.importedSince = value
+				_, err = searchCandidateFilter(flags, config{})
+				if (err != nil) != wantError {
+					t.Fatalf("imported-since %q: %v, wantError=%v", value, err, wantError)
+				}
+			})
+		}
+	}
+}
+
+func TestRFC3339ShowAndImportedSinceBoundaries(t *testing.T) {
+	for _, value := range []string{rfc3339UTC, rfc3339Offset, "2026-03-28T05:00:37.123-05:00", "2026-03-29T09:59:37.123+23:59", "2026-03-27T10:01:37.123-23:59", laterUTC} {
+		t.Run(value, func(t *testing.T) {
+			for _, flag := range []string{"--since", "--until", "--imported-since"} {
+				var out, diag bytes.Buffer
+				db := newRFC3339FilterDB(t, rfc3339UTC)
+				t.Cleanup(func() { db.Close() })
+				args := []string{flag, value}
+				var code int
+				var err error
+				wantResult := value != laterUTC
+				if flag == "--imported-since" {
+					code, err = searchCmd(args, staticDB(db), config{}, &out, &diag)
+				} else {
+					args = append(args, fixtureREF(core.SourceClaudeCode, "rfc3339-session"), "--format", "json")
+					code, err = showCmd(args, staticDB(db), config{}, &out, &diag)
+					if flag == "--until" {
+						wantResult = !wantResult
+					}
+				}
+				if code != 0 || err != nil {
+					t.Fatalf("%s: %d %v %s", flag, code, err, diag.String())
+				}
+				hasResult := false
+				if flag == "--imported-since" {
+					hasResult = timeFilterHasResults(t, "search", &out)
+				} else {
+					var page showJSON
+					if err := json.Unmarshal(out.Bytes(), &page); err != nil {
+						t.Fatal(err)
+					}
+					hasResult = page.Total > 0
+				}
+				if hasResult != wantResult {
+					t.Fatalf("%s: hasResult=%v want=%v: %s", flag, hasResult, wantResult, out.String())
+				}
+			}
+		})
+	}
+}

@@ -49,7 +49,7 @@ Codex の取り込みは rollout の本人会話と継承文脈を区別する�
 
 フラグ・出力形式は `somniloq <command> --help` を参照。`projects`、`search`、`show` は `--format tsv|json` に対応する。show と search の JSON は envelope、projects は配列。session なし search は本文抜粋を含まないまとまり一覧。Claude Code の子・孫は root と sessionId を共有しても独立した本人 REF で取り込み・検索・閲覧でき、本人 sidechain の原文も保持する。直接親は同一物理ファイルの Agent/Task call と構造化結果を厳密に照合し、path の root 所属とは区別する。走査・初期読み取りが不完全な入力は前回保存の本文・関係・cursor を保持する。その後の Codex の失敗では対象会話を保持し、他入力の取り込みを続ける。`--full` の失敗時は対象入力を変更しない。`search --session REF PATTERN` は共通 resolver で指定本人と確定子孫だけを検索し、祖先・兄弟・root 所属だけの子を含めない。Go regexp の全一致箇所を返す。複数 -e、全 pattern を固定文字列にする -F、本文集合全体の --all AND を指定できる。
 
-複数の完全 REF を一回の呼び出しで渡し、指定日の実発言だけを Daily Note の材料として取得できます。REF の指定順・各会話の元の発言番号順を保ち、`--descendants` は確定子孫だけを展開して重複会話を除きます。role・発言番号・日時で絞った後に、発言単位で limit / offset / tail を適用します。`--one-line` は text だけを最初の一行へ短縮し、blocks は原文を保ちます。既定 TSV、JSON は `{items,total,count,limit,offset,hasMore,nextOffset}` envelope です。show の日時は日付または zone 付き RFC3339 で指定し、相対時刻は受理しません。旧 outline・summary・turn・表示除外・Markdown・REF なし期間入口は廃止しました。一覧は REF と metadata を返し、本文抜粋・turn を含みません。詳細 search の messageNumber は show と同じ原文番号です。詳細は [現行仕様](docs/cli-contract.md) を参照してください。
+複数の完全 REF を一回の呼び出しで渡し、指定日の実発言だけを Daily Note の材料として取得できます。REF の指定順・各会話の元の発言番号順を保ち、`--descendants` は確定子孫だけを展開して重複会話を除きます。role・発言番号・日時で絞った後に、発言単位で limit / offset / tail を適用します。`--one-line` は text だけを最初の一行へ短縮し、blocks は原文を保ちます。既定 TSV、JSON は `{items,total,count,limit,offset,hasMore,nextOffset}` envelope です。show の日時は日付または zone 付き RFC3339 で指定し、相対時刻と時00〜23・分00〜59の範囲外の offset は受理しません。旧 outline・summary・turn・表示除外・Markdown・REF なし期間入口は廃止しました。一覧は REF と metadata を返し、本文抜粋・turn を含みません。詳細 search の messageNumber は show と同じ原文番号です。詳細は [現行仕様](docs/cli-contract.md) を参照してください。
 
 ```sh
 # REF1 / REF2 は search からコピーした完全 REF
@@ -60,7 +60,7 @@ somniloq show --config default REF --messages 12:18 --limit 50 --format json
 
 一覧の JSON は `{items,total,count,limit,offset,hasMore,nextOffset}`、既定全件（limit=null）です。明示 `--limit N` だけが上限となり、`--offset` のみでは整列済み結果の残り全件を返します。pattern 省略で一覧、複数 -e は OR、--all は候補本文集合で AND、-F は固定文字列。input/source は繰り返しの OR、条件種間は AND。project は末尾名の大小文字区別 substring と完全一致 alias 展開です。members は全まとまり、matchedMembers は候補本人。root metadata を子で補完せず、全 members の本人原文日時で last 降順・未知最後・group key 順に整列します。limit=0 と末尾超過も total を返します。
 
-search の日時は日付または zone 付き RFC3339。日付は dayBoundary（CLI で上書き可）が起点で、until 日付は指定日全体を含み、日時の上限は排他です。--time-mode は active（既定）/started/last/overlap、明示時は期間必須。active は期間内候補本文で照合し、pattern なしでも実発言が必要です。他 mode は全 members の開始/最後・重なる期間でまとまりを選び、候補全文を照合します。--imported-since RFC3339 は候補本人の取り込み下限で、除外された親本文を AND に使いません。詳細は active のみです。相対時刻・zone なし日時・空値は拒否します。
+search の日時は日付または zone 付き RFC3339。日付は dayBoundary（CLI で上書き可）が起点で、until 日付は指定日全体を含み、日時の上限は排他です。--time-mode は active（既定）/started/last/overlap、明示時は期間必須。active は期間内候補本文で照合し、pattern なしでも実発言が必要です。他 mode は全 members の開始/最後・重なる期間でまとまりを選び、候補全文を照合します。--imported-since RFC3339 は候補本人の取り込み下限で、除外された親本文を AND に使いません。詳細は active のみです。相対時刻・zone なし日時・空値・時00〜23または分00〜59の範囲外の offset は拒否します。
 
 次は条件に合う全まとまりから REF を選ぶ例です（既定は全件取得）。明示 limit で件数を制限する場合は、hasMore/nextOffset を見て続きのページを取得します。
 

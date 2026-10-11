@@ -44,6 +44,7 @@ Time filters:
   started/last select whole-group first/last times; overlap selects groups spanning the period.
   Other modes match candidate full bodies, including unknown timestamps.
   --imported-since accepts RFC3339 with timezone and selects candidate owners before matching.
+  RFC3339 offset hours must be 00-23 and minutes 00-59.
   Detail accepts active only and applies the period to actual messages.
   Display dates and ordering always use all group members' original body timestamps.
 
@@ -90,7 +91,7 @@ func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 func searchCandidateFilter(f searchFlags, cfg config) (core.SearchCandidates, error) {
 	c := core.SearchCandidates{Projects: cfg.expandProject(*f.project)}
 	if *f.importedSince != "" {
-		t, err := time.Parse(time.RFC3339Nano, *f.importedSince)
+		t, err := parseRFC3339Time(*f.importedSince)
 		if err != nil {
 			return c, fmt.Errorf("invalid --imported-since: require RFC3339 with timezone")
 		}
