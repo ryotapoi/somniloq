@@ -55,7 +55,7 @@ func TestImportConfiguredCmdRetainsSummaryAndEarlierDiagnosticOnFatalError(t *te
 		}
 	}
 	var out, errOut bytes.Buffer
-	code, err := importConfiguredCmd(nil, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceCodex, Root: root}}}, strings.NewReader(""), &out, &errOut, false)
+	code, err := importConfiguredCmd(nil, staticDB(db), config{DB: filepath.Join(t.TempDir(), "test.db"), Inputs: []core.Input{{Source: core.SourceCodex, Root: root}}}, strings.NewReader(""), &out, &errOut, false)
 	if code != 1 || err == nil || !strings.Contains(err.Error(), "d: begin: sql: database is closed") {
 		t.Fatalf("exit=%d err=%v", code, err)
 	}

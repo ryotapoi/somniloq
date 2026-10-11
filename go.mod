@@ -5,6 +5,7 @@ go 1.27.1
 require (
 	github.com/mattn/go-isatty v0.0.16
 	github.com/pelletier/go-toml/v2 v2.2.4
+	golang.org/x/sys v0.16.0
 	modernc.org/sqlite v1.29.0
 )
 
@@ -14,7 +15,6 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
-	golang.org/x/sys v0.16.0 // indirect
 	modernc.org/gc/v3 v3.0.0-20240107210532-573471604cb6 // indirect
 	modernc.org/libc v1.41.0 // indirect
 	modernc.org/mathutil v1.6.0 // indirect

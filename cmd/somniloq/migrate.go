@@ -26,6 +26,7 @@ func newMigrateFlagSet() (*flag.FlagSet, *string) {
 func migrateCmd(args []string, cfg config, out, errOut io.Writer) (int, error) {
 	fs, from := newMigrateFlagSet()
 	setUsage(fs, "Migrate a legacy snapshot without changing it", "somniloq migrate [--config NAME_OR_PATH] --from PATH", `The configured database must be new, empty, or a completed copy of the same snapshot.
+Another import or migration on the same DB is rejected immediately with exit 1, before DB open or input reads.
 All configured Codex inputs are processed; missing logs and other sources retain their saved history.
 Output is one JSON summary. Successfully parsed owners replace same-ID Codex history, including empty bodies.
 History with other IDs is retained even when physical lines match; other sources are retained.

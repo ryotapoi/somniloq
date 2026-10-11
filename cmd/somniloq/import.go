@@ -20,6 +20,7 @@ const importHelpDetails = `Output:
   unparsed lines: broken JSON or malformed payload lines. Deliberately ignored record types are not counted.
   On failure after scanning starts, the partial summary is printed; only committed files count as imported.
   Import failure reasons are printed to stderr and the exit code is 1.
+  Another import or migration on the same DB is rejected immediately, before DB open or input reads.
   Parse/normalization diagnostics: up to five file:line: error entries are printed to stderr.
   Codex records with a boundary but no ordinal are retained as unresolved, without a body number.
 
@@ -104,6 +105,12 @@ func importConfiguredCmd(args []string, openDB func() (*core.DB, error), cfg con
 			return 0, nil
 		}
 	}
+
+	lock, err := core.LockOperation(cfg.DB)
+	if err != nil {
+		return 1, err
+	}
+	defer lock.Close()
 
 	db, err := openDB()
 	if err != nil {

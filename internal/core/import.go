@@ -67,6 +67,8 @@ var importSourceSpecs = []importSourceSpec{
 	},
 }
 
+// Import uses an already opened DB. Operation callers must hold LockOperation
+// from before opening it until all import work has finished.
 func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 	source := opts.Source
 	if source == "" {

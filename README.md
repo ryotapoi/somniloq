@@ -39,6 +39,8 @@ Every database command uses `default` when `--config NAME_OR_PATH` is omitted. A
 
 `import` is incremental. Input selections are ORed, then intersected with `--source`. **`--full` rebuilds only the selected inputs' conversations and import state**, retaining other inputs. Check that the selected inputs' original logs are available. It asks for confirmation; `--yes` skips the prompt and is required in noninteractive environments.
 
+Import and migration share a nonblocking lock for the configured database, regardless of source or `--full`. A concurrent operation exits 1 with “another import or migration is running for this database” before opening the DB or reading logs. Other databases remain independent. The `<db>.lock` sidecar remains in place; do not delete it. The lock is released when the operation finishes or its process exits.
+
 When import fails after scanning starts, stdout retains the partial summary with committed files counted as imported. Failure reasons go to stderr and the command exits 1.
 
 Codex import keeps each conversation's own messages separate from inherited context. The first valid session metadata identifies the conversation; an explicit parent ID is retained even if the parent arrives later. Text blocks, their source path and line, original timestamps (including unknown values), and one-based message numbers are stored. Multiple rollouts for the same conversation are ordered by relative path and physical line; incremental import rebuilds that order when earlier content changes. Use a child's full REF to read its own conversation. `show` returns original message numbers and text blocks.

@@ -44,6 +44,8 @@ migrate の後には同じ設定で `somniloq import --config archive` を正常
 
 ## 成功・失敗と出力
 
+同じ移行先 DB への import・migrate が実行中なら、DB open と移行元・入力の読取より前に待機せず拒否する。stderr に別の取込・移行が実行中である旨を表示し、stdout は空、終了1となる。
+
 正常な初回コピー後は独立した本人 group を最後まで処理し、一つの group の失敗で成功済み group を巻き戻さない。stdout は一つの JSON object、stderr は `migrate: error:` の診断（本文を含めない）。summary field は `snapshot_sha256`, `copy_performed`, `groups_replaced`, `groups_skipped`, `groups_failed`, `legacy_messages_removed`, `legacy_messages_retained`, `legacy_conversations_retained`, `legacy_retention_warnings`, `legacy_replacement_failures`。正常な本人本文0件 group も `groups_replaced` に数える。互換性のため残す `groups_skipped`, `legacy_retention_warnings`, `legacy_replacement_failures` は0。removed はその実行で実際に消した旧本文行数、retained は移行先に残る旧本文・旧会話数である。
 
 本人本文0件の正常結果でも、会話・文脈・関係・移行 cursor を保存し、保存済み本人本文を空結果へ置換する。継承文脈は通常の新規 import と同じく本人本文へ昇格させない。同じ snapshot の再実行ではコピーを繰り返さず、その解析結果を再確定する。

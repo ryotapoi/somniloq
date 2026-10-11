@@ -87,7 +87,7 @@ func TestImportConfiguredCmd_FullConfirmation(t *testing.T) {
 			writeSession("kept", "kept content")
 			dbPath := filepath.Join(dir, "somniloq.db")
 			open := func() (*core.DB, error) { return core.OpenDB(dbPath) }
-			cfg := config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: projectsDir}}}
+			cfg := config{DB: dbPath, Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: projectsDir}}}
 
 			var seedOut, seedErrOut bytes.Buffer
 			code, err := importConfiguredCmd([]string{"--source", "claude-code"}, open, cfg, strings.NewReader(""), &seedOut, &seedErrOut, false)
@@ -192,7 +192,7 @@ func TestImportConfiguredCmd_OutputIncludesUnparsedLines(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: dir}}}, strings.NewReader(""), &out, &errOut, false)
+	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{DB: filepath.Join(t.TempDir(), "test.db"), Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: dir}}}, strings.NewReader(""), &out, &errOut, false)
 	if err != nil {
 		t.Fatalf("importConfiguredCmd: %v", err)
 	}
@@ -230,7 +230,7 @@ func TestImportConfiguredCmd_ErrorStderrWriteFailure(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: projectsPath}}}, strings.NewReader(""), &out, failWriter{}, false)
+	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{DB: filepath.Join(t.TempDir(), "test.db"), Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: projectsPath}}}, strings.NewReader(""), &out, failWriter{}, false)
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
@@ -259,7 +259,7 @@ func TestImportConfiguredCmd_UnparsedStderrWriteFailure(t *testing.T) {
 	}
 
 	var out bytes.Buffer
-	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: dir}}}, strings.NewReader(""), &out, failWriter{}, false)
+	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{DB: filepath.Join(t.TempDir(), "test.db"), Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: dir}}}, strings.NewReader(""), &out, failWriter{}, false)
 	if code != 1 {
 		t.Errorf("exit code = %d, want 1", code)
 	}
@@ -289,7 +289,7 @@ func TestImportConfiguredCmd_CursorAgentRootWiring(t *testing.T) {
 	}
 
 	var out, errOut bytes.Buffer
-	code, err := importConfiguredCmd([]string{"--source", "cursor-agent"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceCursorAgent, Root: cursorRoot}}}, strings.NewReader(""), &out, &errOut, false)
+	code, err := importConfiguredCmd([]string{"--source", "cursor-agent"}, staticDB(db), config{DB: filepath.Join(t.TempDir(), "test.db"), Inputs: []core.Input{{Source: core.SourceCursorAgent, Root: cursorRoot}}}, strings.NewReader(""), &out, &errOut, false)
 	if err != nil || code != 0 {
 		t.Fatalf("importConfiguredCmd = %d, %v (stderr: %q)", code, err, errOut.String())
 	}
@@ -330,7 +330,7 @@ func TestImportConfiguredCmd_ScanErrorExitsNonZero(t *testing.T) {
 	t.Cleanup(func() { os.Chmod(badDir, 0o755) })
 
 	var out, errOut bytes.Buffer
-	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: dir}}}, strings.NewReader(""), &out, &errOut, false)
+	code, err := importConfiguredCmd([]string{"--source", "claude-code"}, staticDB(db), config{DB: filepath.Join(t.TempDir(), "test.db"), Inputs: []core.Input{{Source: core.SourceClaudeCode, Root: dir}}}, strings.NewReader(""), &out, &errOut, false)
 	if err != nil {
 		t.Fatalf("importConfiguredCmd: %v", err)
 	}

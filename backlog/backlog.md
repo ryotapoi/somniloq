@@ -39,9 +39,9 @@
 
   Cursor full を入力単位の transaction で削除・再保存し、走査・読取・保存・最終 commit が失敗した入力の旧本文・session・cursor を保持する。複数ファイルの後半失敗、同サイズ変更、欠落ログ、本文なしファイル、空入力、対象外入力、full 後の追記を回帰テストで確認した。
 
-- [ ] Claude の古い full snapshot による上書きを防ぐ
+- [x] Claude の古い full snapshot による上書きを防ぐ
 
-  full の読取後に並行 import が追記を確定すると、古い snapshot が新しい本文・metadata・cursor を上書きする。対応方針は、Codex の import と migrate にも共通の書込み排他で確定する。同じ DB への import・migrate は同時実行を許可せず、通常・full と source を問わず開始時から終了時まで排他し、後発は待機せず「別の取込・移行が実行中」として非成功終了する。DB のオープン（schema 検査・初期化）とファイル走査・読取より前に排他を取得し、正常終了・失敗・プロセス終了後に次の操作を実行できること、別 DB への操作は妨げないことを確認する。排他の具体方式は実装時に決める。
+  DB の canonical path に対応する `.lock` sidecar の OS 排他を、通常・full・source を問わず import の DB open 前と migrate の移行元検査前に取得し、終了まで保持する。後発は待機せず終了1。実プロセス間の競合拒否、別 DB、正常終了・open 失敗・強制終了後の再取得、canonical alias、および Claude full の読取中の後発拒否と解放後の本文・metadata・cursor の追記反映を回帰テストで確認した。
 
 - [ ] Codex の古い full 走査結果による削除を防ぐ
 

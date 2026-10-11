@@ -28,6 +28,12 @@ type MigrationResult struct {
 // Migrate copies a fixed legacy snapshot, then independently replaces parsed
 // Codex owner groups. A non-nil result means the initial copy is committed.
 func Migrate(from, destination string, inputs []Input) (*MigrationResult, error) {
+	lock, err := LockOperation(destination)
+	if err != nil {
+		return nil, err
+	}
+	defer lock.Close()
+
 	db, digest, copied, err := prepareMigration(from, destination)
 	if err != nil {
 		return nil, err

@@ -39,6 +39,8 @@ somniloq show --config default REF --messages 12:18 # 発言番号で読む
 
 `import` は差分取り込み。複数 input 条件は OR、source 条件とは交差する。**`--full` は選択入力の会話・差分状態だけを再構築し、他入力を保持する。** 対象入力の元ログが残っていることを確認して使う。確認プロンプトは `--yes` で省略でき、非対話環境では `--yes` が必須。
 
+import と migrate は通常・`--full` や source を問わず同じ DB の操作全体を排他する。後発は DB open・ログ読取より前に待機せず、stderr に `another import or migration is running for this database`（別の取込・移行が実行中）を表示して終了1となる。別 DB は独立して実行できる。`<db>.lock` sidecar は残るため削除しない。操作の終了・失敗・プロセス終了で排他は解放される。
+
 走査開始後に取り込みが失敗した場合も、stdout に途中集計を表示し、確定済みのファイルだけを取り込み成功として数える。失敗理由は stderr に表示し、終了コードは 1。
 
 Codex の取り込みは rollout の本人会話と継承文脈を区別する。最初の有効な session metadata で本人を固定し、明示された直接親 ID は親が後着しても保持する。text block、元 path・物理行、元の発言日時（未知を含む）、1 始まりの発言番号を保存する。同じ本人の複数 rollout は相対 path・物理行順に並べ、前方の内容が変われば差分取り込みでも順序を再構築する。子本人の完全 REF を指定すればその会話を読める。show は元の発言番号と原文 blocks を返します。
