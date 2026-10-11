@@ -1,6 +1,7 @@
 package core
 
 import (
+	"crypto/sha256"
 	"database/sql/driver"
 	"errors"
 	"fmt"
@@ -174,4 +175,93 @@ func TestMigrateRejectsDestructiveChangesAfterBodyRead(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMigrationRetryOperationLockPreservesLaterAppend(t *testing.T) {
+	f := setupMigrationFixture(t, readMigrationOracle(t), migrationOracleCase{Files: []string{"01-child.jsonl"}})
+	first, err := Migrate(f.from, f.destination, f.inputs)
+	must(t, err)
+	if !first.CopyPerformed || first.GroupsReplaced != 1 || first.GroupsFailed != 0 {
+		t.Fatalf("initial migration: %+v", first)
+	}
+	lock, err := LockOperation(f.destination)
+	must(t, err)
+	defer lock.Close()
+	db, digest, copied, err := prepareMigration(f.from, f.destination)
+	must(t, err)
+	defer db.Close()
+	if copied || digest != first.SnapshotSHA256 {
+		t.Fatalf("retry copied=%t digest=%s", copied, digest)
+	}
+	path := filepath.Join(f.root, "01-child.jsonl")
+	before, err := os.ReadFile(path)
+	must(t, err)
+	adapter := codex.NewMigrationAdapter(ResolveRepoPath)
+	files, errs := adapter.ScanFiles(f.root)
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	groups, errs := adapter.BuildMigrationIndex(f.root, files, "retry")
+	if len(errs) != 0 {
+		t.Fatal(errs)
+	}
+	readBody := false
+	// Use a separate adapter so index repository caching cannot bypass this
+	// boundary: buildGroups has read the complete file before resolving its repo.
+	bodyAdapter := codex.NewAdapter(func(cwd string) string {
+		readBody = true
+		must(t, appendMigrationMessage(path, "later-append"))
+		if laterLock, err := LockOperation(f.destination); !errors.Is(err, ErrOperationBusy) {
+			if laterLock != nil {
+				laterLock.Close()
+			}
+			t.Fatalf("later import lock: %v", err)
+		}
+		if result, err := Migrate(f.from, f.destination, f.inputs); result != nil || !errors.Is(err, ErrOperationBusy) {
+			t.Fatalf("later migration: %+v %v", result, err)
+		}
+		return ResolveRepoPath(cwd)
+	})
+	result := &MigrationResult{SnapshotSHA256: digest}
+	must(t, replaceMigrationGroups(db, []migrationInput{{Input: f.inputs[0], Groups: groups}}, bodyAdapter, "retry", result))
+	if !readBody || result.GroupsFailed != 0 || result.GroupsReplaced != 1 {
+		t.Fatalf("retry readBody=%t result=%+v", readBody, result)
+	}
+	id, err := db.EnsureInput(f.inputs[0])
+	must(t, err)
+	state, err := db.GetImportState(id, path)
+	must(t, err)
+	if state == nil || state.FileSize != int64(len(before)) || state.LastOffset != int64(len(before)) || state.ContentHash != fmt.Sprintf("%x", sha256.Sum256(before)) {
+		t.Fatalf("parsed snapshot cursor: %+v", state)
+	}
+	if bodies := migrationQueryStrings(t, db, `SELECT content FROM messages ORDER BY number`); !reflect.DeepEqual(bodies, []string{"inherited context", "child own"}) {
+		t.Fatalf("parsed snapshot bodies: %v", bodies)
+	}
+	must(t, lock.Close())
+	lock, err = LockOperation(f.destination)
+	must(t, err)
+	defer lock.Close()
+	imported, err := Import(db, ImportOptions{Inputs: f.inputs})
+	must(t, err)
+	if imported.FilesFailed != 0 || imported.FilesImported != 1 || len(imported.Errors) != 0 {
+		t.Fatalf("followup import: %+v", imported)
+	}
+	if bodies := migrationQueryStrings(t, db, `SELECT content FROM messages ORDER BY number`); !reflect.DeepEqual(bodies, []string{"inherited context", "child own", "later-append"}) {
+		t.Fatalf("followup bodies: %v", bodies)
+	}
+	after, err := os.ReadFile(path)
+	must(t, err)
+	state, err = db.GetImportState(id, path)
+	must(t, err)
+	if state == nil || state.FileSize != int64(len(after)) || state.LastOffset != int64(len(after)) || state.ContentHash != fmt.Sprintf("%x", sha256.Sum256(after)) {
+		t.Fatalf("followup cursor: %+v", state)
+	}
+	must(t, db.Close())
+	must(t, lock.Close())
+	again, err := Migrate(f.from, f.destination, f.inputs)
+	must(t, err)
+	if again.CopyPerformed || again.GroupsFailed != 0 || again.GroupsReplaced != 1 || again.LegacyMessagesRetained != first.LegacyMessagesRetained {
+		t.Fatalf("same snapshot after release: %+v", again)
+	}
+	assertMigrationSourceUnchanged(t, f)
 }

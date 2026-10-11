@@ -47,9 +47,9 @@
 
   共通の書込み排他で Codex full のファイル一覧取得前から終了まで保護する。実プロセスの先発 Codex full に対し、全 source の通常・full import と migrate が DB open 前に busy・終了1となることを確認した。一覧確定後に新 rollout を追加し、後発の拒否、full 完了・解放後の再 import による新 rollout の本文と cursor（サイズ・offset・hash）の保存を回帰テストで確認した。
 
-- [ ] 古い移行 snapshot による上書きを防ぐ
+- [x] 古い移行 snapshot による上書きを防ぐ
 
-  同じ旧 DB の snapshot と移行先への migrate を再実行し、ログ読取後に別 import・migrate が追記を確定すると、古い読取結果が新しい本文と cursor を上書きする。対応方針は、前二項の import と共通の書込み排他で確定する。移行先 DB の変更と元ログの走査・読取より前から migrate の終了まで排他を保持し、同じ DB への後発 import・migrate は待機せず非成功終了することを確認する。移行中に並行書込みを受理する専用の競合解決は追加しない。
+  共通の書込み排他を移行先 DB の変更と元ログの走査・読取より前から migrate の終了まで保持する。同一 snapshot・移行先への再実行でも実プロセスの後発を拒否し、本文読取後の追記に対する後発 import 相当の lock 取得と migrate の busy、解放後の import による新本文・cursor（サイズ・offset・hash）の反映を回帰テストで確認した。元 snapshot の bytes・sidecar 不変と、再実行時のコピー非重複も維持する。
 
 - [ ] 特殊文字を含む DB パスで指定先と権限を守る
 

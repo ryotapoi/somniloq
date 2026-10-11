@@ -38,43 +38,51 @@ func TestMigrationOperationLockAcrossProcesses(t *testing.T) {
 	script, err := os.ReadFile("../ingest/testdata/v0.14.0-migration/legacy.sql")
 	must(t, err)
 	from := makeLegacySnapshot(t, string(script))
-	destination := filepath.Join(t.TempDir(), "new", "history.db")
-	cmd := exec.Command(os.Args[0], "-test.run=^TestMigrationLockProcessHelper$")
-	cmd.Env = append(os.Environ(), "SOMNILOQ_MIGRATION_LOCK_DB="+destination, "SOMNILOQ_MIGRATION_LOCK_FROM="+from)
-	stdin, err := cmd.StdinPipe()
-	must(t, err)
-	stdout, err := cmd.StdoutPipe()
-	must(t, err)
-	cmd.Stderr = os.Stderr
-	must(t, cmd.Start())
-	defer func() {
-		stdin.Close()
-		if cmd.ProcessState == nil {
-			cmd.Process.Kill()
-			cmd.Wait()
-		}
-	}()
-	ready := make(chan string, 1)
-	go func() { line, _ := bufio.NewReader(stdout).ReadString('\n'); ready <- line }()
-	select {
-	case line := <-ready:
-		if line != "ready\n" {
-			t.Fatalf("readiness: %q", line)
-		}
-	case <-time.After(10 * time.Second):
-		t.Fatal("migration did not reach input boundary")
+	for _, retry := range []bool{false, true} {
+		t.Run(fmt.Sprintf("same_snapshot_retry=%t", retry), func(t *testing.T) {
+			destination := filepath.Join(t.TempDir(), "new", "history.db")
+			if retry {
+				_, err := Migrate(from, destination, nil)
+				must(t, err)
+			}
+			cmd := exec.Command(os.Args[0], "-test.run=^TestMigrationLockProcessHelper$")
+			cmd.Env = append(os.Environ(), "SOMNILOQ_MIGRATION_LOCK_DB="+destination, "SOMNILOQ_MIGRATION_LOCK_FROM="+from)
+			stdin, err := cmd.StdinPipe()
+			must(t, err)
+			stdout, err := cmd.StdoutPipe()
+			must(t, err)
+			cmd.Stderr = os.Stderr
+			must(t, cmd.Start())
+			defer func() {
+				stdin.Close()
+				if cmd.ProcessState == nil {
+					cmd.Process.Kill()
+					cmd.Wait()
+				}
+			}()
+			ready := make(chan string, 1)
+			go func() { line, _ := bufio.NewReader(stdout).ReadString('\n'); ready <- line }()
+			select {
+			case line := <-ready:
+				if line != "ready\n" {
+					t.Fatalf("readiness: %q", line)
+				}
+			case <-time.After(10 * time.Second):
+				t.Fatal("migration did not reach input boundary")
+			}
+			if _, err := LockOperation(destination); !errors.Is(err, ErrOperationBusy) {
+				t.Fatalf("import lock: %v", err)
+			}
+			if result, err := Migrate("missing", destination, nil); result != nil || !errors.Is(err, ErrOperationBusy) {
+				t.Fatalf("migration: %+v %v", result, err)
+			}
+			fmt.Fprintln(stdin, "finish")
+			stdin.Close()
+			must(t, cmd.Wait())
+			_, err = Migrate(from, destination, nil)
+			must(t, err)
+		})
 	}
-	if _, err := LockOperation(destination); !errors.Is(err, ErrOperationBusy) {
-		t.Fatalf("import lock: %v", err)
-	}
-	if result, err := Migrate("missing", destination, nil); result != nil || !errors.Is(err, ErrOperationBusy) {
-		t.Fatalf("migration: %+v %v", result, err)
-	}
-	fmt.Fprintln(stdin, "finish")
-	stdin.Close()
-	must(t, cmd.Wait())
-	_, err = Migrate(from, destination, nil)
-	must(t, err)
 	// Canonical aliases share the lock, including a not-yet-created DB below a symlink.
 	real := t.TempDir()
 	alias := filepath.Join(t.TempDir(), "alias")
