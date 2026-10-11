@@ -12,6 +12,25 @@ regexp期待区間はGo標準regexpのUTF8 byte区間を直接確認する。dup
 
 lineText の LF 境界は search_matches_test.go の具体例で保護する。`one\ntwo` の LF 一文字一致 `[3,4)` は `one`、LF 直後のゼロ幅 `[4,4)` は `two`、`one\n` の末尾ゼロ幅は空の末尾行。複数行一致は途中の LF を保持し、一致の末尾が LF ならその後の行を含めない。
 
-`expected.json` の listExample は build CLI で確認した親子 AND の一覧 envelope 例。members/matchedMembers は全6本人で、本文抜粋を含まない。importedAt は例の取り込み時点であり、実行ごとに変わる。実行時は config.toml の db を一時ディレクトリに置き、root を実体 path に設定して import 後に `search --config PATH --all -e "Inherited question" -e "Child answer" --format json` を呼ぶ。既定全件（limit=null）、明示上限、offset のみ、明示0件、末尾超過の TSV/JSON も同じ config で試用できる。
+`expected.json` の listExample は成功プロファイルの親子 AND の一覧 envelope 例。members/matchedMembers は全5本人で、本文抜粋を含まない。importedAt は例の取り込み時点であり、実行ごとに変わる。既定全件（limit=null）、明示上限、offset のみ、明示0件、末尾超過の TSV/JSON も同じ config で試用できる。
+
+成功例の実行では `config.toml` をそのまま使わず、対象の6ファイルだけを一時入力へコピーする。隣のfixture全体を指す設定例には、成功プロファイルから外した `missing-ordinal.jsonl` も含まれる。リポジトリ直下でbuild済みのCLIを使う手順は次のとおり。完全REFの入力キーはこの一時rootの実体pathに応じて変わるため、expected.json の概念上のrootから計算したREFとは文字列が異なる。
+
+```sh
+query_tmp="$(mktemp -d)"
+mkdir "$query_tmp/input-a"
+for name in root child child-extra grandchild no-boundary ordinal-no-boundary; do
+  cp "internal/ingest/testdata/v0.14.0/codex/input-a/$name.jsonl" "$query_tmp/input-a/"
+done
+cat > "$query_tmp/config.toml" <<'TOML'
+db = "./result.db"
+[[inputs]]
+name = "A"
+source = "codex"
+root = "./input-a"
+TOML
+bin/somniloq import --config "$query_tmp/config.toml"
+bin/somniloq search --config "$query_tmp/config.toml" --all -e "Inherited question" -e "Child answer" --format json
+```
 
 日時の直接オラクルは `internal/core/search_groups_test.go` の `TestSearchGroupsActivityModesAndImportCandidates`。親子孫の min/max、gap の active/overlap 差、offset/nanosecond、未知日時、子だけ project/取り込み候補と AND を同じ SQLite fixture で検証する。CLI の日付 upper・設定上書き・厳密入力・filter 後 total/page は `cmd/somniloq/search_test.go` で保護する。詳細は active のみ、非 active mode は一覧専用として拒否し、取り込み下限は共通候補条件とする。
