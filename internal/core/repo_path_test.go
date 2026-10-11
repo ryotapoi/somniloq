@@ -54,6 +54,16 @@ func TestResolveRepoPath_Worktree(t *testing.T) {
 		want string
 	}{
 		{
+			name: "filesystem root worktree",
+			cwd:  "/.claude/worktrees/feat-x",
+			want: "/",
+		},
+		{
+			name: "filesystem root worktree subdirectory",
+			cwd:  "/.claude/worktrees/feat-x/sub/dir",
+			want: "/",
+		},
+		{
 			name: "worktree root",
 			cwd:  "/Users/foo/repo/.claude/worktrees/feat-x",
 			want: "/Users/foo/repo",

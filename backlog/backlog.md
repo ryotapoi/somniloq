@@ -101,9 +101,9 @@
 
   Git の単独パス出力は終端 LF 1文字だけを除去し、git-dir と common-dir は個別に照会する。パス内・末尾の CR・LF を保持し、本体と linked worktree の同一 repo_path、Claude Code / Codex の保存・project 集約、通常 import の旧値保持と full による再解決を回帰テストで確認した。
 
-- [ ] ルート直下の Claude worktree を repository に解決する
+- [x] ルート直下の Claude worktree を repository に解決する
 
-  main repository が `/` の Claude worktree CWD を解決すると、Git 照会前に空 repository を返す。対応方針は、既存の worktree パス処理でルート境界も通常のパスとして扱う方式で確定する。`internal/core/repo_path.go` で `/.claude/worktrees/…` を `/` に解決し、未知 repository への混入を防ぎ project 条件で選択できること、通常の worktree の解決を維持することを確認する。`/` を拒否するルールは追加しない。
+  `/.claude/worktrees/…` とその配下を Git 照会前に `/` に解決する。未知 repository との集約の分離、project `/` による検索、通常 worktree の解決を確認した。保存済みの旧空値は変更なし import では保持され、元ログを選んだ `--full --yes` で再解決できる。
 
 #### 検索と出力の整理
 

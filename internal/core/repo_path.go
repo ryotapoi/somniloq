@@ -20,6 +20,9 @@ func ResolveRepoPath(cwd string) string {
 		return ""
 	}
 	if i := strings.Index(cwd, worktreePathFragment); i >= 0 {
+		if i == 0 {
+			return "/"
+		}
 		return cwd[:i]
 	}
 	// Git environment overrides can select a repository unrelated to the log cwd.
