@@ -18,17 +18,6 @@ func scanJSONLFiles(projectsDir string) ([]string, []error) {
 	return claudecode.NewAdapter(ResolveRepoPath).ScanFiles(projectsDir)
 }
 
-func newImportTransaction(t *testing.T, db *DB, source Source) ingest.NewImportTransaction {
-	inputID := testInput(t, db, source)
-	return func() (ingest.ImportTransaction, error) {
-		tx, err := db.Begin()
-		if err != nil {
-			return nil, err
-		}
-		return importTx{tx: tx, inputID: inputID}, nil
-	}
-}
-
 type failingFileAdapter struct {
 	files     []string
 	failPath  string
@@ -107,11 +96,6 @@ func TestImportWithAdapter_ProcessFileFailureContinues(t *testing.T) {
 	}
 }
 
-func processFile(t *testing.T, db *DB, path string, offset, fileSize int64, importedAt string) error {
-	_, err := claudecode.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(t, db, SourceClaudeCode), path, offset, fileSize, importedAt)
-	return err
-}
-
 func TestScanJSONLFiles(t *testing.T) {
 	dir := testTempDir(t)
 
@@ -149,46 +133,6 @@ func TestScanJSONLFiles(t *testing.T) {
 		if !found[name] {
 			t.Errorf("missing file %s", name)
 		}
-	}
-}
-
-func TestProcessFile_ResolvesRepoPath(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/Users/test/projA/.claude/worktrees/feature-x","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
-{"type":"user","uuid":"u2","sessionId":"s2","timestamp":"2026-03-28T14:01:00Z","cwd":"/Users/test/projB/.claude/worktrees/feature-y","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"world"}}
-{"type":"user","uuid":"u3","sessionId":"s3","timestamp":"2026-03-28T14:02:00Z","cwd":"","gitBranch":"","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hi"}}
-`
-	path := filepath.Join(dir, "s.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	if err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z"); err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-
-	for _, c := range []struct {
-		sessionID string
-		want      string
-	}{
-		{"s1", "/Users/test/projA"},
-		{"s2", "/Users/test/projB"},
-	} {
-		var repoPath string
-		if err := db.db.QueryRow("SELECT COALESCE(repo_path, '') FROM sessions WHERE session_id=?", c.sessionID).Scan(&repoPath); err != nil {
-			t.Fatalf("%s SELECT failed: %v", c.sessionID, err)
-		}
-		if repoPath != c.want {
-			t.Errorf("%s repo_path: got %q, want %q", c.sessionID, repoPath, c.want)
-		}
-	}
-
-	var isNull int
-	if err := db.db.QueryRow("SELECT repo_path IS NULL FROM sessions WHERE session_id='s3'").Scan(&isNull); err != nil {
-		t.Fatalf("s3 SELECT failed: %v", err)
-	}
-	if isNull != 1 {
-		t.Errorf("s3 repo_path should be NULL for empty cwd, got non-NULL")
 	}
 }
 
@@ -333,61 +277,6 @@ func TestImport_ReportsClaudeCodeDiagnosticOnUnterminatedPrefixLine(t *testing.T
 		t.Errorf("diagnostic = %q, want prefix %q", got, wantPrefix)
 	} else if detail := strings.TrimPrefix(got, wantPrefix); detail == "" {
 		t.Errorf("diagnostic = %q, want non-empty detail after prefix %q", got, wantPrefix)
-	}
-}
-
-func TestProcessFile_EmptyFile(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	path := filepath.Join(dir, "empty.jsonl")
-	os.WriteFile(path, []byte(""), 0o644)
-
-	err := processFile(t, db, path, 0, 0, "2026-03-28T15:00:00Z")
-	if err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-	state, err := db.GetImportState(testOnlyInput(t, db), path)
-	if err != nil {
-		t.Fatalf("GetImportState failed: %v", err)
-	}
-	if state != nil {
-		t.Fatalf("empty file must not create import_state, got %+v", state)
-	}
-}
-
-func TestProcessFile_SkipsEmptyContent(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	// tool_use only message: ExtractText returns "" for this content
-	jsonl := `{"type":"user","uuid":"u1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"tool_use","id":"t1","name":"Read","input":{}}]}}
-`
-	path := filepath.Join(dir, "s1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
-	if err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-
-	// Only the user message should be saved (tool_use-only assistant message skipped)
-	var msgCount int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&msgCount); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
-	}
-	if msgCount != 1 {
-		t.Errorf("messages: got %d, want 1 (empty content skipped)", msgCount)
-	}
-
-	// Session should still be created (upsertSession called for all messages)
-	var sessCount int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE session_id='s1'").Scan(&sessCount); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
-	}
-	if sessCount != 1 {
-		t.Errorf("session should exist even for empty content messages")
 	}
 }
 
@@ -605,34 +494,6 @@ func TestImport_IncompleteClaudeInputAllowsOtherInputs(t *testing.T) {
 	}
 	if !strings.Contains(result.Errors[0].Error(), projBad) {
 		t.Errorf("error should name the unreadable dir: %v", result.Errors[0])
-	}
-}
-
-func TestProcessFile_MetadataOnly_NoSessionRow(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		jsonl string
-	}{
-		{"custom title", `{"type":"custom-title","customTitle":"meta only","sessionId":"meta1"}` + "\n"},
-		{"agent name", `{"type":"agent-name","agentName":"orphan","sessionId":"meta1"}` + "\n"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			db := testDB(t)
-			path := filepath.Join(testTempDir(t), "meta1.jsonl")
-			if err := os.WriteFile(path, []byte(tc.jsonl), 0o644); err != nil {
-				t.Fatal(err)
-			}
-			if err := processFile(t, db, path, 0, int64(len(tc.jsonl)), "2026-03-28T15:00:00Z"); err != nil {
-				t.Fatalf("processFile failed: %v", err)
-			}
-			var count int
-			if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions").Scan(&count); err != nil {
-				t.Fatalf("SELECT failed: %v", err)
-			}
-			if count != 0 {
-				t.Errorf("metadata-only JSONL created %d sessions, want 0", count)
-			}
-		})
 	}
 }
 

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
-	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
 )
 
 type importTx struct {
@@ -13,10 +12,6 @@ type importTx struct {
 	inputID            int64
 	allowCyclicParents bool
 }
-
-// importTx must keep satisfying the claude-code-specific extension interface
-// that claudecode's Flush asserts for at runtime.
-var _ claudecode.SessionMetaWriter = importTx{}
 
 func (t importTx) UpsertSession(meta ingest.SessionMeta, importedAt string) error {
 	return upsertSession(t.tx, t.inputID, meta, importedAt, t.allowCyclicParents)
@@ -34,14 +29,6 @@ func (t importTx) ReplaceSession(source ingest.Source, sessionID string) error {
 	}
 	_, err := t.tx.Exec(`DELETE FROM sessions WHERE input_id=? AND source=? AND session_id=?`, t.inputID, string(source), sessionID)
 	return err
-}
-
-func (t importTx) UpdateSessionTitle(source ingest.Source, sessionID, title, importedAt string) error {
-	return updateSessionTitle(t.tx, t.inputID, source, sessionID, title, importedAt)
-}
-
-func (t importTx) UpdateSessionAgentName(source ingest.Source, sessionID, agentName, importedAt string) error {
-	return updateSessionAgentName(t.tx, t.inputID, source, sessionID, agentName, importedAt)
 }
 
 func (t importTx) UpsertImportState(state ingest.ImportState) error {

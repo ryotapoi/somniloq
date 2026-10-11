@@ -59,7 +59,7 @@ type ProcessResult struct {
 //
 // Because that state is per-file, adapters must build a fresh handler for
 // every ProcessFile call; reusing one leaks the previous file's state (line
-// numbers, buffered metadata) into the next. The adapters themselves stay
+// numbers, body numbers) into the next. The adapters themselves stay
 // stateless.
 type FileHandler interface {
 	// Begin restores per-file state from the already-imported prefix before
@@ -73,18 +73,10 @@ type FileHandler interface {
 	HandleLine(tx ImportTransaction, line []byte) (LineResult, error)
 }
 
-// FileFlusher is an optional FileHandler capability for writing metadata
-// buffered during HandleLine. ProcessJSONL invokes it at EOF only when a body
-// record has been written.
-type FileFlusher interface {
-	Flush(tx ImportTransaction) error
-}
-
 // ProcessJSONL runs the shared skeleton of an incremental JSONL import: it
 // feeds every line after offset to handler inside one transaction, then
-// flushes buffered metadata when handler implements FileFlusher, advances
-// import_state, and commits. If no body record has ever been written for the
-// file, it commits nothing and keeps the old offset so the next import
+// advances import_state, and commits. If no body record has ever been written
+// for the file, it commits nothing and keeps the old offset so the next import
 // re-reads the meta-only prefix once a body record finally appears.
 func ProcessJSONL(newTransaction NewImportTransaction, source Source, handler FileHandler, path string, offset, fileSize int64, importedAt string) (ProcessResult, error) {
 	return processJSONL(newTransaction, source, handler, path, offset, fileSize, importedAt, func(path string) (readSeekCloser, error) {
@@ -153,12 +145,6 @@ func processJSONL(newTransaction NewImportTransaction, source Source, handler Fi
 
 	if !hasBody {
 		return result, nil
-	}
-
-	if flusher, ok := handler.(FileFlusher); ok {
-		if err := flusher.Flush(tx); err != nil {
-			return result, err
-		}
 	}
 
 	if err := tx.UpsertImportState(ImportState{

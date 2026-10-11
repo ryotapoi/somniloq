@@ -70,9 +70,7 @@ type NormalizedRecord struct {
 
 // ImportTransaction is the source-neutral persistence surface adapters need
 // while processing one file. internal/core owns the SQLite implementation
-// behind this interface. Source-specific writes (e.g. claude-code session
-// titles) live in extension interfaces next to the adapter that needs them,
-// asserted against the concrete transaction.
+// behind this interface.
 type ImportTransaction interface {
 	UpsertSession(meta SessionMeta, importedAt string) error
 	InsertMessage(msg NormalizedMessage) error
@@ -92,13 +90,18 @@ type NewImportTransaction func() (ImportTransaction, error)
 // (NULL), which would silently break per-project grouping.
 type RepoResolver func(cwd string) string
 
-// Adapter scans and imports one source's JSONL format into normalized records.
+// Adapter discovers one source's importable JSONL files.
 type Adapter interface {
 	// ScanFiles walks rootDir for importable JSONL files. Scan failures are
 	// non-fatal: unreadable directories are skipped and reported in errs
 	// alongside the files that could be discovered. A missing rootDir means
 	// the source is unused and yields no files and no errors.
 	ScanFiles(rootDir string) (files []string, errs []error)
+}
+
+// FileAdapter imports one file at a time using incremental cursors.
+type FileAdapter interface {
+	Adapter
 	ProcessFile(newTransaction NewImportTransaction, path string, offset, fileSize int64, importedAt string) (ProcessResult, error)
 }
 

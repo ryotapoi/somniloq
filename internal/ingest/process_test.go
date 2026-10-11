@@ -166,17 +166,6 @@ func (h *bodyHandler) HandleLine(ImportTransaction, []byte) (LineResult, error) 
 	return LineResult{Outcome: LineWroteBody}, nil
 }
 
-type failingPersistenceHandler struct {
-	bodyHandler
-	flushErr error
-	flushes  int
-}
-
-func (h *failingPersistenceHandler) Flush(ImportTransaction) error {
-	h.flushes++
-	return h.flushErr
-}
-
 type errorAfterReader struct {
 	data   *strings.Reader
 	err    error
@@ -348,35 +337,23 @@ func TestProcessJSONL_PersistenceFailureKeepsOffsetAndRollsBack(t *testing.T) {
 
 	tests := []struct {
 		name             string
-		configure        func(*failingPersistenceHandler, *processRecordingTx, error)
-		wantFlushes      int
+		configure        func(*processRecordingTx, error)
 		wantImportStates int
 		wantCommits      int
 	}{
 		{
-			name: "flush",
-			configure: func(handler *failingPersistenceHandler, _ *processRecordingTx, wantErr error) {
-				handler.flushErr = wantErr
-			},
-			wantFlushes:      1,
-			wantImportStates: 0,
-			wantCommits:      0,
-		},
-		{
 			name: "upsert import state",
-			configure: func(_ *failingPersistenceHandler, tx *processRecordingTx, wantErr error) {
+			configure: func(tx *processRecordingTx, wantErr error) {
 				tx.upsertErr = wantErr
 			},
-			wantFlushes:      1,
 			wantImportStates: 1,
 			wantCommits:      0,
 		},
 		{
 			name: "commit",
-			configure: func(_ *failingPersistenceHandler, tx *processRecordingTx, wantErr error) {
+			configure: func(tx *processRecordingTx, wantErr error) {
 				tx.commitErr = wantErr
 			},
-			wantFlushes:      1,
 			wantImportStates: 1,
 			wantCommits:      1,
 		},
@@ -385,9 +362,9 @@ func TestProcessJSONL_PersistenceFailureKeepsOffsetAndRollsBack(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			wantErr := errors.New(tt.name + " failed")
-			handler := &failingPersistenceHandler{}
+			handler := &bodyHandler{}
 			tx := &processRecordingTx{}
-			tt.configure(handler, tx, wantErr)
+			tt.configure(tx, wantErr)
 
 			_, err := ProcessJSONL(
 				func() (ImportTransaction, error) { return tx, nil },
@@ -401,9 +378,6 @@ func TestProcessJSONL_PersistenceFailureKeepsOffsetAndRollsBack(t *testing.T) {
 
 			if !errors.Is(err, wantErr) {
 				t.Fatalf("ProcessJSONL error = %v, want wrapping %v", err, wantErr)
-			}
-			if handler.flushes != tt.wantFlushes {
-				t.Errorf("Flush calls = %d, want %d", handler.flushes, tt.wantFlushes)
 			}
 			if tx.importStateWrites != tt.wantImportStates {
 				t.Errorf("UpsertImportState calls = %d, want %d", tx.importStateWrites, tt.wantImportStates)

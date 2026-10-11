@@ -137,10 +137,12 @@ func Import(db *DB, opts ImportOptions) (*ImportResult, error) {
 			r, err = importCodexGroups(db, item.id, item.input.Root, a, importedAt, opts.Full)
 		} else if a, ok := item.adapter.(claudecode.Adapter); ok {
 			r, err = importClaudeSnapshots(db, item.id, item.input.Root, a, importedAt, opts.Full)
-		} else if opts.Full {
-			r, err = replaceCursorInput(db, item.id, item.input.Root, item.adapter, importedAt)
-		} else {
-			r, err = importWithAdapter(db, item.id, item.input.Root, item.adapter, importedAt)
+		} else if a, ok := item.adapter.(ingest.FileAdapter); ok {
+			if opts.Full {
+				r, err = replaceCursorInput(db, item.id, item.input.Root, a, importedAt)
+			} else {
+				r, err = importWithAdapter(db, item.id, item.input.Root, a, importedAt)
+			}
 		}
 		if r != nil {
 			result.add(r)
@@ -197,12 +199,9 @@ func (r *ImportResult) addUnparsedDiagnostics(diagnostics []error) {
 	r.UnparsedDiagnostics = append(r.UnparsedDiagnostics, diagnostics...)
 }
 
-func importWithAdapter(db *DB, inputID int64, rootDir string, adapter ingest.Adapter, importedAt string) (*ImportResult, error) {
+func importWithAdapter(db *DB, inputID int64, rootDir string, adapter ingest.FileAdapter, importedAt string) (*ImportResult, error) {
 	if a, ok := adapter.(codex.Adapter); ok {
 		return importCodexGroups(db, inputID, rootDir, a, importedAt, false)
-	}
-	if a, ok := adapter.(claudecode.Adapter); ok {
-		return importClaudeSnapshots(db, inputID, rootDir, a, importedAt, false)
 	}
 	files, scanErrs := adapter.ScanFiles(rootDir)
 
@@ -284,7 +283,7 @@ type cursorFullTx struct{ importTx }
 func (cursorFullTx) Commit() error   { return nil }
 func (cursorFullTx) Rollback() error { return nil }
 
-func replaceCursorInput(db *DB, inputID int64, rootDir string, adapter ingest.Adapter, importedAt string) (*ImportResult, error) {
+func replaceCursorInput(db *DB, inputID int64, rootDir string, adapter ingest.FileAdapter, importedAt string) (*ImportResult, error) {
 	files, scanErrs := adapter.ScanFiles(rootDir)
 	result := &ImportResult{FilesScanned: len(files), Errors: scanErrs}
 	if len(scanErrs) > 0 {

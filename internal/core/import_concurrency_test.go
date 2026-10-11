@@ -16,12 +16,12 @@ import (
 	"time"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
-	"github.com/ryotapoi/somniloq/internal/ingest/claudecode"
+	"github.com/ryotapoi/somniloq/internal/ingest/cursoragent"
 )
 
 // The adapter boundaries let separate processes pause without shipping hooks.
 type pausedImportAdapter struct {
-	ingest.Adapter
+	ingest.FileAdapter
 	phase string
 	wait  func()
 }
@@ -30,7 +30,7 @@ func (a pausedImportAdapter) ScanFiles(root string) ([]string, []error) {
 	if a.phase == "full" {
 		a.wait() // The helper has committed an explicit deletion before rebuilding.
 	}
-	return a.Adapter.ScanFiles(root)
+	return a.FileAdapter.ScanFiles(root)
 }
 
 func (a pausedImportAdapter) ProcessFile(newTx ingest.NewImportTransaction, path string, offset, size int64, at string) (ingest.ProcessResult, error) {
@@ -47,7 +47,7 @@ func (a pausedImportAdapter) ProcessFile(newTx ingest.NewImportTransaction, path
 			return tx, err
 		}
 	}
-	return a.Adapter.ProcessFile(newTx, path, offset, size, at)
+	return a.FileAdapter.ProcessFile(newTx, path, offset, size, at)
 }
 
 type concurrentImportOutcome struct {
@@ -66,9 +66,9 @@ func TestConcurrentImportProcess(t *testing.T) {
 	must(t, err)
 	defer db.Close()
 	importSourceSpecs = []importSourceSpec{{
-		source: ImportSourceClaudeCode,
+		source: ImportSourceCursorAgent,
 		newAdapter: func() ingest.Adapter {
-			return pausedImportAdapter{Adapter: claudecode.NewAdapter(ResolveRepoPath), phase: phase, wait: func() {
+			return pausedImportAdapter{FileAdapter: cursoragent.NewAdapter(), phase: phase, wait: func() {
 				fmt.Println("ready")
 				var signal [1]byte
 				_, err := io.ReadFull(os.Stdin, signal[:])
@@ -76,7 +76,7 @@ func TestConcurrentImportProcess(t *testing.T) {
 			}}
 		},
 	}}
-	input := Input{Source: SourceClaudeCode, Root: os.Getenv("SOMNILOQ_IMPORT_TEST_ROOT")}
+	input := Input{Source: SourceCursorAgent, Root: os.Getenv("SOMNILOQ_IMPORT_TEST_ROOT")}
 	if phase == "full" {
 		// Exercise the incremental cursor guard against an independent deletion.
 		// Production full imports now own deletion and rebuilding atomically.
@@ -84,7 +84,7 @@ func TestConcurrentImportProcess(t *testing.T) {
 		must(t, err)
 		must(t, db.DeleteInputs([]int64{id}))
 	}
-	r, err := Import(db, ImportOptions{Inputs: []Input{input}, Source: ImportSourceClaudeCode})
+	r, err := Import(db, ImportOptions{Inputs: []Input{input}, Source: ImportSourceCursorAgent})
 	must(t, err)
 	outcome := concurrentImportOutcome{Imported: r.FilesImported, Skipped: r.FilesSkipped, Failed: r.FilesFailed}
 	for _, err := range r.Errors {
@@ -151,11 +151,11 @@ func TestImportConcurrentDeletion(t *testing.T) {
 			dir := testTempDir(t)
 			dbPath := filepath.Join(dir, "import.db")
 			root := filepath.Join(dir, "projects")
-			project := filepath.Join(root, "project")
+			project := filepath.Join(root, "project", "agent-transcripts", "s1")
 			must(t, os.MkdirAll(project, 0o755))
-			path := filepath.Join(project, "session.jsonl")
-			prefix := `{"type":"user","uuid":"prefix-id","sessionId":"s1","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"original prefix"}}` + "\n"
-			tail := `{"type":"assistant","uuid":"tail-id","sessionId":"s1","timestamp":"2026-01-01T00:00:01Z","message":{"role":"assistant","content":[{"type":"text","text":"appended tail"}]}}` + "\n"
+			path := filepath.Join(project, "s1.jsonl")
+			prefix := `{"role":"user","message":{"content":[{"type":"text","text":"original prefix"}]}}` + "\n"
+			tail := `{"role":"assistant","message":{"content":[{"type":"text","text":"appended tail"}]}}` + "\n"
 			must(t, os.WriteFile(path, []byte(prefix), 0o644))
 			db, err := OpenDB(dbPath)
 			must(t, err)
@@ -166,7 +166,7 @@ func TestImportConcurrentDeletion(t *testing.T) {
 				_, err = db.db.Exec("PRAGMA journal_mode=WAL")
 				must(t, err)
 			}
-			opts := ImportOptions{Inputs: []Input{{Source: SourceClaudeCode, Root: root}}, Source: ImportSourceClaudeCode}
+			opts := ImportOptions{Inputs: []Input{{Source: SourceCursorAgent, Root: root}}, Source: ImportSourceCursorAgent}
 			r, err := Import(db, opts)
 			must(t, err)
 			if r.FilesImported != 1 || len(r.Errors) != 0 {
@@ -184,18 +184,19 @@ func TestImportConcurrentDeletion(t *testing.T) {
 			fullResult := full.finish(t)
 			assertBodies := func() {
 				t.Helper()
-				rows, err := db.db.Query("SELECT uuid, content FROM messages ORDER BY timestamp, rowid")
+				rows, err := db.db.Query("SELECT origin_line, content FROM messages ORDER BY origin_line")
 				must(t, err)
 				defer rows.Close()
 				var got []string
 				for rows.Next() {
-					var id, body string
-					must(t, rows.Scan(&id, &body))
-					got = append(got, id+":"+body)
+					var line int
+					var body string
+					must(t, rows.Scan(&line, &body))
+					got = append(got, fmt.Sprintf("%d:%s", line, body))
 				}
 				must(t, rows.Err())
 				t.Logf("DB bodies: %v", got)
-				want := []string{"prefix-id:original prefix", "tail-id:appended tail"}
+				want := []string{"1:original prefix", "2:appended tail"}
 				if !reflect.DeepEqual(got, want) {
 					t.Errorf("bodies: got %v, want %v", got, want)
 				}
@@ -203,14 +204,14 @@ func TestImportConcurrentDeletion(t *testing.T) {
 			assertBodies()
 			r, err = Import(db, opts)
 			must(t, err)
-			t.Logf("next incremental canonicalizes the test wrapper cursor: %+v", r)
+			t.Logf("next incremental skips the rebuilt cursor: %+v", r)
 			assertBodies()
 			if deltaResult.Failed != 1 || deltaResult.Imported != 0 || len(deltaResult.Errors) != 1 {
 				t.Errorf("stale delta must report failure: %+v", deltaResult)
 			} else if phase == "before" && !strings.Contains(deltaResult.Errors[0], "import state changed") {
 				t.Errorf("unexpected stale-state error: %v", deltaResult.Errors)
 			}
-			if fullResult.Imported != 1 || fullResult.Failed != 0 || len(fullResult.Errors) != 0 || r.FilesImported != 1 || len(r.Errors) != 0 {
+			if fullResult.Imported != 1 || fullResult.Failed != 0 || len(fullResult.Errors) != 0 || r.FilesSkipped != 1 || len(r.Errors) != 0 {
 				t.Errorf("full / next import: %+v / %+v", fullResult, r)
 			}
 		})
