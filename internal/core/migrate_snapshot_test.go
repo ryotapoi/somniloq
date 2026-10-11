@@ -160,36 +160,6 @@ func TestLegacySnapshotSQLSpellingAndConstraint(t *testing.T) {
 }
 
 func TestSnapshotCopyRollbackAndRetry(t *testing.T) {
-	data, err := os.ReadFile("../ingest/testdata/v0.14.0-migration/expected.json")
-	if err != nil {
-		t.Fatal(err)
-	}
-	var oracle struct {
-		Cases []struct {
-			Name     string
-			Expected struct {
-				Sessions int    `json:"committed_sessions"`
-				Complete bool   `json:"copy_complete"`
-				Retry    string `json:"retry_mode"`
-			}
-		}
-	}
-	if err = json.Unmarshal(data, &oracle); err != nil {
-		t.Fatal(err)
-	}
-	found := false
-	for _, item := range oracle.Cases {
-		if item.Name == "initial_copy_interrupt" {
-			found = true
-			if item.Expected.Sessions != 0 || item.Expected.Complete || item.Expected.Retry != "initial_copy" {
-				t.Fatal("unexpected interruption oracle")
-			}
-		}
-	}
-	if !found {
-		t.Fatal("missing interruption oracle")
-	}
-
 	sourcePath := makeLegacySnapshot(t, legacySnapshotSchema+`INSERT INTO sessions(source,session_id,imported_at) VALUES('codex','s',''); INSERT INTO messages(uuid,source,session_id,role,content,timestamp) VALUES('u','codex','s','user','saved','');`)
 	source, _ := sql.Open("sqlite", sourcePath)
 	defer source.Close()

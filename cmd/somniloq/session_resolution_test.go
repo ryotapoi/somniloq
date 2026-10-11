@@ -35,16 +35,6 @@ func newCrossSourceSessionTestDB(t *testing.T) *core.DB {
 	return db
 }
 
-func TestCommandsRejectBareSessionIDs(t *testing.T) {
-	db := newCrossSourceSessionTestDB(t)
-	var out, errOut bytes.Buffer
-	code, err := showCmd([]string{"same-id"}, staticDB(db), config{}, &out, &errOut)
-	if code != 2 || err == nil || out.Len() != 0 {
-		t.Fatalf("bare ID: %d %v %q", code, err, out.String())
-	}
-
-}
-
 func TestResolveSessionREFAcceptsCrossSourceRefs(t *testing.T) {
 	db := newCrossSourceSessionTestDB(t)
 	for _, source := range []core.Source{core.SourceClaudeCode, core.SourceCodex} {

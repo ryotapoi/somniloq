@@ -3,43 +3,11 @@ package main
 import (
 	"bytes"
 	"errors"
-	"flag"
 	"strings"
 	"testing"
 
 	"github.com/ryotapoi/somniloq/internal/core"
 )
-
-func TestSetUsage(t *testing.T) {
-	var buf bytes.Buffer
-	fs := flag.NewFlagSet("test", flag.ContinueOnError)
-	fs.SetOutput(&buf)
-	fs.String("since", "", "filter by start time")
-
-	setUsage(fs, "List work groups", "somniloq search [flags]", "Examples:\n  somniloq search --since 2026-10-01")
-	fs.Usage()
-
-	out := buf.String()
-
-	if !strings.Contains(out, "List work groups") {
-		t.Errorf("expected description in output, got:\n%s", out)
-	}
-	if !strings.Contains(out, "somniloq search [flags]") {
-		t.Errorf("expected usage line in output, got:\n%s", out)
-	}
-	if !strings.Contains(out, "TOML configuration name or path (default: default)") {
-		t.Errorf("expected default configuration guidance, got:\n%s", out)
-	}
-	if !strings.Contains(out, "Flags:") {
-		t.Errorf("expected Flags section in output, got:\n%s", out)
-	}
-	if !strings.Contains(out, "-since") {
-		t.Errorf("expected flag defaults in output, got:\n%s", out)
-	}
-	if !strings.Contains(out, "Examples:") {
-		t.Errorf("expected details section in output, got:\n%s", out)
-	}
-}
 
 func TestSubcommandHelpIsSelfContained(t *testing.T) {
 	openDB := func() (*core.DB, error) {

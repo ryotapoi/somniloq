@@ -99,42 +99,13 @@ func TestShowCmd_FormatJSON(t *testing.T) {
 		})
 	}
 }
-func TestFormatFlag_Unknown(t *testing.T) {
-	openDB := func() (*core.DB, error) {
-		t.Fatal("openDB must not be called for an unknown format")
+func TestProjectsRejectsUnknownFormatBeforeDB(t *testing.T) {
+	var out, errOut bytes.Buffer
+	code, err := projectsCmd([]string{"--format", "xml"}, func() (*core.DB, error) {
+		t.Fatal("DB opened for unknown format")
 		return nil, nil
-	}
-
-	tests := []struct {
-		name string
-		run  func() (int, error)
-	}{
-		{"projects", func() (int, error) {
-			var out, errOut bytes.Buffer
-			return projectsCmd([]string{"--format", "xml"}, openDB, config{}, &out, &errOut)
-		}},
-		{"show", func() (int, error) {
-			var out, errOut bytes.Buffer
-			return showCmd([]string{"--format", "xml", fixtureREF(core.SourceClaudeCode, "sess-1")}, openDB, config{}, &out, &errOut)
-		}},
-		{"search", func() (int, error) {
-			var out, errOut bytes.Buffer
-			return searchCmd([]string{"--format", "xml", "query"}, openDB, config{}, &out, &errOut)
-		}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			code, err := tt.run()
-			wantCode := 1
-			if tt.name == "show" || tt.name == "search" {
-				wantCode = 2
-			}
-			if code != wantCode {
-				t.Errorf("exit code = %d, want %d", code, wantCode)
-			}
-			if err == nil || !strings.Contains(err.Error(), "unknown format") {
-				t.Errorf("err = %v, want unknown format", err)
-			}
-		})
+	}, config{}, &out, &errOut)
+	if code != 1 || err == nil || !strings.Contains(err.Error(), "unknown format") || out.Len() != 0 {
+		t.Fatalf("unknown format: %d %v %q", code, err, out.String())
 	}
 }

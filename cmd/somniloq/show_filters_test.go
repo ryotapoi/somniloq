@@ -95,9 +95,12 @@ func TestShowInputErrorsAndAtomicOutput(t *testing.T) {
 	ref := fixtureREF(core.SourceCodex, "a")
 	for _, flags := range [][]string{{"--messages", ":"}, {"--messages", "2:1"}, {"--messages", "0:"}, {"--messages", "1"}, {"--messages", "+1:2"}, {"--messages", "1:2:3"}, {"--messages", ""}, {"--role", "system"}, {"--role", ""}, {"--since", "24h"}, {"--since", "2026-10-01T04:00"}, {"--since", ""}, {"--day-boundary", ""}, {"--day-boundary", "24:00"}, {"--limit", "-1"}, {"--offset", "-1"}, {"--tail", "-1"}, {"--tail", "0", "--limit", "0"}, {"--tail", "0", "--offset", "0"}, {"--format", "markdown"}, {"--summary", "1"}, {"--turn", "1"}, {"--project", "p"}, {"--short"}, {"--source", "codex"}, {"--exclude-user-message-pattern", "x"}, {"--no-exclude-user-messages"}} {
 		var out, diag bytes.Buffer
-		code, _ := showCmd(append([]string{ref}, flags...), func() (*core.DB, error) { t.Fatal("DB opened for invalid input"); return nil, nil }, config{}, &out, &diag)
+		code, err := showCmd(append([]string{ref}, flags...), func() (*core.DB, error) { t.Fatal("DB opened for invalid input"); return nil, nil }, config{}, &out, &diag)
 		if code != 2 || out.Len() != 0 {
 			t.Fatalf("%v: %d %s", flags, code, out.String())
+		}
+		if flags[0] == "--format" && (err == nil || !strings.Contains(err.Error(), "unknown format")) {
+			t.Fatalf("unknown format: %v", err)
 		}
 	}
 	for _, last := range []string{"bare", fixtureREF(core.SourceCodex, "absent")} {

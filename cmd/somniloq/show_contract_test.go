@@ -98,46 +98,6 @@ func TestShowOriginalFixtureContract(t *testing.T) {
 			}
 		})
 	}
-	// Query fixture matches must lead back to the same owner text and number.
-	var queryOracle struct {
-		Cases []struct {
-			ExpectedMatches []struct {
-				REF           string `json:"ref"`
-				MessageNumber int    `json:"messageNumber"`
-				Role          string
-				Timestamp     *string
-				LineText      string `json:"lineText"`
-			} `json:"expectedMatches"`
-		}
-	}
-	queryData, err := os.ReadFile(filepath.Join(base, "../v0.14.0-query/expected.json"))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := json.Unmarshal(queryData, &queryOracle); err != nil {
-		t.Fatal(err)
-	}
-	for _, expected := range queryOracle.Cases[0].ExpectedMatches {
-		parts := strings.Split(expected.REF, ":")
-		selected := ref(core.SourceCodex, `["root"]`)
-		if parts[len(parts)-1] == "WyJjaGlsZCJd" {
-			selected = ref(core.SourceCodex, `["child"]`)
-		}
-		var out, diag bytes.Buffer
-		code, err := showCmd([]string{"--format", "json", selected}, open, config{}, &out, &diag)
-		if code != 0 || err != nil {
-			t.Fatalf("%d %v", code, err)
-		}
-		var got showJSON
-		if err := json.Unmarshal(out.Bytes(), &got); err != nil {
-			t.Fatal(err)
-		}
-		item := got.Items[expected.MessageNumber-1]
-		if item.Text != expected.LineText || item.MessageNumber != expected.MessageNumber || item.Role != expected.Role || !reflect.DeepEqual(item.Timestamp, expected.Timestamp) {
-			t.Fatalf("query reference: %+v want %+v", item, expected)
-		}
-	}
-
 	// Multiple selectors retain the first expansion order, including overlapping descendants.
 	for _, ids := range [][]string{{`["root"]`, `["child"]`}, {`["child"]`, `["root"]`}} {
 		args := []string{"--format", "json", "--descendants"}

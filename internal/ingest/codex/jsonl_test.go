@@ -8,18 +8,6 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
-func TestExtractText_CodexContentBlocks(t *testing.T) {
-	raw := json.RawMessage(`[{"type":"input_text","text":"question"},{"type":"output_text","text":"answer"},{"type":"tool_call","name":"exec"}]`)
-	got, err := ExtractText(raw)
-	if err != nil {
-		t.Fatalf("ExtractText failed: %v", err)
-	}
-	want := "question\n\nanswer"
-	if got != want {
-		t.Errorf("got %q, want %q", got, want)
-	}
-}
-
 func TestNormalizeMessageTextBlocks(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
@@ -28,7 +16,7 @@ func TestNormalizeMessageTextBlocks(t *testing.T) {
 		text    string
 		wantErr bool
 	}{
-		{name: "blocks", content: json.RawMessage(`[{"type":"input_text","text":" first "},{"type":"tool_call"},{"type":"text","text":""}]`), blocks: []string{" first ", ""}, text: " first \n\n"},
+		{name: "blocks", content: json.RawMessage(`[{"type":"input_text","text":" first "},{"type":"output_text","text":"answer"},{"type":"tool_call"},{"type":"text","text":""}]`), blocks: []string{" first ", "answer", ""}, text: " first \n\nanswer\n\n"},
 		{name: "null", content: json.RawMessage(`null`)},
 		{name: "empty array", content: json.RawMessage(`[]`)},
 		{name: "malformed", content: json.RawMessage(`{`), wantErr: true},

@@ -130,9 +130,12 @@ func TestSearchListPages(t *testing.T) {
 func TestSearchListValidationBeforeDB(t *testing.T) {
 	for _, args := range [][]string{{""}, {"(?=foo)"}, {"--limit", "-1"}, {"--offset", "-1"}, {"--format", "xml"}, {"--source", "all"}, {"--source", "claude_code"}, {"--input", ""}, {"--day-boundary", "25:00"}, {"--since", "bad"}, {"--all", "-e", ""}, {"one", "two"}, {"--unknown"}, {"--time-mode", "bad"}, {"--time-mode", "active"}, {"--time-mode", ""}, {"--since", ""}, {"--until", ""}, {"--day-boundary", ""}, {"--imported-since", ""}, {"--since", "7d"}, {"--since", "2026-10-01T12:00"}, {"--imported-since", "2026-10-01"}, {"--imported-since", "bad"}, {"--since", "2026-10-02", "--until", "2026-10-01"}, {"--since", "2026-10-01T00:00:00Z", "--until", "2026-10-01T00:00:00Z"}, {"--session", "REF", "--time-mode", "last", "--since", "2026-10-01", "needle"}} {
 		var out, diag bytes.Buffer
-		code, _ := searchCmd(args, func() (*core.DB, error) { t.Fatal("DB opened", args); return nil, nil }, config{}, &out, &diag)
+		code, err := searchCmd(args, func() (*core.DB, error) { t.Fatal("DB opened", args); return nil, nil }, config{}, &out, &diag)
 		if code != 2 || out.Len() != 0 {
 			t.Fatal(args, code, out.String())
+		}
+		if len(args) == 2 && args[0] == "--format" && (err == nil || !strings.Contains(err.Error(), "unknown format")) {
+			t.Fatalf("unknown format: %v", err)
 		}
 	}
 }

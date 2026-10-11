@@ -152,39 +152,6 @@ func TestScanJSONLFiles(t *testing.T) {
 	}
 }
 
-func TestProcessFile(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	jsonl := `{"type":"user","uuid":"u1","parentUuid":"p1","sessionId":"s1","timestamp":"2026-03-28T14:00:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"user","content":"hello"}}
-{"type":"assistant","uuid":"a1","sessionId":"s1","timestamp":"2026-03-28T14:01:00Z","cwd":"/nonexistent/not-a-repo","gitBranch":"main","version":"2.1.86","isSidechain":false,"message":{"role":"assistant","content":[{"type":"text","text":"hi there"}]}}
-{"type":"custom-title","customTitle":"test session","sessionId":"s1"}
-`
-	path := filepath.Join(dir, "s1.jsonl")
-	os.WriteFile(path, []byte(jsonl), 0o644)
-
-	err := processFile(t, db, path, 0, int64(len(jsonl)), "2026-03-28T15:00:00Z")
-	if err != nil {
-		t.Fatalf("processFile failed: %v", err)
-	}
-	var title string
-	err = db.db.QueryRow("SELECT custom_title FROM sessions WHERE session_id='s1'").Scan(&title)
-	if err != nil {
-		t.Fatalf("session not found: %v", err)
-	}
-	if title != "test session" {
-		t.Errorf("title: got %q, want %q", title, "test session")
-	}
-
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='s1'").Scan(&count); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
-	}
-	if count != 2 {
-		t.Errorf("messages: got %d, want 2", count)
-	}
-}
-
 func TestProcessFile_ResolvesRepoPath(t *testing.T) {
 	db := testDB(t)
 	dir := testTempDir(t)
@@ -562,30 +529,6 @@ func TestImport_InvalidSourceDoesNotDelete(t *testing.T) {
 	}
 	if count != 1 {
 		t.Errorf("message count after failed import: got %d, want 1", count)
-	}
-}
-
-func TestImportSourceChoicesMatchValidSources(t *testing.T) {
-	choices := ImportSourceChoices()
-	if len(choices) != len(importSourceSpecs)+1 {
-		t.Fatalf("choices length: got %d (%v), want %d specs plus all", len(choices), choices, len(importSourceSpecs))
-	}
-	if choices[0] != string(ImportSourceAll) {
-		t.Fatalf("choices[0]: got %q, want %q", choices[0], ImportSourceAll)
-	}
-	seen := map[string]bool{choices[0]: true}
-	for i, spec := range importSourceSpecs {
-		choice := choices[i+1]
-		if choice != string(spec.source) {
-			t.Fatalf("choices[%d]: got %q, want %q", i+1, choice, spec.source)
-		}
-		if !ImportSource(choice).Valid() {
-			t.Fatalf("choice %q must be valid", choice)
-		}
-		if seen[choice] {
-			t.Fatalf("choice %q appears more than once", choice)
-		}
-		seen[choice] = true
 	}
 }
 

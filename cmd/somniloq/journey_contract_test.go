@@ -395,12 +395,6 @@ func journeyPage(t *testing.T, page map[string]any) {
 	if !ok {
 		t.Fatal(page)
 	}
-	for _, key := range []string{"total", "count", "offset"} {
-		n, ok := page[key].(float64)
-		if !ok || n < 0 || n != float64(int(n)) {
-			t.Fatalf("numeric %s: %v", key, page)
-		}
-	}
 	if page["count"] != float64(len(items)) || page["offset"] != float64(0) || page["hasMore"] != false || page["nextOffset"] != nil || page["total"] != page["count"] {
 		t.Fatal(page)
 	}

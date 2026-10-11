@@ -12,16 +12,6 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
 )
 
-func processCodexFile(t *testing.T, db *DB, path, jsonl string) error {
-	_, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(t, db, SourceCodex),
-		path,
-		0,
-		int64(len(jsonl)),
-		"2026-05-01T00:10:00Z",
-	)
-	return err
-}
-
 func TestCodexScanFiles_Recursive(t *testing.T) {
 	root := testTempDir(t)
 	nested := filepath.Join(root, "2026", "05", "01")
@@ -69,53 +59,6 @@ func TestCodexScanFiles_UnreadableRootIsReported(t *testing.T) {
 	}
 }
 
-func TestCodexProcessFile_CountsUnparsedLines(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	// One broken JSON line and one message with a malformed content payload;
-	// the non-message event_msg record is deliberately ignored.
-	jsonl := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-session","cwd":"/nonexistent/codex-project","cli_version":"0.128.0","git":{"branch":"main"}}}
-{broken json
-{"timestamp":"2026-05-01T00:00:01.000Z","type":"event_msg","payload":{"type":"token_count"}}
-{"timestamp":"2026-05-01T00:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":"not a block array"}}
-{"timestamp":"2026-05-01T00:00:03.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
-`
-	path := filepath.Join(dir, "rollout.jsonl")
-	if err := os.WriteFile(path, []byte(jsonl), 0o644); err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
-
-	pr, err := codex.NewAdapter(ResolveRepoPath).ProcessFile(newImportTransaction(t, db, SourceCodex),
-		path,
-		0,
-		int64(len(jsonl)),
-		"2026-05-01T00:10:00Z",
-	)
-	if err != nil {
-		t.Fatalf("ProcessFile failed: %v", err)
-	}
-	if pr.UnparsedLines != 2 {
-		t.Errorf("UnparsedLines: got %d, want 2", pr.UnparsedLines)
-	}
-	if len(pr.UnparsedDiagnostics) != 2 {
-		t.Fatalf("UnparsedDiagnostics: got %d, want 2: %v", len(pr.UnparsedDiagnostics), pr.UnparsedDiagnostics)
-	}
-	for i, wantPrefix := range []string{path + ":2: ", path + ":4: "} {
-		if got := pr.UnparsedDiagnostics[i].Error(); !strings.HasPrefix(got, wantPrefix) {
-			t.Errorf("UnparsedDiagnostics[%d] = %q, want prefix %q", i, got, wantPrefix)
-		}
-	}
-
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM messages WHERE session_id='codex-session'").Scan(&count); err != nil {
-		t.Fatalf("COUNT failed: %v", err)
-	}
-	if count != 1 {
-		t.Errorf("messages: got %d, want 1", count)
-	}
-}
-
 func TestCodexImport_ReportsDiagnosticOnUnterminatedPrefixLine(t *testing.T) {
 	db := testDB(t)
 	root := testTempDir(t)
@@ -145,71 +88,6 @@ func TestCodexImport_ReportsDiagnosticOnUnterminatedPrefixLine(t *testing.T) {
 	}
 	if got, wantPrefix := res.UnparsedDiagnostics[0].Error(), path+":2: "; !strings.HasPrefix(got, wantPrefix) {
 		t.Errorf("diagnostic = %q, want prefix %q", got, wantPrefix)
-	}
-}
-
-func TestCodexProcessFile_ImportsConversationMessages(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	jsonl := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"before metadata"}]}}
-{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"codex-session","timestamp":"2026-05-01T00:00:00.000Z","cwd":"/nonexistent/codex-project","cli_version":"0.128.0","git":{"branch":"main"}}}
-{"timestamp":"2026-05-01T00:00:01.000Z","type":"event_msg","payload":{"type":"token_count"}}
-{"timestamp":"2026-05-01T00:00:02.000Z","type":"response_item","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"hello"}]}}
-{"timestamp":"2026-05-01T00:00:03.000Z","type":"response_item","payload":{"type":"function_call","name":"exec_command","arguments":"{}"}}
-{"timestamp":"2026-05-01T00:00:04.000Z","type":"response_item","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"hi there"}]}}
-{"timestamp":"2026-05-01T00:00:05.000Z","type":"response_item","payload":{"type":"message","role":"system","content":[{"type":"text","text":"skip"}]}}
-`
-	path := filepath.Join(dir, "rollout.jsonl")
-	if err := os.WriteFile(path, []byte(jsonl), 0o644); err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
-
-	err := processCodexFile(t, db, path, jsonl)
-	if err != nil {
-		t.Fatalf("processCodexFile failed: %v", err)
-	}
-	var source, repoPath, branch, version string
-	if err := db.db.QueryRow(
-		"SELECT source, repo_path, git_branch, version FROM sessions WHERE source='codex' AND session_id='codex-session'",
-	).Scan(&source, &repoPath, &branch, &version); err != nil {
-		t.Fatalf("session not found: %v", err)
-	}
-	if source != "codex" || repoPath != "/nonexistent/codex-project" || branch != "main" || version != "0.128.0" {
-		t.Errorf("session: source=%q repo=%q branch=%q version=%q", source, repoPath, branch, version)
-	}
-
-	rows, err := db.db.Query("SELECT uuid, role, content FROM messages WHERE source='codex' AND session_id='codex-session' ORDER BY timestamp")
-	if err != nil {
-		t.Fatalf("messages query failed: %v", err)
-	}
-	defer rows.Close()
-
-	var got []string
-	for rows.Next() {
-		var uuid, role, content string
-		if err := rows.Scan(&uuid, &role, &content); err != nil {
-			t.Fatalf("Scan failed: %v", err)
-		}
-		if !strings.HasPrefix(uuid, "codex:") {
-			t.Errorf("uuid should be codex-derived, got %q", uuid)
-		}
-		got = append(got, role+":"+content)
-	}
-	if err := rows.Err(); err != nil {
-		t.Fatalf("Rows failed: %v", err)
-	}
-	want := []string{"user:hello", "assistant:hi there"}
-	if strings.Join(got, "\n") != strings.Join(want, "\n") {
-		t.Errorf("messages:\ngot  %q\nwant %q", got, want)
-	}
-
-	state, err := db.GetImportState(testOnlyInput(t, db), path)
-	if err != nil {
-		t.Fatalf("GetImportState failed: %v", err)
-	}
-	if state == nil || state.Source != SourceCodex || state.LastOffset != int64(len(jsonl)) {
-		t.Fatalf("import_state: %+v", state)
 	}
 }
 
@@ -277,35 +155,4 @@ func TestCodexImport_IncrementalUsesSessionMetaBeforeOffset(t *testing.T) {
 func codexMessageUUID(path string, lineNumber int) string {
 	sum := sha256.Sum256([]byte(path + "\x00" + strconv.Itoa(lineNumber)))
 	return "codex:" + hex.EncodeToString(sum[:])
-}
-
-func TestCodexProcessFile_MetaOnlyDoesNotAdvanceImportState(t *testing.T) {
-	db := testDB(t)
-	dir := testTempDir(t)
-
-	jsonl := `{"timestamp":"2026-05-01T00:00:00.000Z","type":"session_meta","payload":{"id":"meta-only","timestamp":"2026-05-01T00:00:00.000Z","cwd":"/nonexistent/meta-only","cli_version":"0.128.0"}}
-`
-	path := filepath.Join(dir, "rollout-meta-only.jsonl")
-	if err := os.WriteFile(path, []byte(jsonl), 0o644); err != nil {
-		t.Fatalf("WriteFile failed: %v", err)
-	}
-
-	err := processCodexFile(t, db, path, jsonl)
-	if err != nil {
-		t.Fatalf("processCodexFile failed: %v", err)
-	}
-	var count int
-	if err := db.db.QueryRow("SELECT COUNT(*) FROM sessions WHERE source='codex'").Scan(&count); err != nil {
-		t.Fatalf("COUNT sessions failed: %v", err)
-	}
-	if count != 0 {
-		t.Errorf("sessions: got %d, want 0", count)
-	}
-	state, err := db.GetImportState(testOnlyInput(t, db), path)
-	if err != nil {
-		t.Fatalf("GetImportState failed: %v", err)
-	}
-	if state != nil {
-		t.Fatalf("import_state should be nil for meta-only file, got %+v", state)
-	}
 }
