@@ -18,7 +18,7 @@ TARGETS = (
 
 
 def run(*args, **kwargs):
-    return subprocess.check_output(args, cwd=ROOT, text=True, **kwargs)
+    return subprocess.check_output(args, cwd=ROOT, text=True, encoding="utf-8", **kwargs)
 
 
 def main():
@@ -34,7 +34,7 @@ def main():
     for requirement in requirements:
         name = requirement["Path"]
         modules[name] = json.loads(run("go", "list", "-m", "-json", name))
-        notices[name + "/LICENSE"] = (Path(modules[name]["Dir"]) / "LICENSE").read_text()
+        notices[name + "/LICENSE"] = (Path(modules[name]["Dir"]) / "LICENSE").read_text(encoding="utf-8")
 
     with tempfile.TemporaryDirectory(prefix="somniloq-notices-") as temporary:
         for target in TARGETS:
@@ -48,7 +48,7 @@ def main():
             )
             for path in sorted(destination.rglob("*")):
                 if path.is_file():
-                    notices[path.relative_to(destination).as_posix()] = path.read_text()
+                    notices[path.relative_to(destination).as_posix()] = path.read_text(encoding="utf-8")
             # go-licenses does not detect licenses embedded in generated libc code.
             sources = run(
                 "go", "list", "-deps", "-f",
@@ -63,7 +63,7 @@ def main():
                     continue
                 for match in re.finditer(
                     r"(?m)^[ \t]*(?://[^\n]*(?:\n[ \t]*//[^\n]*)*|/\*[\s\S]*?\*/)",
-                    path.read_text(),
+                    path.read_text(encoding="utf-8"),
                 ):
                     comment = match.group().strip()
                     if re.search(
@@ -80,7 +80,7 @@ def main():
     }
     for name, paths in supplements.items():
         for relative in paths:
-            notices[name + "/" + relative] = (Path(modules[name]["Dir"]) / relative).read_text()
+            notices[name + "/" + relative] = (Path(modules[name]["Dir"]) / relative).read_text(encoding="utf-8")
     notices["modernc.org/libc/embedded-source-notices"] = (
         "対象ビルドの libc ソース内に保持された通知コメントです。\n"
         "生成ヘッダー由来の通知も含み、実行コードのライセンス分類を示すものではありません。\n\n"
@@ -95,10 +95,10 @@ def main():
     go_license = goroot / "LICENSE"
     if not go_license.is_file():
         go_license = goroot.parent / "LICENSE"
-    notices["Go/LICENSE"] = go_license.read_text()
-    notices["Go/PATENTS"] = (goroot / "PATENTS").read_text()
+    notices["Go/LICENSE"] = go_license.read_text(encoding="utf-8")
+    notices["Go/PATENTS"] = (goroot / "PATENTS").read_text(encoding="utf-8")
     for path in sorted((goroot / "src/vendor").rglob("LICENSE")):
-        notices["Go/" + path.relative_to(goroot).as_posix()] = path.read_text()
+        notices["Go/" + path.relative_to(goroot).as_posix()] = path.read_text(encoding="utf-8")
 
     sections = [
         "THIRD-PARTY NOTICES\n\n"
@@ -118,10 +118,10 @@ def main():
     output = "".join(sections)
     destination = ROOT / "THIRD-PARTY-NOTICES.txt"
     if args.check:
-        if destination.read_text() != output:
+        if destination.read_text(encoding="utf-8") != output:
             raise SystemExit("THIRD-PARTY-NOTICES.txt is outdated; regenerate it.")
     else:
-        destination.write_text(output)
+        destination.write_text(output, encoding="utf-8")
 
 
 if __name__ == "__main__":
