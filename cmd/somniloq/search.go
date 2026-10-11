@@ -28,7 +28,7 @@ const searchHelpDetails = `Search lists saved work groups, without body snippets
   Sort: lastAt descending, unknown last, group key ascending. Default unlimited; only explicit --limit caps results.
   JSON: {items,total,count,limit,offset,hasMore,nextOffset}.
   TSV: # page metadata, then ref,input,source,project,title,startedAt,lastAt,importedAt,members,matchedMembers,memberCount.
-  Strings use reversible escapes, null is \N, arrays are compact JSON.
+  Strings use reversible escapes (controls as \xhh, ESC as \x1b); null is \N, arrays are compact JSON.
   Explicit limit 0 gives an empty page; offsets beyond the end retain total.
   Invalid input exits 2 with empty stdout; zero matches succeeds.
 
@@ -208,7 +208,7 @@ func writeSearchGroupTSV(out io.Writer, page searchGroupJSON) error {
 	for _, s := range page.Items {
 		members, _ := json.Marshal(s.Members)
 		matched, _ := json.Marshal(s.MatchedMembers)
-		fields := []string{showTSVString(s.REF), showTSVNullable(s.Input), showTSVString(string(s.Source)), showTSVNullable(s.Project), showTSVNullable(s.Title), showTSVNullable(s.StartedAt), showTSVNullable(s.LastAt), showTSVNullable(s.ImportedAt), string(members), string(matched), strconv.Itoa(s.MemberCount)}
+		fields := []string{showTSVString(s.REF), showTSVNullable(s.Input), showTSVString(string(s.Source)), showTSVNullable(s.Project), showTSVNullable(s.Title), showTSVNullable(s.StartedAt), showTSVNullable(s.LastAt), showTSVNullable(s.ImportedAt), showTSVJSON(members), showTSVJSON(matched), strconv.Itoa(s.MemberCount)}
 		if _, err := fmt.Fprintln(out, strings.Join(fields, "\t")); err != nil {
 			return err
 		}

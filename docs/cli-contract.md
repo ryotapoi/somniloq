@@ -24,7 +24,7 @@ REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`。Base64 は padding なし R
 
 `messageNumber` は本人原文の1始まり番号で `show` と詳細検索に共通する。`occurrenceNumber` は同一発言内の1始まり番号。`startByte` / `endByte` は原文 text 内の UTF-8 byte の半開区間 `[startByte,endByte)` で、`matchText` を切り出せる。`patternIndexes` は pattern 列の1始まり番号の配列。位置引数の pattern があれば先頭に置き、その後に `-e` を指定順で並べる。`-e` だけの場合も最初は1となる。
 
-一覧project/titleは存在するrootの値のみ、子から推測しない。欠落rootではnull。`search` と `show` の TSV は先頭 `# page\t` の後に同envelopeのitemsを除くcompact JSON、一行header、その後itemごと一行。列順は上表field順。nullは `\N`、配列はcompact JSON、文字列はbackslash→`\\`、tab→`\t`、LF→`\n`、CR→`\r` の順にescapeして可逆にする。JSON一行textもtextだけ短縮、blocksは原文のまま。JSON/TSVは本文抜粋を一覧に載せない。
+一覧project/titleは存在するrootの値のみ、子から推測しない。欠落rootではnull。`search` と `show` の TSV は先頭 `# page\t` の後に同envelopeのitemsを除くcompact JSON、一行header、その後itemごと一行。列順は上表field順。nullは `\N`、配列はcompact JSON、文字列はbackslash→`\\`、tab→`\t`、LF→`\n`、CR→`\r` を優先してescapeし、それ以外の C0（U+0000–U+001F）、DEL（U+007F）、C1（U+0080–U+009F）は小文字2桁の `\xhh`（ESC は `\x1b`）で返す。復元は左から右へ一回だけ行い、`\\` / `\t` / `\n` / `\r` を対応文字に、`\xhh` を同値の Unicode code point に戻す（C1 は raw byte ではなく UTF-8 の文字）。復元結果を再度escape解釈しない。元の literal `\x1b` は `\\x1b`、literal `\N` は `\\N` となり、null は列全体が `\N` の場合のみ。配列の JSON は C0 を JSON escape、DEL/C1 を `\u007f` / `\u00hh` にし、TSV escape を重ねず JSON decode で元の値に戻す。JSON一行textもtextだけ短縮、blocksは原文のまま。JSON/TSVは本文抜粋を一覧に載せない。
 
 `search` と `show` は成功時に0（0件含む）、入力・設定・REF・非対応DBの拒否に2、I/O失敗に1を返す。診断はstderr、結果はstdoutに分ける。`migrate` の終了値とsummaryは [移行手順](migration.md#成功失敗と出力) に従う。表示用現在時刻を日時unknownに代入しない。
 

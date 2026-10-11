@@ -208,12 +208,12 @@ func TestSearchDetailValidationBeforeDB(t *testing.T) {
 	}
 }
 func TestSearchDetailTSVEscaping(t *testing.T) {
-	page := searchDetailJSON{Items: []core.SearchOccurrence{{REF: "r", Role: "user", PatternIndexes: []int{1}, MatchText: "a\t\\\r\n", LineText: "a\t\\\r\n"}}, Total: 1, Count: 1}
+	page := searchDetailJSON{Items: []core.SearchOccurrence{{REF: "r", Role: "user", PatternIndexes: []int{1}, MatchText: "a\t\\\r\n\x1b", LineText: "a\t\\\r\n\u009b"}}, Total: 1, Count: 1}
 	var out bytes.Buffer
 	if e := writeSearchDetailTSV(&out, page); e != nil {
 		t.Fatal(e)
 	}
-	if !strings.Contains(out.String(), "\\N\t0\t0\t[1]\ta\\t\\\\\\r\\n\ta\\t\\\\\\r\\n\n") {
+	if !strings.Contains(out.String(), "\\N\t0\t0\t[1]\ta\\t\\\\\\r\\n\\x1b\ta\\t\\\\\\r\\n\\x9b\n") {
 		t.Fatal(out.String())
 	}
 }

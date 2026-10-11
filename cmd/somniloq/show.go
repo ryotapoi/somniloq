@@ -16,7 +16,7 @@ const showUsageLine = "somniloq show [--config NAME_OR_PATH] REF... [--descendan
 const showHelpDetails = `Output (TSV/JSON):
   Envelope: items, total, count, limit, offset, hasMore, nextOffset.
   Each item: ref, messageNumber, role, timestamp, text, blocks, parentRef, rootRef, provenance.
-  TSV begins with # page metadata and a fixed header; null is \N and strings are reversibly escaped.
+  TSV begins with # page metadata and a fixed header; null is \N and strings are reversibly escaped (controls as \xhh, ESC as \x1b).
 Notes:
   Full REF values are required. Selectors are expanded in input order and duplicates removed.
   --descendants includes confirmed descendants in parent-first order.

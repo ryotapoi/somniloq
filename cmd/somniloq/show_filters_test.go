@@ -140,13 +140,22 @@ func TestShowTSVWireFormatAndWriteErrors(t *testing.T) {
 	if out.String() != want {
 		t.Fatalf("TSV: %q", out.String())
 	}
-	p.Items[0].Blocks = []string{"a\tb\n\\N"}
+	p.Items[0].Text = "\x1b[2J\u009b"
+	p.Items[0].Blocks = []string{"a\tb\n\\N\x1b\x7f\u009b"}
 	out.Reset()
 	if err := writeShowTSV(&out, p); err != nil {
 		t.Fatal(err)
 	}
-	if strings.Count(out.String(), "\n") != 4 || !strings.Contains(out.String(), `["a\tb\n\\N"]`) {
+	if strings.Count(out.String(), "\n") != 4 || !strings.Contains(out.String(), `["a\tb\n\\N\u001b\u007f\u009b"]`) {
 		t.Fatalf("blocks: %q", out.String())
+	}
+	row := strings.Split(strings.Split(out.String(), "\n")[2], "\t")
+	if len(row) != 9 || row[4] != `\x1b[2J\x9b` {
+		t.Fatalf("row: %q", row)
+	}
+	var blocks []string
+	if err := json.Unmarshal([]byte(row[5]), &blocks); err != nil || len(blocks) != 1 || blocks[0] != p.Items[0].Blocks[0] {
+		t.Fatalf("blocks: %q, %v", blocks, err)
 	}
 	for _, format := range []string{"tsv", "json"} {
 		code, err := showCmd([]string{fixtureREF(core.SourceCodex, "a"), "--format", format}, staticDB(newShowFilterDB(t)), config{}, failWriter{}, &bytes.Buffer{})

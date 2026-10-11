@@ -141,11 +141,11 @@ func TestSearchListValidationBeforeDB(t *testing.T) {
 }
 func TestSearchListTSVNullAndArrays(t *testing.T) {
 	var out bytes.Buffer
-	page := searchGroupJSON{Items: []core.SearchGroup{{REF: "r", Source: core.SourceCodex, Members: []string{"r"}, MatchedMembers: []string{"r"}, MemberCount: 1}}, Total: 1, Count: 1, Limit: newInt(20)}
+	page := searchGroupJSON{Items: []core.SearchGroup{{REF: "r\x1b", Source: core.SourceCodex, Members: []string{"r\u009b"}, MatchedMembers: []string{"r\x7f"}, MemberCount: 1}}, Total: 1, Count: 1, Limit: newInt(20)}
 	if err := writeSearchGroupTSV(&out, page); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(out.String(), "r\t\\N\tcodex\t\\N\t\\N\t\\N\t\\N\t\\N\t[\"r\"]\t[\"r\"]\t1\n") {
+	if !strings.Contains(out.String(), "r\\x1b\t\\N\tcodex\t\\N\t\\N\t\\N\t\\N\t\\N\t[\"r\\u009b\"]\t[\"r\\u007f\"]\t1\n") {
 		t.Fatal(out.String())
 	}
 }
