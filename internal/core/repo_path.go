@@ -30,42 +30,44 @@ func ResolveRepoPath(cwd string) string {
 			env = append(env, entry)
 		}
 	}
-	// Keep -C before rev-parse so cwd is consumed as its value, even when it
-	// begins with a hyphen.
-	cmd := exec.Command("git", "-C", cwd, "rev-parse", "--show-toplevel")
-	// Git failures use the cwd fallback; discard stderr to keep expected misses silent.
-	cmd.Env = env
-	cmd.Stderr = io.Discard
-	out, err := cmd.Output()
+	// Keep -C before the subcommand so cwd is consumed as its value, even when
+	// it begins with a hyphen. Every query must use the filtered environment.
+	gitOutput := func(args ...string) (string, error) {
+		cmd := exec.Command("git", append([]string{"-C", cwd}, args...)...)
+		cmd.Env = env
+		// Git failures use the cwd/root fallback; keep expected misses silent.
+		cmd.Stderr = io.Discard
+		out, err := cmd.Output()
+		return string(out), err
+	}
+	out, err := gitOutput("rev-parse", "--show-toplevel")
 	if err != nil {
 		return cwd
 	}
-	// Git terminates this output with a newline. Trimming only CR/LF preserves
-	// trailing spaces; TrimSpace would remove them.
-	root := strings.TrimRight(string(out), "\r\n")
-	// Only linked worktrees have a Git directory distinct from the common
-	// directory. Ordinary repositories and submodules retain their top-level.
-	cmd = exec.Command("git", "-C", cwd, "rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir")
-	cmd.Env = env
-	cmd.Stderr = io.Discard
-	out, err = cmd.Output()
+	// Git adds one LF to each single path result. The path itself may end in
+	// CR, LF, or spaces, so remove only that terminator.
+	root := strings.TrimSuffix(out, "\n")
+	// Query paths separately: embedded LF is a valid path byte, not a separator.
+	gitDir, err := gitOutput("rev-parse", "--path-format=absolute", "--git-dir")
 	if err != nil {
 		return root
 	}
-	dirs := strings.Split(strings.TrimRight(string(out), "\r\n"), "\n")
-	if len(dirs) != 2 || dirs[0] == dirs[1] {
+	commonDir, err := gitOutput("rev-parse", "--path-format=absolute", "--git-common-dir")
+	if err != nil {
+		return root
+	}
+	// Only linked worktrees have a Git directory distinct from the common
+	// directory. Ordinary repositories and submodules retain their top-level.
+	if strings.TrimSuffix(gitDir, "\n") == strings.TrimSuffix(commonDir, "\n") {
 		return root
 	}
 	// Git lists the main worktree first. Do not infer its root from the
 	// common directory's location; that location need not be root/.git.
-	cmd = exec.Command("git", "-C", cwd, "worktree", "list", "--porcelain", "-z")
-	cmd.Env = env
-	cmd.Stderr = io.Discard
-	out, err = cmd.Output()
+	out, err = gitOutput("worktree", "list", "--porcelain", "-z")
 	if err != nil {
 		return root
 	}
-	first, _, _ := strings.Cut(string(out), "\x00")
+	first, _, _ := strings.Cut(out, "\x00")
 	if main, ok := strings.CutPrefix(first, "worktree "); ok {
 		return main
 	}

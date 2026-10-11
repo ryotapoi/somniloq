@@ -724,7 +724,21 @@ func TestImport_MetaAfterBody_AcrossInvocations(t *testing.T) {
 }
 
 func TestImport_LinkedWorktreeProjects(t *testing.T) {
-	repo, worktree := linkedWorktree(t)
+	for _, tc := range []struct {
+		name, main, linked string
+	}{
+		{"spaces", "main repo ", "linked tree "},
+		{"newlines", "main\rinside\nend\r\n", "linked\ninside\r\n"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			testImportLinkedWorktreeProjects(t, tc.main, tc.linked)
+		})
+	}
+}
+
+func testImportLinkedWorktreeProjects(t *testing.T, mainName, linkedName string) {
+	t.Helper()
+	repo, worktree := linkedWorktreeNamed(t, mainName, linkedName)
 	foreignRepo, foreignWorktree := linkedWorktree(t)
 	foreignGitDir, err := exec.Command("git", "-C", foreignWorktree, "rev-parse", "--absolute-git-dir").Output()
 	if err != nil {

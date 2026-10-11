@@ -184,13 +184,18 @@ func TestResolveRepoPath_NotGitRepo(t *testing.T) {
 // Keep Git discovery tests sequential because they clear process-wide GIT_*.
 func linkedWorktree(t *testing.T) (string, string) {
 	t.Helper()
+	return linkedWorktreeNamed(t, "main repo ", "linked tree ")
+}
+
+func linkedWorktreeNamed(t *testing.T, mainName, linkedName string) (string, string) {
+	t.Helper()
 	unsetAllGitEnv(t)
 	parent, err := filepath.EvalSymlinks(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	repo := filepath.Join(parent, "main repo ")
-	worktree := filepath.Join(parent, "linked tree ")
+	repo := filepath.Join(parent, mainName)
+	worktree := filepath.Join(parent, linkedName)
 	run := func(args ...string) {
 		t.Helper()
 		cmd := exec.Command("git", args...)
@@ -214,6 +219,25 @@ func TestResolveRepoPath_LinkedWorktree(t *testing.T) {
 		if got := ResolveRepoPath(cwd); got != repo {
 			t.Errorf("ResolveRepoPath(%q) = %q, want %q", cwd, got, repo)
 		}
+	}
+}
+
+func TestResolveRepoPath_PreservesNewlines(t *testing.T) {
+	for _, name := range []string{"main\rinside\nend", "main\r", "main\n\n", "main\r\n"} {
+		t.Run(fmt.Sprintf("%q", name), func(t *testing.T) {
+			repo, worktree := linkedWorktreeNamed(t, name, "linked\rinside\nend\r\n")
+			for _, root := range []string{repo, worktree} {
+				sub := filepath.Join(root, "sub")
+				if err := os.Mkdir(sub, 0o755); err != nil {
+					t.Fatal(err)
+				}
+				for _, cwd := range []string{root, sub} {
+					if got := ResolveRepoPath(cwd); got != repo {
+						t.Errorf("ResolveRepoPath(%q) = %q, want %q", cwd, got, repo)
+					}
+				}
+			}
+		})
 	}
 }
 

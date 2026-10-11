@@ -97,9 +97,9 @@
 
 #### repository の解決
 
-- [ ] Git パス内の改行を repository 名として保持する
+- [x] Git パス内の改行を repository 名として保持する
 
-  Git repository のパスに CR・LF があると、出力の trim・分割で別パスを保存し linked worktree と本体も別 project になる。対応方針は、大幅な書換えをせず、`internal/core/repo_path.go` の Git 出力解析を局所的に修正する範囲で確定する。パス内・末尾の改行を保持し、同じ repository の本体と worktree が同じ repo_path に解決されることを確認する。局所修正で成立しない場合は、構造変更を進める前に範囲と保守負担を再判断する。
+  Git の単独パス出力は終端 LF 1文字だけを除去し、git-dir と common-dir は個別に照会する。パス内・末尾の CR・LF を保持し、本体と linked worktree の同一 repo_path、Claude Code / Codex の保存・project 集約、通常 import の旧値保持と full による再解決を回帰テストで確認した。
 
 - [ ] ルート直下の Claude worktree を repository に解決する
 
