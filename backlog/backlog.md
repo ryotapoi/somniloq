@@ -73,9 +73,9 @@
 
   `--since`・`--until` と search の `--imported-since` で原文の RFC3339 offset を検査し、時24・分60を補正受理せず DB open 前の引数エラー終了2で拒否する。projects と同じ境界、正常 offset・小数秒・等価 instant の選択と下限包含・日時上限排他を回帰テストで確認した。help と README 両言語も同期した。
 
-- [ ] projects に表示した full-path alias で検索できるようにする
+- [x] projects に表示した full-path alias で検索できるようにする
 
-  full path を projectAliases に設定すると projects は canonical 名で集計するが、search はその名や設定した旧 full path から同じ履歴を選べない。対応方針は、この表示と検索の不一致を不具合として修正することで確定する。受理済み alias の表示と選択を整合させ、canonical 名・旧 full path のどちらでも対象履歴を検索できることを確認する。
+  完全一致で展開した alias group 内の full path を保存 repository path 全体への literal equality として候補選択に渡す。canonical 名・旧 full path のどちらからも pattern なし・あり・指定 REF の search で選べること、projects の集約件数と保存値の不変、別ディレクトリの同 basename を巻き込まないことを確認した。通常の basename substring と非 alias 入力の意味は維持する。
 
 - [ ] full path と basename が交差する alias の曖昧さを拒否する
 

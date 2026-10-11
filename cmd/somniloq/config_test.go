@@ -2,7 +2,9 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -270,4 +272,57 @@ func newLiteralAliasTestDB(t *testing.T, aliases []string) *core.DB {
 		t.Fatalf("UpsertSession(false-positive): %v", err)
 	}
 	return db
+}
+
+func TestFullPathAliasDisplayAndSearch(t *testing.T) {
+	for _, canonical := range []string{"renamed", "/new/renamed"} {
+		t.Run(canonical, func(t *testing.T) {
+			cfg := config{ProjectAliases: map[string][]string{canonical: {"/Users/test/Brimday", "somniloq"}}}
+			newPath := "/Users/test/somniloq"
+			if filepath.IsAbs(canonical) {
+				newPath = canonical
+			}
+			makeDB := func() *core.DB {
+				db := newProjectAliasDisplayDB(t)
+				if err := db.UpsertSession(testInputID(t, db, core.SourceClaudeCode), core.SessionMeta{Source: core.SourceClaudeCode, SessionID: "new-1", RepoPath: newPath, StartedAt: "2026-03-29T10:00:00Z"}, "2026-03-29T15:00:00Z"); err != nil {
+					t.Fatal(err)
+				}
+				return db
+			}
+			db := makeDB()
+			var out, errOut bytes.Buffer
+			code, err := projectsCmd(nil, staticDB(db), cfg, &out, &errOut)
+			if code != 0 || err != nil || !strings.Contains(out.String(), canonical+"\t2\n") {
+				t.Fatalf("projects = %d, %v, %q, stderr %q", code, err, out.String(), errOut.String())
+			}
+			for _, input := range []string{canonical, "/Users/test/Brimday"} {
+				for _, args := range [][]string{
+					{"--project", input, "--format", "json"},
+					{"--project", input, "--format", "json", "alias-hit"},
+					{"--project", input, "--session", fixtureREF(core.SourceClaudeCode, "old-1"), "alias-hit"},
+				} {
+					out.Reset()
+					errOut.Reset()
+					code, err := searchCmd(args, staticDB(makeDB()), cfg, &out, &errOut)
+					if code != 0 || err != nil || !strings.Contains(out.String(), fixtureREF(core.SourceClaudeCode, "old-1")) {
+						t.Fatalf("search %v = %d, %v, %q, stderr %q", args, code, err, out.String(), errOut.String())
+					}
+					if args[2] == "--format" {
+						var page searchGroupJSON
+						if err := json.Unmarshal(out.Bytes(), &page); err != nil {
+							t.Fatal(err)
+						}
+						if page.Total != 2 {
+							t.Fatalf("total = %d, want 2", page.Total)
+						}
+						for _, item := range page.Items {
+							if item.Project == nil || (*item.Project != "/Users/test/Brimday" && *item.Project != newPath) {
+								t.Fatalf("saved root project changed: %+v", item)
+							}
+						}
+					}
+				}
+			}
+		})
+	}
 }

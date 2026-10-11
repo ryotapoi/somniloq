@@ -206,7 +206,7 @@ func parseDayBoundary(value string) (dayBoundary, error) {
 // exactly equals a group's canonical name or one of its old names, the whole
 // group is returned so any of the names matches. Otherwise the value is
 // passed through unchanged. Exact equality keeps expansion predictable —
-// substring matching still happens in SQL against each returned pattern.
+// basename substring matching remains available for unaliased values.
 func (c config) expandProject(project string) []string {
 	if project == "" {
 		return nil
@@ -218,4 +218,24 @@ func (c config) expandProject(project string) []string {
 		return append([]string{canonical}, oldNames...)
 	}
 	return []string{project}
+}
+
+// searchProjects preserves full paths from an exact alias expansion separately
+// from the ordinary basename substring conditions.
+func (c config) searchProjects(project string) core.SearchCandidates {
+	for canonical, oldNames := range c.ProjectAliases {
+		if project == "" || (project != canonical && !slices.Contains(oldNames, project)) {
+			continue
+		}
+		var candidates core.SearchCandidates
+		for _, name := range append([]string{canonical}, oldNames...) {
+			if filepath.IsAbs(name) {
+				candidates.ProjectPaths = append(candidates.ProjectPaths, name)
+			} else {
+				candidates.Projects = append(candidates.Projects, name)
+			}
+		}
+		return candidates
+	}
+	return core.SearchCandidates{Projects: c.expandProject(project)}
 }

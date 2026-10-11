@@ -227,3 +227,28 @@ func TestSearchGroupsActivityModesAndImportCandidates(t *testing.T) {
 		})
 	}
 }
+
+func TestSearchCandidatesProjectPaths(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		c    SearchCandidates
+		path string
+		want bool
+	}{
+		{"full path literal", SearchCandidates{ProjectPaths: []string{"/old/rate_100%"}}, "/old/rate_100%", true},
+		{"same basename elsewhere", SearchCandidates{ProjectPaths: []string{"/old/rate_100%"}}, "/other/rate_100%", false},
+		{"prefix", SearchCandidates{ProjectPaths: []string{"/old/repo"}}, "/old/repository", false},
+		{"suffix", SearchCandidates{ProjectPaths: []string{"/old/repo"}}, "/prefix/old/repo", false},
+		{"case sensitive", SearchCandidates{ProjectPaths: []string{"/old/Repo"}}, "/old/repo", false},
+		{"basename alternative", SearchCandidates{Projects: []string{"new"}, ProjectPaths: []string{"/old/repo"}}, "/else/new-repo", true},
+		{"ordinary substring", SearchCandidates{Projects: []string{"repo"}}, "/else/my-repo", true},
+		{"unaliased path stays substring", SearchCandidates{Projects: []string{"/old/repo"}}, "/old/repo", false},
+		{"empty saved path", SearchCandidates{ProjectPaths: []string{"/old/repo"}}, "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := tc.c.accepts(searchOwner{project: &tc.path}); got != tc.want {
+				t.Fatalf("accepts(%q) = %v, want %v", tc.path, got, tc.want)
+			}
+		})
+	}
+}

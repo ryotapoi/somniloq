@@ -21,6 +21,7 @@ const searchHelpDetails = `Search lists saved work groups, without body snippets
   Sources: claude-code, codex, cursor-agent (all is not accepted).
   Input paths use the config directory and canonical path rules.
   --project matches case-sensitive substrings of repo_path's final name; exact aliases expand.
+  Full paths in an expanded alias group match the whole saved repo_path literally.
   Candidates are selected before body matching. Members lists the full group;
   matchedMembers lists candidate members, including members without a pattern hit.
   Root project/title are not filled from children. Dates use all members' known own-body times.
@@ -89,7 +90,7 @@ func newSearchFlagSet() (*flag.FlagSet, searchFlags) {
 	return fs, f
 }
 func searchCandidateFilter(f searchFlags, cfg config) (core.SearchCandidates, error) {
-	c := core.SearchCandidates{Projects: cfg.expandProject(*f.project)}
+	c := cfg.searchProjects(*f.project)
 	if *f.importedSince != "" {
 		t, err := parseRFC3339Time(*f.importedSince)
 		if err != nil {

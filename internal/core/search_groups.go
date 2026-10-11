@@ -14,6 +14,7 @@ type SearchCandidates struct {
 	Inputs        []string
 	Sources       []Source
 	Projects      []string
+	ProjectPaths  []string // Literal saved repo_path alternatives to basename substrings.
 	ImportedSince string
 }
 
@@ -70,9 +71,14 @@ func (c SearchCandidates) accepts(s searchOwner) bool {
 			return false
 		}
 	}
-	if len(c.Projects) > 0 {
+	if len(c.Projects) > 0 || len(c.ProjectPaths) > 0 {
 		found := false
 		if s.project != nil && *s.project != "" {
+			for _, p := range c.ProjectPaths {
+				if *s.project == p {
+					found = true
+				}
+			}
 			name := filepath.Base(*s.project)
 			for _, p := range c.Projects {
 				if strings.Contains(name, p) {
