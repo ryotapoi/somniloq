@@ -171,6 +171,14 @@ func validateProjectAliases(groups map[string][]string) error {
 			owners[name] = canonical
 		}
 	}
+	for _, canonical := range names {
+		for _, name := range append([]string{canonical}, groups[canonical]...) {
+			base := filepath.Base(name)
+			if owner, ok := owners[base]; ok && owner != canonical {
+				return fmt.Errorf("projectAliases: %q in %q overlaps basename %q in %q", name, canonical, base, owner)
+			}
+		}
+	}
 	return nil
 }
 

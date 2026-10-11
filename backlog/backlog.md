@@ -77,9 +77,9 @@
 
   完全一致で展開した alias group 内の full path を保存 repository path 全体への literal equality として候補選択に渡す。canonical 名・旧 full path のどちらからも pattern なし・あり・指定 REF の search で選べること、projects の集約件数と保存値の不変、別ディレクトリの同 basename を巻き込まないことを確認した。通常の basename substring と非 alias 入力の意味は維持する。
 
-- [ ] full path と basename が交差する alias の曖昧さを拒否する
+- [x] full path と basename が交差する alias の曖昧さを拒否する
 
-  同じ repository の full path と basename が別 alias group に一致すると、map 順で projects の名前と件数の集約先が変わる。対応方針は、既存の alias 重複拒否ルールを維持し、この曖昧な重なりも設定読込時に拒否する方式で確定する。優先順位は追加せず、別 group との重なりを拒否し、同じ group 内の full path と basename は受理する。受理する設定の集約先と件数が一意になることを確認する。
+  canonical 名と旧名の完全一致重複拒否を維持し、full path とその basename が別 group に属する設定も読込時に拒否する。同じ group 内の交差、および別 group の異なる full path が同 basename を持つだけの設定は受理する。canonical・旧名の配置と group の走査順によらない拒否、受理した設定の projects 集約名と件数を確認した。
 
 #### 取り込みの正確性
 

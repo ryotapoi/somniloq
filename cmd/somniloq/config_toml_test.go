@@ -507,3 +507,56 @@ func TestConfigInitDistinctPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestLoadConfigRejectsCrossGroupAliasBasenames(t *testing.T) {
+	for name, aliases := range map[string]string{
+		"both canonical":                     "'/Users/test/app' = []\napp = []\n",
+		"path canonical basename old":        "'/Users/test/app' = []\nz = ['app']\n",
+		"path old basename canonical before": "app = []\nz = ['/Users/test/app']\n",
+		"path old basename canonical after":  "a = ['/Users/test/app']\napp = []\n",
+		"both old path before":               "a = ['/Users/test/app']\nz = ['app']\n",
+		"both old path after":                "a = ['app']\nz = ['/Users/test/app']\n",
+	} {
+		t.Run(name, func(t *testing.T) {
+			path := writeConfigFixture(t, t.TempDir(), minimalTOMLConfig+"[projectAliases]\n"+aliases)
+			_, err := loadConfig(path)
+			if err == nil || !strings.Contains(err.Error(), "projectAliases:") {
+				t.Fatalf("expected alias conflict, got %v", err)
+			}
+		})
+	}
+}
+
+func TestLoadedAliasProjectAggregation(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		aliases string
+		rows    []core.ProjectRow
+		want    []projectDisplayRow
+	}{
+		{
+			name:    "same group overlap",
+			aliases: "app = ['/Users/test/app', 'app', '/archive/old']\n",
+			rows:    []core.ProjectRow{{RepoPath: "/Users/test/app", SessionCount: 2}, {RepoPath: "/other/app", SessionCount: 3}, {RepoPath: "/archive/old", SessionCount: 4}},
+			want:    []projectDisplayRow{{Project: "app", SessionCount: 9}},
+		},
+		{
+			name:    "distinct full paths sharing basename",
+			aliases: "'/Users/test/app' = []\nother = ['/other/app']\n",
+			rows:    []core.ProjectRow{{RepoPath: "/Users/test/app", SessionCount: 2}, {RepoPath: "/other/app", SessionCount: 3}, {RepoPath: "/unaliased/app", SessionCount: 4}},
+			want:    []projectDisplayRow{{Project: "/Users/test/app", SessionCount: 2}, {Project: "other", SessionCount: 3}, {Project: "/unaliased/app", SessionCount: 4}},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := writeConfigFixture(t, t.TempDir(), minimalTOMLConfig+"[projectAliases]\n"+tc.aliases)
+			cfg, err := loadConfig(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := projectDisplayRows(tc.rows, false, cfg)
+			if !reflect.DeepEqual(got, tc.want) {
+				t.Fatalf("projects = %+v, want %+v", got, tc.want)
+			}
+		})
+	}
+}
