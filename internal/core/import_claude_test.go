@@ -110,6 +110,85 @@ func claudeResult(id, agent string) string {
 	return `{"type":"user","uuid":"result-` + id + `","sessionId":"r","toolUseResult":{"agentId":"` + agent + `"},"message":{"role":"user","content":[{"type":"tool_result","tool_use_id":"` + id + `"}]}}` + "\n"
 }
 
+func TestClaudeChangedIDPreservesHistoryUntilFull(t *testing.T) {
+	root := testTempDir(t)
+	dbPath := filepath.Join(testTempDir(t), "history.db")
+	db, err := OpenDB(dbPath)
+	must(t, err)
+	t.Cleanup(func() { db.Close() })
+	priorClock := timeNow
+	timeNow = func() string { return "2026-01-01T00:00:00Z" }
+	defer func() { timeNow = priorClock }()
+	writeClaude(t, root, "p/conversation.jsonl", `{"type":"user","uuid":"same","sessionId":"a","cwd":"/old","gitBranch":"old-branch","version":"old-version","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"old history"}}`+"\n"+
+		`{"type":"custom-title","sessionId":"a","customTitle":"Old title"}`+"\n")
+	importClaudeTest(t, db, root)
+	oldREF := claudeREF(root, "a")
+	oldSession, err := db.LookupSessionREF(oldREF)
+	must(t, err)
+	if oldSession == nil || oldSession.CWD != "/old" || oldSession.CustomTitle != "Old title" {
+		t.Fatalf("initial session=%+v", oldSession)
+	}
+	oldMessages, err := db.GetIdentityMessages(oldSession.InputID, oldSession.Source, oldSession.Identity)
+	must(t, err)
+	if len(oldMessages) != 1 || oldMessages[0].Content != "old history" {
+		t.Fatalf("initial messages=%+v", oldMessages)
+	}
+	// Reopen the saved DB before replacing the same physical file's ID.
+	must(t, db.Close())
+	db, err = OpenDB(dbPath)
+	must(t, err)
+	timeNow = func() string { return "2026-01-02T00:00:00Z" }
+	writeClaude(t, root, "p/conversation.jsonl", `{"type":"user","uuid":"same","sessionId":"b","cwd":"/new","timestamp":"2026-01-02T00:00:00Z","message":{"role":"user","content":"new history"}}`+"\n")
+	for pass := 0; pass < 2; pass++ {
+		importClaudeTest(t, db, root)
+		gotSession, err := db.LookupSessionREF(oldREF)
+		must(t, err)
+		if !reflect.DeepEqual(gotSession, oldSession) {
+			t.Fatalf("pass %d changed old session: %+v", pass, gotSession)
+		}
+		gotMessages, err := db.GetIdentityMessages(oldSession.InputID, oldSession.Source, oldSession.Identity)
+		must(t, err)
+		if !reflect.DeepEqual(gotMessages, oldMessages) {
+			t.Fatalf("pass %d changed old messages: %+v", pass, gotMessages)
+		}
+		var branch, version, importedAt string
+		must(t, db.db.QueryRow(`SELECT git_branch,version,imported_at FROM sessions WHERE input_id=? AND identity=?`, oldSession.InputID, oldSession.Identity).Scan(&branch, &version, &importedAt))
+		if branch != "old-branch" || version != "old-version" || importedAt != "2026-01-01T00:00:00Z" {
+			t.Fatalf("pass %d changed old metadata: %s/%s/%s", pass, branch, version, importedAt)
+		}
+	}
+	newSession, err := db.LookupSessionREF(claudeREF(root, "b"))
+	must(t, err)
+	if newSession == nil || newSession.CWD != "/new" {
+		t.Fatalf("new session=%+v", newSession)
+	}
+	newMessages, err := db.GetIdentityMessages(newSession.InputID, newSession.Source, newSession.Identity)
+	must(t, err)
+	if len(newMessages) != 1 || newMessages[0].Content != "new history" || newMessages[0].OriginPath != "p/conversation.jsonl" {
+		t.Fatalf("new messages=%+v", newMessages)
+	}
+	r, err := Import(db, ImportOptions{Full: true, Inputs: []Input{{Source: SourceClaudeCode, Root: root}}})
+	must(t, err)
+	if len(r.Errors) > 0 {
+		t.Fatalf("full=%+v", r)
+	}
+	gotOld, err := db.LookupSessionREF(oldREF)
+	must(t, err)
+	if gotOld != nil {
+		t.Fatalf("full retained old session: %+v", gotOld)
+	}
+	gotNew, err := db.LookupSessionREF(newSession.REF)
+	must(t, err)
+	if !reflect.DeepEqual(gotNew, newSession) {
+		t.Fatalf("full changed current session: %+v", gotNew)
+	}
+	gotMessages, err := db.GetIdentityMessages(newSession.InputID, newSession.Source, newSession.Identity)
+	must(t, err)
+	if !reflect.DeepEqual(gotMessages, newMessages) {
+		t.Fatalf("full changed current messages: %+v", gotMessages)
+	}
+}
+
 func TestClaudeArrivalAppendIsolationAndFull(t *testing.T) {
 	root := testTempDir(t)
 	other := testTempDir(t)

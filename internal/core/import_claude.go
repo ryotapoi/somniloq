@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"path/filepath"
 	"reflect"
 	"strings"
 
@@ -59,29 +58,6 @@ func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecod
 			result.FilesImported++
 			for _, r := range f.Records {
 				changed[r.Session.Identity] = true
-			}
-			if old != nil && (len(f.Records) > 0 || len(f.Failures) == 0) {
-				relative, e := filepath.Rel(root, f.State.JSONLPath)
-				if e != nil {
-					return nil, e
-				}
-				rows, e := db.db.Query(`SELECT DISTINCT identity FROM messages WHERE input_id=? AND origin_path=?`, inputID, filepath.ToSlash(relative))
-				if e != nil {
-					return nil, e
-				}
-				for rows.Next() {
-					var identity string
-					if e = rows.Scan(&identity); e != nil {
-						rows.Close()
-						return nil, e
-					}
-					changed[identity] = true
-				}
-				e = rows.Err()
-				rows.Close()
-				if e != nil {
-					return nil, e
-				}
 			}
 			if full {
 				old = nil
