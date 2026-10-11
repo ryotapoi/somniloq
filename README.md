@@ -85,7 +85,7 @@ somniloq show --config default REF --messages 1:1 --format json
 
 ## Configuration
 
-`somniloq config init [NAME] [--output PATH] [--db PATH]` defaults to name `default`, output `~/.somniloq/config/NAME.toml`, and database `~/.somniloq/NAME.db`. It creates only the config, and only when both its destination and referenced database are absent. Existing files, directories, and symlinks (including dangling symlinks) at either path are refused and preserved. This applies to both the default database and explicit `--db`; relative database paths resolve against the config's real parent directory. It creates config parent directories and prints the config's absolute path. `--db` is available only for init.
+`somniloq config init [NAME] [--output PATH] [--db PATH]` defaults to name `default`, output `~/.somniloq/config/NAME.toml`, and database `~/.somniloq/NAME.db`. It creates only the config, and only when both its destination and referenced database are absent. Existing files, directories, and symlinks (including dangling symlinks) at either path are refused and preserved. The resolved database path must not be the config path or any of its parent directories. This applies to both the default database and explicit `--db`; relative database paths resolve against the config's real parent directory. It creates config parent directories and prints the config's absolute path. `--db` is available only for init.
 
 The generated config includes these three inputs:
 

@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/pelletier/go-toml/v2"
 	"github.com/ryotapoi/somniloq/internal/core"
 )
 
@@ -416,6 +417,92 @@ func TestConfigInitDatabaseEntriesAndPathBase(t *testing.T) {
 				if _, err := os.Stat(target); !os.IsNotExist(err) {
 					t.Fatalf("created target: %v", err)
 				}
+			}
+		})
+	}
+}
+
+func TestConfigInitOverlappingPaths(t *testing.T) {
+	for _, tc := range []struct {
+		name   string
+		output string
+		db     string
+	}{
+		{"absolute same path", "new/profile.toml", "new/profile.toml"},
+		{"relative same path", "new/profile.toml", "./profile.toml"},
+		{"absolute parent", "new/profile.toml", "new"},
+		{"relative ancestor", "new/nested/profile.toml", ".."},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			destination := filepath.Join(dir, tc.output)
+			db := tc.db
+			if strings.HasPrefix(tc.name, "absolute") {
+				db = filepath.Join(dir, db)
+			}
+			var out, errOut bytes.Buffer
+			code, err := configInitCmd([]string{"--output", destination, "--db", db}, &out, &errOut)
+			if code != 2 || err != nil || out.Len() != 0 || !strings.Contains(errOut.String(), "database destination overlaps config path") {
+				t.Fatalf("init: %d %v %q %q", code, err, out.String(), errOut.String())
+			}
+			entries, err := os.ReadDir(dir)
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("created entries: %v, %v", entries, err)
+			}
+		})
+	}
+}
+
+func TestConfigInitOverlapThroughParentSymlink(t *testing.T) {
+	dir := t.TempDir()
+	real := filepath.Join(dir, "real")
+	if err := os.Mkdir(real, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	alias := filepath.Join(dir, "alias")
+	if err := os.Symlink(real, alias); err != nil {
+		t.Fatal(err)
+	}
+	destination := filepath.Join(alias, "new", "profile.toml")
+	db := filepath.Join(real, "new", "profile.toml")
+	var out, errOut bytes.Buffer
+	code, err := configInitCmd([]string{"--output", destination, "--db", db}, &out, &errOut)
+	if code != 2 || err != nil || out.Len() != 0 || !strings.Contains(errOut.String(), "database destination overlaps config path") {
+		t.Fatalf("init: %d %v %q %q", code, err, out.String(), errOut.String())
+	}
+	entries, err := os.ReadDir(real)
+	if err != nil || len(entries) != 0 {
+		t.Fatalf("created entries: %v, %v", entries, err)
+	}
+}
+
+func TestConfigInitDistinctPaths(t *testing.T) {
+	for _, db := range []string{"history.db", "../new"} {
+		t.Run(db, func(t *testing.T) {
+			dir := t.TempDir()
+			destination := filepath.Join(dir, "new-config", "profile.toml")
+			var out, errOut bytes.Buffer
+			code, err := configInitCmd([]string{"--output", destination, "--db", db}, &out, &errOut)
+			if code != 0 || err != nil || errOut.Len() != 0 {
+				t.Fatalf("init: %d %v %q %q", code, err, out.String(), errOut.String())
+			}
+			config, err := loadConfig(destination)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out.String() != config.Path+"\n" {
+				t.Fatalf("stdout=%q config path=%q", out.String(), config.Path)
+			}
+			if _, err := os.Lstat(config.DB); !os.IsNotExist(err) {
+				t.Fatalf("created DB: %v", err)
+			}
+			data, err := os.ReadFile(destination)
+			if err != nil {
+				t.Fatal(err)
+			}
+			var raw tomlConfig
+			if err := toml.Unmarshal(data, &raw); err != nil || raw.DB != db {
+				t.Fatalf("config DB=%q err=%v", raw.DB, err)
 			}
 		})
 	}

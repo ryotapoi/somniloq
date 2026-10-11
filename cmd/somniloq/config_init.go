@@ -22,6 +22,7 @@ Usage:
   somniloq config init [NAME] [--output PATH] [--db PATH]
 
 NAME defaults to default. Existing files, directories, and symlinks are refused.
+The database path must not be the config path or one of its parent directories.
 Only the configuration is created; the database is not opened.
 
 Flags:`)
@@ -104,6 +105,15 @@ Flags:`)
 		return 1, fmt.Errorf("resolve database directory: %w", err)
 	}
 	resolvedDB = filepath.Join(dbParent, filepath.Base(resolvedDB))
+	for ancestor := destination; ; ancestor = filepath.Dir(ancestor) {
+		if resolvedDB == ancestor {
+			fmt.Fprintf(errOut, "database destination overlaps config path: %s\n", resolvedDB)
+			return 2, nil
+		}
+		if ancestor == filepath.Dir(ancestor) {
+			break
+		}
+	}
 	if _, err := os.Lstat(resolvedDB); err == nil {
 		fmt.Fprintf(errOut, "database destination already exists: %s\n", resolvedDB)
 		return 2, nil

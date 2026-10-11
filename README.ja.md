@@ -85,7 +85,7 @@ somniloq show --config default REF --messages 1:1 --format json
 
 ## 設定
 
-`somniloq config init [NAME] [--output PATH] [--db PATH]` の既定名は `default`、出力は `~/.somniloq/config/NAME.toml`、DB は `~/.somniloq/NAME.db`。設定宛先と参照 DB の両方が未存在の場合だけ設定を生成する。いずれかに通常ファイル・directory・symlink（dangling を含む）があれば拒否し、既存内容を保持する。名前の既定 DB と明示 `--db` に同じ存在判定を適用し、相対 DB は設定の実体親を基準に解決する。設定の parent directory を作成し、DB は作成しない。stdout は設定の絶対 path 一行。`--db` は init だけで利用できる。
+`somniloq config init [NAME] [--output PATH] [--db PATH]` の既定名は `default`、出力は `~/.somniloq/config/NAME.toml`、DB は `~/.somniloq/NAME.db`。設定宛先と参照 DB の両方が未存在の場合だけ設定を生成する。いずれかに通常ファイル・directory・symlink（dangling を含む）があれば拒否し、既存内容を保持する。解決後の DB パスが設定自身またはその親ディレクトリ（祖先を含む）になる指定も拒否する。名前の既定 DB と明示 `--db` に同じ存在判定を適用し、相対 DB は設定の実体親を基準に解決する。設定の parent directory を作成し、DB は作成しない。stdout は設定の絶対 path 一行。`--db` は init だけで利用できる。
 
 生成する設定には次の3入力がある。
 
