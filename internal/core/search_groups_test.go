@@ -252,3 +252,42 @@ func TestSearchCandidatesProjectPaths(t *testing.T) {
 		})
 	}
 }
+
+func TestSearchGroupsPeriodWithoutPatternsDoesNotReadContent(t *testing.T) {
+	db := testDB(t)
+	_, err := db.db.Exec(`INSERT INTO inputs(id,input_key,source,root) VALUES(1,?,'codex','/fixture');
+ INSERT INTO sessions(input_id,source,identity,session_id,imported_at) VALUES(1,'codex','["root"]','root','2026-10-01T00:00:00Z');
+ INSERT INTO messages(input_id,source,identity,session_id,uuid,role,content,timestamp,number) VALUES(1,'codex','["root"]','root','one','user','body','2026-10-01T00:00:00Z',1)`, strings.Repeat("a", 64))
+	must(t, err)
+	// Preserve all metadata, but fail if a query evaluates message content.
+	rows, err := db.db.Query(`SELECT * FROM messages LIMIT 0`)
+	must(t, err)
+	columns, err := rows.Columns()
+	must(t, err)
+	must(t, rows.Close())
+	for i, column := range columns {
+		if column == "content" {
+			columns[i] = `json_extract('invalid json','$') AS content`
+		}
+	}
+	_, err = db.db.Exec(`ALTER TABLE messages RENAME TO stored_messages;
+ CREATE VIEW messages AS SELECT ` + strings.Join(columns, ",") + ` FROM stored_messages`)
+	must(t, err)
+	filter := SessionFilter{Since: "2026-10-01T00:00:00Z", Until: "2026-10-02T00:00:00Z"}
+	for _, mode := range []string{"started", "last", "overlap"} {
+		t.Run(mode, func(t *testing.T) {
+			var groups []SearchGroup
+			must(t, db.ReadSnapshot(func(snapshot *DB) error {
+				groups, err = snapshot.SearchGroups(SearchCandidates{}, filter, nil, false, mode)
+				return err
+			}))
+			if len(groups) != 1 || groups[0].MemberCount != 1 || *groups[0].StartedAt != filter.Since {
+				t.Fatalf("metadata search: %+v", groups)
+			}
+		})
+	}
+	// Verify that the fixture actually rejects body reads.
+	if _, err := db.SearchGroups(SearchCandidates{}, filter, nil, false, "active"); err == nil {
+		t.Fatal("active period search unexpectedly skipped content")
+	}
+}

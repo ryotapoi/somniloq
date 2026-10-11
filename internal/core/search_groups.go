@@ -228,7 +228,7 @@ func (d *DB) SearchGroups(candidates SearchCandidates, filter SessionFilter, mat
 		}
 	}
 	bodies := []searchBody{}
-	if matcher != nil || filter.Since != "" || filter.Until != "" {
+	if matcher != nil || mode == "active" && (filter.Since != "" || filter.Until != "") {
 		bodyFilter := filter
 		if mode != "active" {
 			bodyFilter = SessionFilter{}
