@@ -87,9 +87,9 @@
 
   通常・full import の snapshot 読取後に競合する sibling を追加し、先発処理中の後発操作が共通排他で拒否されることを確認した。排他解放後の再 import は直接親を消し、root grouping を保持する。root の子孫から競合 child と grandchild を除外し、child の確定 grandchild は選択できること、変更なし再 import でも親が戻らないことを確認した。
 
-- [ ] Codex の通常 import で欠落ログ由来の旧履歴を保持する
+- [x] Codex の通常 import で欠落ログ由来の旧履歴を保持する
 
-  通常 import は元ログが削除されても取込済み履歴を保持し、full だけが選択入力を現在のログから作り直す方針で確定する。現在は同じ会話の一方の rollout が消えた後、残存 rollout に追記すると会話全体の置換で欠落ログ由来の旧本文も消える。`internal/core/import_codex.go` で通常 import の保持方針を満たし、削除だけの場合と残存ログへの追記後の両方で旧本文が残り、full 成功後は現在のログ由来の本文だけになることを確認する。削除を通常 import に反映する旧案は採用しない。
+  通常 import は欠落 rollout の保存済み本文・元ブロック・timestamp・由来・membership と既知の親を保持し、残存 rollout の新規本文と物理順で統合する。payload の重複排除と本文番号を再構成し、full 成功時だけ選択入力を現在ログから作り直す。先頭・後続 rollout の削除、追記、無変更再実行、context / unresolved、保存失敗時の本文・cursor 保持、full と対象外入力の保持を回帰テストで確認した。
 
 - [ ] Codex の本文なし rollout も会話情報の取込判定に含める
 

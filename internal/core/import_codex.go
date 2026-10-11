@@ -1,7 +1,9 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 
 	"github.com/ryotapoi/somniloq/internal/ingest"
 	"github.com/ryotapoi/somniloq/internal/ingest/codex"
@@ -39,7 +41,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 		return replaceCodexInput(db, inputID, root, adapter, groups, result, importedAt)
 	}
 	// A saved rollout missing from the scan has no owner in import_state.
-	// Keep the existing deletion behavior, but do not claim any owner is
+	// Retain its saved evidence, but do not claim any owner is
 	// unchanged when its previous rollout set cannot be established.
 	missingSavedPath, err := codexImportHasMissingSavedPath(db, inputID, expected)
 	if err != nil {
@@ -138,10 +140,14 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 					break
 				}
 			}
+			retained := false
+			if err == nil && missingSavedPath {
+				retained, err = retainMissingCodexRecords(t, root, expected, &g)
+			}
 			if err == nil {
 				err = t.ReplaceSession(ingest.SourceCodex, g.Session.SessionID)
 			}
-			if err == nil && len(g.States) > 0 {
+			if err == nil && (len(g.States) > 0 || retained) {
 				err = persistCodexGroup(t, g, importedAt)
 			}
 			for _, s := range g.States {
@@ -339,4 +345,66 @@ func addCodexMembershipDiagnostics(result *ImportResult, messages []ingest.Norma
 			result.addUnparsedDiagnostics([]error{fmt.Errorf("%s:%d: explicit inheritance boundary with missing ordinal; retained unresolved", m.OriginPath, m.OriginLine)})
 		}
 	}
+}
+
+// Merge only origins absent from this input's complete scan. Existing origins
+// still use their current canonical snapshot, including edits to empty files.
+func retainMissingCodexRecords(t importTx, root string, scanned map[string]*ImportState, g *codex.Group) (bool, error) {
+	rows, err := t.tx.Query(`SELECT uuid, identity, parent_uuid, role, content, blocks_json, timestamp,
+ is_sidechain, origin_path, origin_line, membership, payload_id
+ FROM messages WHERE input_id=? AND source=? AND session_id=?`, t.inputID, string(ingest.SourceCodex), g.Session.SessionID)
+	if err != nil {
+		return false, err
+	}
+	retained := false
+	for rows.Next() {
+		m := ingest.NormalizedMessage{Source: ingest.SourceCodex, SessionID: g.Session.SessionID}
+		var blocks string
+		if err := rows.Scan(&m.UUID, &m.Identity, &m.ParentUUID, &m.Role, &m.Content, &blocks, &m.Timestamp,
+			&m.IsSidechain, &m.OriginPath, &m.OriginLine, &m.Membership, &m.PayloadID); err != nil {
+			rows.Close()
+			return false, err
+		}
+		if _, exists := scanned[filepath.Join(root, filepath.FromSlash(m.OriginPath))]; exists {
+			continue
+		}
+		if err := json.Unmarshal([]byte(blocks), &m.Blocks); err != nil {
+			rows.Close()
+			return false, err
+		}
+		g.Messages = append(g.Messages, m)
+		retained = true
+	}
+	err = rows.Err()
+	rows.Close()
+	if err != nil || !retained {
+		return false, err
+	}
+	var saved ingest.SessionMeta
+	if err := t.tx.QueryRow(`SELECT parent_session_id, parent_identity, cwd, COALESCE(repo_path,''), git_branch, version
+  FROM sessions WHERE input_id=? AND source=? AND session_id=?`, t.inputID, string(ingest.SourceCodex), g.Session.SessionID).
+		Scan(&saved.ParentSessionID, &saved.ParentIdentity, &saved.CWD, &saved.RepoPath, &saved.GitBranch, &saved.Version); err != nil {
+		return false, err
+	}
+	// Missing rollouts cannot retract known direct-parent evidence or metadata.
+	if g.Session.ParentSessionID == "" {
+		g.Session.ParentSessionID, g.Session.ParentIdentity = saved.ParentSessionID, saved.ParentIdentity
+	} else if saved.ParentSessionID != "" && g.Session.ParentSessionID != saved.ParentSessionID {
+		return false, fmt.Errorf("%s: conflicting explicit parent references", g.Session.SessionID)
+	}
+	if g.Session.CWD == "" {
+		g.Session.CWD = saved.CWD
+	}
+	if g.Session.RepoPath == "" {
+		g.Session.RepoPath = saved.RepoPath
+	}
+	if g.Session.GitBranch == "" {
+		g.Session.GitBranch = saved.GitBranch
+	}
+	if g.Session.Version == "" {
+		g.Session.Version = saved.Version
+	}
+
+	g.Canonicalize()
+	return true, g.Err
 }

@@ -485,3 +485,165 @@ func TestCodexMetadataOnlyEditRebuildsOwner(t *testing.T) {
 		}
 	}
 }
+
+func TestCodexMissingRolloutHistorySurvivesAppendUntilFull(t *testing.T) {
+	for _, missing := range []string{"child-extra.jsonl", "child.jsonl"} {
+		t.Run(missing, func(t *testing.T) {
+			db := testDB(t)
+			root, other := testTempDir(t), testTempDir(t)
+			for _, name := range []string{"child-extra.jsonl", "child.jsonl"} {
+				copyCodexFixture(t, root, name)
+			}
+			// A boundary without an ordinal remains unresolved, never owner body.
+			path := filepath.Join(root, "child.jsonl")
+			data, err := os.ReadFile(path)
+			must(t, err)
+			data = append(data, []byte(`{"type":"response_item","payload":{"type":"message","id":"unknown","role":"user","content":[{"type":"input_text","text":"Unresolved original"}]}}`+"\n")...)
+			must(t, os.WriteFile(path, data, 0600))
+			copyCodexFixture(t, other, "child.jsonl")
+			runCodexImport(t, db, other, false)
+			otherID, err := db.EnsureInput(Input{Source: SourceCodex, Root: other})
+			must(t, err)
+			otherBefore, err := db.GetMessages(otherID, SourceCodex, "child")
+			must(t, err)
+			runCodexImport(t, db, root, false)
+			id, err := db.EnsureInput(Input{Source: SourceCodex, Root: root})
+			must(t, err)
+			read := func() []MessageRow {
+				t.Helper()
+				rows, err := db.GetMessages(id, SourceCodex, "child")
+				must(t, err)
+				return rows
+			}
+			originals := func() []string {
+				t.Helper()
+				rows, err := db.db.Query(`SELECT json_array(uuid,identity,parent_uuid,role,content,blocks_json,timestamp,is_sidechain,number,origin_path,origin_line,membership,payload_id)
+     FROM messages WHERE input_id=? ORDER BY origin_path,origin_line`, id)
+				must(t, err)
+				defer rows.Close()
+				var result []string
+				for rows.Next() {
+					var value string
+					must(t, rows.Scan(&value))
+					result = append(result, value)
+				}
+				must(t, rows.Err())
+				return result
+			}
+			before, beforeOriginals := read(), originals()
+			must(t, os.Remove(filepath.Join(root, missing)))
+			runCodexImport(t, db, root, false)
+			if !reflect.DeepEqual(originals(), beforeOriginals) {
+				t.Fatal("deletion changed saved records")
+			}
+			remaining := "child.jsonl"
+			if missing == remaining {
+				remaining = "child-extra.jsonl"
+			}
+			remainingPath := filepath.Join(root, remaining)
+			oldState, err := db.GetImportState(id, remainingPath)
+			must(t, err)
+			appendData, err := os.ReadFile(filepath.Join("..", "ingest", "testdata", "v0.14.0", "resume", "forward-rollout-append.txt"))
+			must(t, err)
+			f, err := os.OpenFile(remainingPath, os.O_APPEND|os.O_WRONLY, 0600)
+			must(t, err)
+			_, err = f.Write(appendData)
+			must(t, err)
+			must(t, f.Close())
+			_, err = db.db.Exec(`CREATE TRIGGER fail_missing BEFORE INSERT ON messages WHEN NEW.payload_id='c4' BEGIN SELECT RAISE(ABORT,'injected write failure'); END`)
+			must(t, err)
+			result, err := Import(db, ImportOptions{Inputs: []Input{{Source: SourceCodex, Root: root}}})
+			must(t, err)
+			if len(result.Errors) != 1 || result.FilesFailed != 1 {
+				t.Fatalf("failure=%+v", result)
+			}
+			if !reflect.DeepEqual(originals(), beforeOriginals) {
+				t.Fatal("write failure lost saved records")
+			}
+			state, err := db.GetImportState(id, remainingPath)
+			must(t, err)
+			if !reflect.DeepEqual(state, oldState) {
+				t.Fatal("write failure advanced cursor")
+			}
+			_, err = db.db.Exec("DROP TRIGGER fail_missing")
+			must(t, err)
+			runCodexImport(t, db, root, false)
+			after := read()
+			want := []string{"c1", "c3", "c2", "c4"}
+			if missing == "child.jsonl" {
+				want = []string{"c1", "c3", "c4", "c2"}
+			}
+			if len(after) != len(want) {
+				t.Fatalf("merged=%+v", after)
+			}
+			for i, row := range after {
+				if row.PayloadID != want[i] || row.Number != i+1 {
+					t.Fatalf("physical order=%+v want=%v", after, want)
+				}
+				for _, old := range before {
+					if old.PayloadID == row.PayloadID {
+						row.Number = old.Number
+						if !reflect.DeepEqual(row, old) {
+							t.Fatalf("saved payload changed: %+v want=%+v", row, old)
+						}
+					}
+				}
+			}
+			var context, unresolved int
+			must(t, db.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE input_id=? AND membership='context' AND number=0`, id).Scan(&context))
+			must(t, db.db.QueryRow(`SELECT COUNT(*) FROM messages WHERE input_id=? AND membership='unresolved' AND number=0`, id).Scan(&unresolved))
+			if context != 2 || unresolved != 1 {
+				t.Fatalf("context=%d unresolved=%d", context, unresolved)
+			}
+			session, err := db.GetSession(id, SourceCodex, "child")
+			must(t, err)
+			if session.ParentSessionID != "root" || session.StartedAt != "2026-10-01T00:01:00Z" {
+				t.Fatalf("metadata=%+v", session)
+			}
+			mergedOriginals := originals()
+			runCodexImport(t, db, root, false)
+			if !reflect.DeepEqual(originals(), mergedOriginals) {
+				t.Fatal("rerun changed merged records")
+			}
+			runCodexImport(t, db, root, true)
+			fresh := testDB(t)
+			runCodexImport(t, fresh, root, false)
+			freshID, err := fresh.EnsureInput(Input{Source: SourceCodex, Root: root})
+			must(t, err)
+			current, err := fresh.GetMessages(freshID, SourceCodex, "child")
+			must(t, err)
+			if !reflect.DeepEqual(read(), current) || len(current) != 3 {
+				t.Fatalf("full=%+v current=%+v", read(), current)
+			}
+			otherAfter, err := db.GetMessages(otherID, SourceCodex, "child")
+			must(t, err)
+			if !reflect.DeepEqual(otherAfter, otherBefore) {
+				t.Fatal("full changed another input")
+			}
+		})
+	}
+}
+
+func TestCodexMissingRolloutKeepsParentAndBodyActivity(t *testing.T) {
+	db := testDB(t)
+	root := testTempDir(t)
+	meta := `{"type":"session_meta","payload":{"id":"child","cwd":"/fixture","source":{"subagent":{"thread_spawn":{"parent_thread_id":"root"}}}}}` + "\n"
+	body := func(id, timestamp string) string {
+		return `{"type":"response_item","timestamp":"` + timestamp + `","payload":{"type":"message","id":"` + id + `","role":"user","content":[{"type":"input_text","text":"` + id + `"}]}}` + "\n"
+	}
+	a, b := filepath.Join(root, "a.jsonl"), filepath.Join(root, "b.jsonl")
+	must(t, os.WriteFile(a, []byte(meta+body("old", "2026-10-01T01:00:00Z")), 0600))
+	must(t, os.WriteFile(b, []byte(meta+body("current", "2026-10-01T02:00:00Z")), 0600))
+	runCodexImport(t, db, root, false)
+	must(t, os.Remove(a))
+	meta = `{"type":"session_meta","payload":{"id":"child","source":"cli"}}` + "\n"
+	must(t, os.WriteFile(b, []byte(meta+body("current", "2026-10-01T02:00:00Z")+body("new", "2026-10-01T03:00:00Z")), 0600))
+	runCodexImport(t, db, root, false)
+	id, err := db.EnsureInput(Input{Source: SourceCodex, Root: root})
+	must(t, err)
+	session, err := db.GetSession(id, SourceCodex, "child")
+	must(t, err)
+	if session.ParentSessionID != "root" || session.CWD != "/fixture" || session.StartedAt != "2026-10-01T01:00:00Z" || session.EndedAt != "2026-10-01T03:00:00Z" {
+		t.Fatalf("retained metadata=%+v", session)
+	}
+}

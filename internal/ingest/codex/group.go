@@ -351,32 +351,45 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 	}
 	for i := range groups {
 		g := &groups[i]
-		seen := map[string]int{}
-		number := 0
-		messages := g.Messages[:0]
-		for _, m := range g.Messages {
-			// Context and unresolved records retain their physical provenance. Only
-			// owner body participates in payload-ID deduplication and numbering.
-			if m.Membership == "body" {
-				if m.PayloadID != "" {
-					if index, ok := seen[m.PayloadID]; ok {
-						if !samePayload(messages[index], m) {
-							g.Err = fmt.Errorf("%s: conflicting payload ID %q", g.Session.SessionID, m.PayloadID)
-						}
-						continue
-					}
-					seen[m.PayloadID] = len(messages)
-				}
-				number++
-				m.Number = number
-			} else {
-				m.Number = 0
-			}
-			messages = append(messages, m)
-		}
-		g.Messages = messages
+		g.Canonicalize()
 	}
 	return groups, errs
+}
+
+// Canonicalize orders physical records and applies owner-body deduplication and numbering.
+// Ordinary import also uses it when merging saved records from missing rollouts.
+func (g *Group) Canonicalize() {
+	sort.SliceStable(g.Messages, func(i, j int) bool {
+		a, b := g.Messages[i], g.Messages[j]
+		if a.OriginPath != b.OriginPath {
+			return a.OriginPath < b.OriginPath
+		}
+		return a.OriginLine < b.OriginLine
+	})
+	seen := map[string]int{}
+	number := 0
+	messages := g.Messages[:0]
+	for _, m := range g.Messages {
+		// Context and unresolved records retain their physical provenance. Only
+		// owner body participates in payload-ID deduplication and numbering.
+		if m.Membership == "body" {
+			if m.PayloadID != "" {
+				if index, ok := seen[m.PayloadID]; ok {
+					if !samePayload(messages[index], m) {
+						g.Err = fmt.Errorf("%s: conflicting payload ID %q", g.Session.SessionID, m.PayloadID)
+					}
+					continue
+				}
+				seen[m.PayloadID] = len(messages)
+			}
+			number++
+			m.Number = number
+		} else {
+			m.Number = 0
+		}
+		messages = append(messages, m)
+	}
+	g.Messages = messages
 }
 
 func samePayload(a, b ingest.NormalizedMessage) bool {
