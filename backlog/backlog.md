@@ -59,9 +59,9 @@
 
   走査で認識した会話 ID が読取時に空になった場合を既存の一致検証で拒否し、full の transaction 全体を rollback する。空ログ・ID のない非空ログと、同じ会話の複数 rollout の部分喪失で、旧本文・session・全 cursor の保持と失敗報告を回帰テストで確認した。会話 ID を含む有効な短縮ログは現在の本文・session・cursor（サイズ・offset・hash）へ置換する。一般的なログ書換え追従の強化は含めない。
 
-- [ ] 初回 DB 初期化で一貫した schema 判定を行う
+- [x] 初回 DB 初期化で一貫した schema 判定を行う
 
-  二つの初期化が並行すると revision と schema objects の読取時点が混ざり、正常な DB を非対応 revision 0 と誤判定する。対応方針は、import・migrate の共通書込み排他を DB のオープン（schema 検査・初期化）より前に取得する方式で確定する。後発は DB を開く前に待機せず非成功終了させ、初回の同時起動でも正常 schema に誤った移行案内や非対応エラーを返さないことを確認する。初期化専用の排他は追加しない。
+  import・migrate の共通書込み排他を DB のオープン（schema 検査・初期化）より前に取得し、終了まで保持する。未作成 DB の先発を open 境界で停止した実プロセステストで、全 source の通常・full import と migrate の後発が DB open 前に busy・終了1となり、先発の正常初期化と解放後の import が成功することを確認した。初期化専用の排他は追加しない。
 
 #### CLI と設定
 
