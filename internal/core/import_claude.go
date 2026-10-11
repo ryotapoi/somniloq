@@ -83,10 +83,10 @@ func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecod
 					return nil, e
 				}
 			}
-			pr := f.Diagnostics(old)
 			if full {
-				pr = f.Diagnostics(nil)
+				old = nil
 			}
+			pr := ingest.SnapshotDiagnostics(f.Data, f.Failures, old)
 			result.UnparsedLines += pr.UnparsedLines
 			result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
 		} else {

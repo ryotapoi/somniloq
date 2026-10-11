@@ -201,15 +201,10 @@ func splitFlagArg(arg string) (name string, hasValue bool, ok bool) {
 func configCommandFlagSet(command string) *flag.FlagSet {
 	switch command {
 	case "migrate":
-		fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
-		fs.String("from", "", "")
+		fs, _ := newMigrateFlagSet()
 		return fs
 	case "import":
-		fs := flag.NewFlagSet("import", flag.ContinueOnError)
-		fs.Bool("full", false, "")
-		fs.Bool("yes", false, "")
-		fs.String("source", "all", "")
-		fs.String("input", "", "")
+		fs, _ := newImportFlagSet()
 		return fs
 	case "show":
 		fs, _ := newShowFlagSet()

@@ -136,28 +136,16 @@ func (d *DB) EnsureInput(input Input) (int64, error) {
 	if !validSource(input.Source) || input.Root == "" {
 		return 0, fmt.Errorf("invalid input source/root")
 	}
+	return ensureInput(d.db, input)
+}
+
+func ensureInput(e execer, input Input) (int64, error) {
 	key := InputKey(input.Source, input.Root)
-	_, err := d.db.Exec(`INSERT INTO inputs(input_key,source,root) VALUES(?,?,?) ON CONFLICT(input_key) DO NOTHING`, key, input.Source, input.Root)
+	_, err := e.Exec(`INSERT INTO inputs(input_key,source,root) VALUES(?,?,?) ON CONFLICT(input_key) DO NOTHING`, key, input.Source, input.Root)
 	if err != nil {
 		return 0, err
 	}
 	var id int64
-	err = d.db.QueryRow(`SELECT id FROM inputs WHERE input_key=?`, key).Scan(&id)
+	err = e.QueryRow(`SELECT id FROM inputs WHERE input_key=?`, key).Scan(&id)
 	return id, err
-}
-
-func parseRootREF(ref string) (string, Source, string, error) {
-	key, source, identity, err := parseREF(ref)
-	if err != nil {
-		return "", "", "", err
-	}
-	if strings.HasPrefix(key, "legacy:") {
-		return "", "", "", &REFError{}
-	}
-	var parts []string
-	_ = json.Unmarshal([]byte(identity), &parts)
-	if len(parts) != 1 {
-		return "", "", "", &REFError{}
-	}
-	return key, source, parts[0], nil
 }

@@ -21,38 +21,9 @@ type FileSnapshot struct {
 	Records    []ingest.NormalizedRecord
 	Titles     map[string]string
 	AgentNames map[string]string
-	Failures   []ParseFailure
+	Failures   []ingest.ParseFailure
 	Data       []byte
 	Parents    map[string]string
-}
-
-type ParseFailure struct {
-	Offset     int64
-	Diagnostic error
-}
-
-func (f FileSnapshot) Diagnostics(old *ingest.ImportState) ingest.ProcessResult {
-	start := int64(0)
-	if old != nil && int64(len(f.Data)) >= old.FileSize {
-		sum := sha256.Sum256(f.Data[:old.FileSize])
-		if hex.EncodeToString(sum[:]) == old.ContentHash {
-			start = old.LastOffset
-			if start > 0 && start == old.FileSize && f.Data[start-1] != '\n' {
-				start = int64(bytes.LastIndexByte(f.Data[:start], '\n') + 1)
-			}
-		}
-	}
-	r := ingest.ProcessResult{}
-	for _, failure := range f.Failures {
-		if failure.Offset < start {
-			continue
-		}
-		r.UnparsedLines++
-		if len(r.UnparsedDiagnostics) < ingest.MaxUnparsedDiagnostics {
-			r.UnparsedDiagnostics = append(r.UnparsedDiagnostics, failure.Diagnostic)
-		}
-	}
-	return r
 }
 
 // BuildSnapshots performs Claude-specific interpretation before storage writes.
@@ -86,7 +57,7 @@ func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string) 
 			at := offset
 			offset += int64(len(line))
 			fail := func(err error) {
-				f.Failures = append(f.Failures, ParseFailure{at, fmt.Errorf("%s:%d: %w", path, lineNumber, err)})
+				f.Failures = append(f.Failures, ingest.ParseFailure{Offset: at, Diagnostic: fmt.Errorf("%s:%d: %w", path, lineNumber, err)})
 				if line[len(line)-1] != '\n' {
 					f.State.LastOffset = at
 				}

@@ -43,14 +43,27 @@ Examples:
   somniloq import --config default --source cursor-agent
   somniloq import --config default --full --yes`
 
+type importFlags struct {
+	full, yes *bool
+	inputs    *stringListFlag
+	source    *string
+}
+
+func newImportFlagSet() (*flag.FlagSet, importFlags) {
+	fs := flag.NewFlagSet("import", flag.ContinueOnError)
+	f := importFlags{
+		full:   fs.Bool("full", false, "rebuild only selected inputs"),
+		yes:    fs.Bool("yes", false, "skip confirmation prompt"),
+		inputs: new(stringListFlag),
+		source: fs.String("source", string(core.ImportSourceAll), "source to import: "+importSourceCommaList()),
+	}
+	fs.Var(f.inputs, "input", "input root path to import (repeatable; OR, intersected with --source)")
+	return fs, f
+}
+
 // importConfiguredCmd opens the DB only after argument validation and confirmation.
 func importConfiguredCmd(args []string, openDB func() (*core.DB, error), cfg config, in io.Reader, out, errOut io.Writer, isTTY bool) (int, error) {
-	fs := flag.NewFlagSet("import", flag.ContinueOnError)
-	full := fs.Bool("full", false, "rebuild only selected inputs")
-	yes := fs.Bool("yes", false, "skip confirmation prompt")
-	var inputs stringListFlag
-	fs.Var(&inputs, "input", "input root path to import (repeatable; OR, intersected with --source)")
-	sourceValue := fs.String("source", string(core.ImportSourceAll), "source to import: "+importSourceCommaList())
+	fs, f := newImportFlagSet()
 	setUsage(fs, "Import Claude Code, Codex, and Cursor Agent session logs from JSONL files", "somniloq import [--config NAME_OR_PATH] [--source "+importSourcePipeList()+"] [flags]", importHelpDetails)
 	if code, ok := parseFlags(fs, errOut, args); !ok {
 		if code != 0 {
@@ -64,22 +77,22 @@ func importConfiguredCmd(args []string, openDB func() (*core.DB, error), cfg con
 		return 2, nil
 	}
 
-	source, err := parseImportSource(*sourceValue)
+	source, err := parseImportSource(*f.source)
 	if err != nil {
 		return 2, err
 	}
 
-	for i, path := range inputs {
+	for i, path := range *f.inputs {
 		if path == "" {
 			return 2, fmt.Errorf("--input requires a non-empty path")
 		}
-		inputs[i], err = core.CanonicalPath(path, filepath.Dir(cfg.Path))
+		(*f.inputs)[i], err = core.CanonicalPath(path, filepath.Dir(cfg.Path))
 		if err != nil {
 			return 2, fmt.Errorf("invalid --input: %w", err)
 		}
 	}
 
-	if *full && !*yes {
+	if *f.full && !*f.yes {
 		if !isTTY {
 			return 1, errors.New("--full requires confirmation; use --yes to skip in non-interactive mode")
 		}
@@ -99,9 +112,9 @@ func importConfiguredCmd(args []string, openDB func() (*core.DB, error), cfg con
 	defer db.Close()
 
 	result, err := core.Import(db, core.ImportOptions{
-		Full:       *full,
+		Full:       *f.full,
 		Inputs:     cfg.Inputs,
-		InputPaths: inputs,
+		InputPaths: *f.inputs,
 		Source:     source,
 	})
 	if result == nil {

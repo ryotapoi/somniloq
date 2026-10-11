@@ -167,7 +167,7 @@ func TestResolutionSiblingDFSOrder(t *testing.T) {
 	a := row("a", "root")
 	b := row("b", "root")
 	grand := row("grand", "a")
-	r := resolveSessionRelations(root, []SessionRow{b, grand, root, a}, key)
+	r := buildSessionRelations([]SessionRow{b, grand, root, a}).resolve(root, key, true)
 	want := []string{root.REF, a.REF, grand.REF, b.REF}
 	if !reflect.DeepEqual(refs(r.Descendants), want) {
 		t.Fatalf("DFS %+v want %v", r.Descendants, want)

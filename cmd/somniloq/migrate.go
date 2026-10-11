@@ -17,9 +17,14 @@ type migrationIOError struct{ err error }
 func (e *migrationIOError) Error() string { return "migrate: " + e.err.Error() }
 func (e *migrationIOError) Unwrap() error { return e.err }
 
-func migrateCmd(args []string, cfg config, out, errOut io.Writer) (int, error) {
+func newMigrateFlagSet() (*flag.FlagSet, *string) {
 	fs := flag.NewFlagSet("migrate", flag.ContinueOnError)
 	from := fs.String("from", "", "fixed standalone legacy SQLite snapshot (required)")
+	return fs, from
+}
+
+func migrateCmd(args []string, cfg config, out, errOut io.Writer) (int, error) {
+	fs, from := newMigrateFlagSet()
 	setUsage(fs, "Migrate a legacy snapshot without changing it", "somniloq migrate [--config NAME_OR_PATH] --from PATH", `The configured database must be new, empty, or a completed copy of the same snapshot.
 All configured Codex inputs are processed; missing logs and other sources retain their saved history.
 Output is one JSON summary. Successfully parsed owners replace same-ID Codex history, including empty bodies.

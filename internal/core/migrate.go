@@ -183,12 +183,8 @@ func replaceMigrationGroup(db *DB, input Input, g codex.Group, digest, importedA
 	}
 	defer tx.Rollback()
 	// Input creation belongs to the same transaction as the replacement.
-	key := InputKey(input.Source, input.Root)
-	if _, err = tx.Exec(`INSERT INTO inputs(input_key,source,root) VALUES(?,?,?) ON CONFLICT(input_key) DO NOTHING`, key, input.Source, input.Root); err != nil {
-		return 0, err
-	}
-	var inputID int64
-	if err = tx.QueryRow(`SELECT id FROM inputs WHERE input_key=?`, key).Scan(&inputID); err != nil {
+	inputID, err := ensureInput(tx, input)
+	if err != nil {
 		return 0, err
 	}
 	if err = checkSavedMigrationRollouts(tx, inputID, input.Root, g); err != nil {

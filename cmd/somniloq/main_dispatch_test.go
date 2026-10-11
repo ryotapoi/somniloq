@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -79,10 +80,23 @@ func TestMainDispatchReadMissingDBDoesNotCreate(t *testing.T) {
 }
 
 func TestExtractCommandConfigPreservesFlagValues(t *testing.T) {
-	value := ""
-	args, err := extractCommandConfig("search", []string{"--project", "--config", "--config", "chosen"}, &value)
-	if err != nil || value != "chosen" || len(args) != 2 || args[1] != "--config" {
-		t.Fatalf("%v %q %v", args, value, err)
+	for _, tc := range []struct {
+		command string
+		args    []string
+		want    []string
+	}{
+		{"search", []string{"--project", "--config", "--config", "chosen"}, []string{"--project", "--config"}},
+		{"import", []string{"--source", "--config", "--config", "chosen"}, []string{"--source", "--config"}},
+		{"import", []string{"--input", "--config", "--config", "chosen"}, []string{"--input", "--config"}},
+		{"migrate", []string{"--from", "--config", "--config", "chosen"}, []string{"--from", "--config"}},
+	} {
+		t.Run(tc.command+"/"+tc.args[0], func(t *testing.T) {
+			value := ""
+			args, err := extractCommandConfig(tc.command, tc.args, &value)
+			if err != nil || value != "chosen" || !reflect.DeepEqual(args, tc.want) {
+				t.Fatalf("%v %q %v", args, value, err)
+			}
+		})
 	}
 }
 

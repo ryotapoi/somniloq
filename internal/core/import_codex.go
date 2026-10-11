@@ -96,7 +96,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 				result.FilesImported += g.Files
 				for _, report := range g.Reports {
 					old := expected[report.Path]
-					pr := report.Diagnostics(old)
+					pr := ingest.SnapshotDiagnostics(report.Data, report.Failures, old)
 					result.UnparsedLines += pr.UnparsedLines
 					result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
 				}
@@ -168,7 +168,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 			result.FilesImported += g.Files
 			addCodexMembershipDiagnostics(result, g.Messages)
 			for _, report := range g.Reports {
-				pr := report.Diagnostics(expected[report.Path])
+				pr := ingest.SnapshotDiagnostics(report.Data, report.Failures, expected[report.Path])
 				result.UnparsedLines += pr.UnparsedLines
 				result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
 			}
@@ -235,7 +235,7 @@ func replaceCodexInput(db *DB, inputID int64, root string, adapter codex.Adapter
 			}
 			if writeErr == nil {
 				for _, report := range g.Reports {
-					pr := report.Diagnostics(nil)
+					pr := ingest.SnapshotDiagnostics(report.Data, report.Failures, nil)
 					unparsedLines += pr.UnparsedLines
 					for _, diagnostic := range pr.UnparsedDiagnostics {
 						if len(unparsedDiagnostics) < ingest.MaxUnparsedDiagnostics {

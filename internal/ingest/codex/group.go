@@ -15,17 +15,12 @@ import (
 	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
-type ParseFailure struct {
-	Offset     int64
-	Diagnostic error
-}
-
 type FileReport struct {
 	Path     string
 	Info     os.FileInfo
 	Data     []byte
 	Hash     [sha256.Size]byte
-	Failures []ParseFailure
+	Failures []ingest.ParseFailure
 }
 
 // Group is a canonical snapshot of every discovered rollout for one owner.
@@ -390,32 +385,6 @@ func samePayload(a, b ingest.NormalizedMessage) bool {
 		}
 	}
 	return true
-}
-
-// Diagnostics reports only newly encountered failures when an unchanged prefix
-// is resumed; a full edit reports its entire newly parsed snapshot.
-func (r FileReport) Diagnostics(old *ingest.ImportState) ingest.ProcessResult {
-	start := int64(0)
-	if old != nil && int64(len(r.Data)) >= old.FileSize {
-		sum := sha256.Sum256(r.Data[:old.FileSize])
-		if hex.EncodeToString(sum[:]) == old.ContentHash {
-			start = old.LastOffset
-			if start > 0 && start == old.FileSize && r.Data[start-1] != '\n' {
-				start = int64(bytes.LastIndexByte(r.Data[:start], '\n') + 1)
-			}
-		}
-	}
-	result := ingest.ProcessResult{}
-	for _, f := range r.Failures {
-		if f.Offset < start {
-			continue
-		}
-		result.UnparsedLines++
-		if len(result.UnparsedDiagnostics) < ingest.MaxUnparsedDiagnostics {
-			result.UnparsedDiagnostics = append(result.UnparsedDiagnostics, f.Diagnostic)
-		}
-	}
-	return result
 }
 
 func (h *fileHandler) validateMigrationRecord(rec *RawRecord) error {

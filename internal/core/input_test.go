@@ -34,9 +34,9 @@ func TestRootREF_StrictCanonicalIdentity(t *testing.T) {
 	key := InputKey(SourceCodex, "/root")
 	id := "session<&>日本語"
 	ref := RootREF(key, SourceCodex, id)
-	k, source, got, err := parseRootREF(ref)
+	k, source, got, err := parseREF(ref)
 	must(t, err)
-	if k != key || source != SourceCodex || got != id {
+	if k != key || source != SourceCodex || got != rootIdentity(id) {
 		t.Fatalf("parsed %q %q %q", k, source, got)
 	}
 	body, err := base64.RawURLEncoding.DecodeString(strings.Split(ref, ":")[3])
@@ -46,7 +46,7 @@ func TestRootREF_StrictCanonicalIdentity(t *testing.T) {
 	}
 	prefix := "slq1:" + key + ":codex:"
 	for _, invalid := range []string{id, ref[:20], strings.Replace(ref, "slq1:", "slq2:", 1), strings.Replace(ref, ":codex:", ":other:", 1), strings.Replace(ref, key, strings.ToUpper(key), 1), ref + "=", prefix + base64.RawURLEncoding.EncodeToString([]byte(`[ "session" ]`)), prefix + base64.RawURLEncoding.EncodeToString([]byte(`[""]`)), prefix + base64.RawURLEncoding.EncodeToString([]byte(`["parent","child"]`))} {
-		if _, _, _, err := parseRootREF(invalid); err == nil {
+		if _, _, _, err := parseREF(invalid); err == nil {
 			t.Fatalf("accepted invalid REF %q", invalid)
 		}
 	}

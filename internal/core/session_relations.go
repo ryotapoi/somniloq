@@ -183,10 +183,6 @@ func (g *sessionRelations) resolve(self SessionRow, inputKey string, descendants
 	return result
 }
 
-func resolveSessionRelations(self SessionRow, sessions []SessionRow, inputKey string) *SessionResolution {
-	return buildSessionRelations(sessions).resolve(self, inputKey, true)
-}
-
 // resolveSessionGroups builds each namespace graph once, keeping saved members
 // separate from missing parent keys and preserving the single-REF resolver rules.
 func resolveSessionGroups(sessions []SessionRow) []*SessionResolution {

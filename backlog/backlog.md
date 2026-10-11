@@ -15,6 +15,6 @@
 
 ### v0.14.4 コード整理とレビュー
 
-- [ ] simplify-code を実行する
+- [x] simplify-code を実行する
 - [ ] simplify-tests を実行する
 - [ ] コードレビューを実行する

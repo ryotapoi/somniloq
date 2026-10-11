@@ -51,7 +51,7 @@ type fileHandler struct {
 	historyStart    *int
 	number          int
 	byteOffset      int64
-	failures        []ParseFailure
+	failures        []ingest.ParseFailure
 }
 
 func (a Adapter) ProcessFile(newTransaction ingest.NewImportTransaction, path string, offset, fileSize int64, importedAt string) (ingest.ProcessResult, error) {
@@ -182,7 +182,7 @@ func (h *fileHandler) handleParsedLine(tx ingest.ImportTransaction, line []byte,
 
 func (h *fileHandler) unparsed(err error) ingest.LineResult {
 	diagnostic := fmt.Errorf("%s:%d: %w", h.path, h.lineNumber, err)
-	h.failures = append(h.failures, ParseFailure{Offset: h.byteOffset, Diagnostic: diagnostic})
+	h.failures = append(h.failures, ingest.ParseFailure{Offset: h.byteOffset, Diagnostic: diagnostic})
 	return ingest.LineResult{
 		Outcome:    ingest.LineUnparsed,
 		Diagnostic: fmt.Errorf("%s:%d: %w", h.path, h.lineNumber, err),
