@@ -176,6 +176,133 @@ func TestClaudeFullOperationLockPreservesLaterAppend(t *testing.T) {
 	}
 }
 
+func TestClaudeOperationLockPreservesLaterSiblingConflict(t *testing.T) {
+	for _, full := range []bool{false, true} {
+		t.Run(fmt.Sprintf("full=%t", full), func(t *testing.T) {
+			dir, err := CanonicalPath(t.TempDir(), "")
+			must(t, err)
+			root := filepath.Join(dir, "input")
+			chain := func(owner, callID, child string) string {
+				data := claudeCall(callID) + claudeResult(callID, child)
+				if owner != "" {
+					data = strings.ReplaceAll(data, `"sessionId":"r"`, `"sessionId":"r","agentId":"`+owner+`"`)
+				}
+				return data
+			}
+			writeClaude(t, root, "p/r.jsonl", chain("", "a", "child"))
+			writeClaude(t, root, "p/r/subagents/agent-child.jsonl", claudeBody("child", "child")+chain("child", "g", "grandchild"))
+			writeClaude(t, root, "p/r/subagents/agent-grandchild.jsonl", claudeBody("grandchild", "grandchild"))
+			destination := filepath.Join(dir, "history.db")
+			lock, err := LockOperation(destination)
+			must(t, err)
+			defer lock.Close()
+			db, err := OpenDB(destination)
+			must(t, err)
+			defer db.Close()
+			input := Input{Source: SourceClaudeCode, Root: root}
+			importClaudeTest(t, db, root)
+			id, err := db.EnsureInput(input)
+			must(t, err)
+			rootREF := claudeREF(root, "r")
+			childREF := claudeREF(root, "r", "child")
+			grandREF := claudeREF(root, "r", "grandchild")
+			checkRelations := func(conflicted bool) {
+				t.Helper()
+				r := requireResolution(t, db, rootREF)
+				c := requireResolution(t, db, childREF)
+				g := requireResolution(t, db, grandREF)
+				if c.Self.RootREF != rootREF || c.GroupKey != r.GroupKey || c.Root == nil || c.Root.REF != rootREF || g.Parent == nil || g.Parent.REF != childREF || !reflect.DeepEqual(refs(c.Descendants), []string{childREF, grandREF}) {
+					t.Fatalf("group or grandchild changed: child=%+v grandchild=%+v", c, g)
+				}
+				want := []string{rootREF, childREF, grandREF}
+				if conflicted {
+					want = []string{rootREF}
+					if c.Self.ParentREF != "" || c.Parent != nil || len(r.Members) != 4 {
+						t.Fatalf("conflict restored parent or lost grouping: %+v", c)
+					}
+				} else if c.Self.ParentREF != rootREF || c.Parent == nil || c.Parent.REF != rootREF {
+					t.Fatalf("initial parent: %+v", c)
+				}
+				if !reflect.DeepEqual(refs(r.Descendants), want) {
+					t.Fatalf("root descendants: %v want %v", refs(r.Descendants), want)
+				}
+			}
+			checkRelations(false)
+			ready, release := make(chan struct{}), make(chan struct{})
+			var resume sync.Once
+			done := make(chan error, 1)
+			finished := false
+			defer func() {
+				resume.Do(func() { close(release) })
+				if !finished {
+					select {
+					case <-done:
+					case <-time.After(10 * time.Second):
+						t.Error("snapshot import did not finish during cleanup")
+					}
+				}
+			}()
+			go func() {
+				// Resolution runs after ScanFiles; the new sibling cannot enter this snapshot.
+				result, err := importClaudeSnapshots(db, id, root, claudecode.NewAdapter(func(string) string { close(ready); <-release; return "" }), "2026-01-01T00:00:02Z", full)
+				if err == nil && (result.FilesScanned != 3 || len(result.Errors) > 0 || len(result.UnparsedDiagnostics) > 0) {
+					err = fmt.Errorf("snapshot import: %+v", result)
+				}
+				done <- err
+			}()
+			select {
+			case <-ready:
+			case <-time.After(10 * time.Second):
+				t.Fatal("import did not reach snapshot read boundary")
+			}
+			path := "p/r/subagents/agent-sibling.jsonl"
+			writeClaude(t, root, path, claudeBody("sibling", "sibling")+chain("sibling", "b", "child"))
+			if later, err := LockOperation(destination); !errors.Is(err, ErrOperationBusy) {
+				if later != nil {
+					later.Close()
+				}
+				t.Fatalf("later import lock: %v", err)
+			}
+			resume.Do(func() { close(release) })
+			select {
+			case err := <-done:
+				finished = true
+				must(t, err)
+			case <-time.After(10 * time.Second):
+				t.Fatal("snapshot import did not finish")
+			}
+			state, err := db.GetImportState(id, filepath.Join(root, path))
+			must(t, err)
+			if state != nil {
+				t.Fatalf("snapshot imported new sibling outside scan: %+v", state)
+			}
+			checkRelations(false)
+			must(t, lock.Close())
+			later, err := LockOperation(destination)
+			must(t, err)
+			defer later.Close()
+			checkConflictDiagnostic := func(result *ImportResult) {
+				t.Helper()
+				if len(result.UnparsedDiagnostics) != 1 || result.UnparsedDiagnostics[0].Error() != `["r","child"]: conflicting direct parents; retained unresolved` {
+					t.Fatalf("conflict diagnostic: %+v", result.UnparsedDiagnostics)
+				}
+			}
+			result := importClaudeTest(t, db, root)
+			if result.FilesImported != 1 {
+				t.Fatalf("later sibling conflict: %+v", result)
+			}
+			checkConflictDiagnostic(result)
+			checkRelations(true)
+			result = importClaudeTest(t, db, root)
+			if result.FilesImported != 0 || result.FilesSkipped != 4 {
+				t.Fatalf("unchanged conflict: %+v", result)
+			}
+			checkConflictDiagnostic(result)
+			checkRelations(true)
+		})
+	}
+}
+
 func TestCodexFullOperationLockPreservesLaterRollout(t *testing.T) {
 	dir, err := CanonicalPath(t.TempDir(), "")
 	must(t, err)

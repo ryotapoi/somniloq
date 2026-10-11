@@ -83,9 +83,9 @@
 
 #### 取り込みの正確性
 
-- [ ] 新しい Claude sibling の親競合を古い snapshot で戻さない
+- [x] 新しい Claude sibling の親競合を古い snapshot で戻さない
 
-  snapshot の読取後に競合する sibling が追加され別 import が確定すると、古い snapshot が直接親を誤って確定へ戻す。`internal/core/import_claude.go` でこの順序を再現し、新しい親競合の判定を失わず子孫の選択もその判定に従うことを確認する。
+  通常・full import の snapshot 読取後に競合する sibling を追加し、先発処理中の後発操作が共通排他で拒否されることを確認した。排他解放後の再 import は直接親を消し、root grouping を保持する。root の子孫から競合 child と grandchild を除外し、child の確定 grandchild は選択できること、変更なし再 import でも親が戻らないことを確認した。
 
 - [ ] Codex の通常 import で欠落ログ由来の旧履歴を保持する
 
