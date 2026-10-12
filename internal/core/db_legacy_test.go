@@ -32,16 +32,16 @@ func TestLegacyHistoryReadAndCoexistence(t *testing.T) {
 	if session == nil || session.InputID != LegacyInputID || session.REF != ref || session.MessageCount != 1 || session.ParentREF != "" {
 		t.Fatalf("session %+v", session)
 	}
-	messages, err := db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
+	messages, err := db.GetSessionMessagesFiltered(*session, MessageFilter{}, nil, 0)
 	must(t, err)
 	if len(messages) != 1 || messages[0].Number != 3 || messages[0].Blocks != nil || messages[0].Timestamp != "" || messages[0].LegacyRowID != 9 || messages[0].Provenance != "legacy_saved" {
 		t.Fatalf("messages %+v", messages)
 	}
 	filter := MessageFilter{Role: "user", MinNumber: 3, MaxNumber: 3}
-	count, err := db.CountIdentityMessages(session.InputID, session.Source, session.Identity, filter)
+	count, err := db.CountSessionMessages(*session, filter)
 	must(t, err)
 	limit := 1
-	filtered, err := db.GetIdentityMessagesFiltered(session.InputID, session.Source, session.Identity, filter, &limit, 0)
+	filtered, err := db.GetSessionMessagesFiltered(*session, filter, &limit, 0)
 	must(t, err)
 	if count != 1 || len(filtered) != 1 || filtered[0].LegacyRowID != 9 || filtered[0].Blocks != nil {
 		t.Fatalf("filtered legacy messages: count=%d rows=%+v", count, filtered)

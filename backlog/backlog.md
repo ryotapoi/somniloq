@@ -163,11 +163,11 @@
 
   owner の置換 DELETE と欠落 rollout 保持 SELECT を既存の identity・索引に揃えた。[対比較](../cache/2026-10-12-codex-owner-scan.md)で 256 owner × 256 本文の初回 import は 6.76→4.27 秒、migrate は 6.81→4.30 秒、欠落本文保持＋追記は 15.18→4.90 秒に短縮した。小規模は明確な差なし。特殊文字 ID、欠落本文・metadata、文脈・未解決 record、移行・失敗時保持と共通 gate を確認した。schema は変えず、full は owner 置換を通らない。測定のばらつき・空の旧 snapshot・未計測環境を記録した。
 
+- [x] 旧 DB から残した会話本文の全体走査を減らす
+
+  選択済み legacy REF の snapshot digest を count・本文 SQL に渡し、既存索引の探索に揃えた。[対比較](../cache/2026-10-12-legacy-show-scan.md)で 100,000 本文・8 REF の全件 show は wall 中央値 110.96→9.17 ms、limit 5 は 122.39→8.77 ms、tail 5 は 123.36→8.73 ms。1,000 本文・1 REF と通常 source 対照はばらつき内。取得内容・REF 指定順・number 順・page・tail・sidechain と共通 gate を確認した。schema は変えず、legacy は指定会話を独立して参照する。
+
 #### 対応方針・採否が未確定のもの
-
-- [ ] 旧 DB から残した会話本文の全体走査を減らす
-
-  migrate が旧形式 DB から保存した legacy 履歴を複数 REF で show すると、選択会話ごとに旧履歴全体の本文を探索する。legacy は既存どおり指定会話を独立して参照し、親子関係の復元・推測や他の会話への展開は追加しない。その参照経路を維持し、対象会話を探す問い合わせの走査を減らす。取得内容と順序を維持し、旧履歴の規模・選択会話数を変えた前後の query plan と取得時間を確認する。
 
 - [ ] 詳細検索の一致ごとの重複文字走査を減らす
 

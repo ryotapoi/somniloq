@@ -152,7 +152,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 		if usePagedRead {
 			counts := make([]int, len(sessions))
 			for i, session := range sessions {
-				count, err := snapshot.CountIdentityMessages(session.InputID, session.Source, session.Identity, filter)
+				count, err := snapshot.CountSessionMessages(session, filter)
 				if err != nil {
 					return err
 				}
@@ -177,7 +177,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 					break
 				}
 				fetch := min(counts[i]-skip, remaining)
-				messages, err := snapshot.GetIdentityMessagesFiltered(session.InputID, session.Source, session.Identity, filter, &fetch, skip)
+				messages, err := snapshot.GetSessionMessagesFiltered(session, filter, &fetch, skip)
 				if err != nil {
 					return err
 				}
@@ -190,7 +190,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 			return nil
 		}
 		for _, session := range sessions {
-			messages, err := snapshot.GetIdentityMessagesFiltered(session.InputID, session.Source, session.Identity, filter, nil, 0)
+			messages, err := snapshot.GetSessionMessagesFiltered(session, filter, nil, 0)
 			if err != nil {
 				return err
 			}

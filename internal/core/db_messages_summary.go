@@ -22,17 +22,14 @@ type MessageRow struct {
 	LegacyRowID int64
 }
 
-// GetMessages returns body messages by canonical number, with rowid as the
-// order for sources that have no numbered stream.
+// GetMessages returns source body messages by canonical number, with rowid
+// as the order for sources that have no numbered stream.
 func (d *DB) GetMessages(inputID int64, source Source, sessionID string) ([]MessageRow, error) {
-	if inputID == LegacyInputID {
-		return d.GetIdentityMessages(inputID, source, sessionID)
-	}
 	return d.GetIdentityMessages(inputID, source, rootIdentity(sessionID))
 }
 
 func (d *DB) GetIdentityMessages(inputID int64, source Source, identity string) ([]MessageRow, error) {
-	return d.GetIdentityMessagesFiltered(inputID, source, identity, MessageFilter{}, nil, 0)
+	return d.GetSessionMessagesFiltered(SessionRow{InputID: inputID, Source: source, Identity: identity}, MessageFilter{}, nil, 0)
 }
 
 type MessageFilter struct {
@@ -61,16 +58,21 @@ func messageFilterSQL(filter MessageFilter) (string, []any) {
 	return " AND " + strings.Join(clauses, " AND "), args
 }
 
-func (d *DB) CountIdentityMessages(inputID int64, source Source, identity string, filter MessageFilter) (int, error) {
+func (d *DB) CountSessionMessages(session SessionRow, filter MessageFilter) (int, error) {
 	condition, filterArgs := messageFilterSQL(filter)
 	var query string
 	args := []any{}
-	if inputID == LegacyInputID {
-		query = `SELECT count(*) FROM legacy_messages WHERE source=? AND session_id=? AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0)`
-		args = append(args, source, identity)
+	if session.InputID == LegacyInputID {
+		key, source, identity, err := parseREF(session.REF)
+		if err != nil {
+			return 0, err
+		}
+
+		query = `SELECT count(*) FROM legacy_messages WHERE snapshot_sha256=? AND source=? AND session_id=? AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0)`
+		args = append(args, strings.TrimPrefix(key, "legacy:"), source, identity)
 	} else {
 		query = `SELECT count(*) FROM messages WHERE input_id=? AND source=? AND identity=? AND membership='body' AND (source IN ('codex','claude_code') OR is_sidechain=0)`
-		args = append(args, inputID, source, identity)
+		args = append(args, session.InputID, session.Source, session.Identity)
 	}
 	args = append(args, filterArgs...)
 	var count int
@@ -80,19 +82,24 @@ func (d *DB) CountIdentityMessages(inputID int64, source Source, identity string
 	return count, nil
 }
 
-func (d *DB) GetIdentityMessagesFiltered(inputID int64, source Source, identity string, filter MessageFilter, limit *int, offset int) ([]MessageRow, error) {
+func (d *DB) GetSessionMessagesFiltered(session SessionRow, filter MessageFilter, limit *int, offset int) ([]MessageRow, error) {
 	condition, filterArgs := messageFilterSQL(filter)
 	var query string
 	args := []any{}
 	operation := "get messages"
-	if inputID == LegacyInputID {
-		query = `SELECT uuid,role,content,COALESCE(timestamp,''),'null',number,'',0,'','legacy_saved',legacy_rowid FROM legacy_messages WHERE source=? AND session_id=? AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0)`
-		args = append(args, source, identity)
+	if session.InputID == LegacyInputID {
+		key, source, identity, err := parseREF(session.REF)
+		if err != nil {
+			return nil, err
+		}
+
+		query = `SELECT uuid,role,content,COALESCE(timestamp,''),'null',number,'',0,'','legacy_saved',legacy_rowid FROM legacy_messages WHERE snapshot_sha256=? AND source=? AND session_id=? AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0)`
+		args = append(args, strings.TrimPrefix(key, "legacy:"), source, identity)
 		query += condition + ` ORDER BY number`
 		operation = "get legacy messages"
 	} else {
 		query = `SELECT uuid, role, content, timestamp, blocks_json, number, origin_path, origin_line, payload_id, 'source_record', 0 FROM messages WHERE input_id=? AND source=? AND identity=? AND membership='body' AND (source IN ('codex','claude_code') OR is_sidechain=0)`
-		args = append(args, inputID, source, identity)
+		args = append(args, session.InputID, session.Source, session.Identity)
 		query += condition + ` ORDER BY CASE WHEN number > 0 THEN 0 ELSE 1 END, number, rowid`
 	}
 	args = append(args, filterArgs...)

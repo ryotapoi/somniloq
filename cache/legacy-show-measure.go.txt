@@ -1,0 +1,142 @@
+package main
+
+import (
+	"database/sql"
+	"encoding/json"
+	"fmt"
+	"github.com/ryotapoi/somniloq/internal/core"
+	_ "modernc.org/sqlite"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+func must(e error) {
+	if e != nil {
+		panic(e)
+	}
+}
+func createControl() {
+	path := ".tmp/legacy-show/normal.db"
+	os.Remove(path)
+	d, e := core.OpenDB(path)
+	if e != nil {
+		panic(e)
+	}
+	defer d.Close()
+	input := core.Input{Source: core.SourceCodex, Root: "/tmp/legacy-show-normal"}
+	id, e := d.EnsureInput(input)
+	if e != nil {
+		panic(e)
+	}
+	if e = d.UpsertSession(id, core.SessionMeta{Source: core.SourceCodex, SessionID: "normal"}, "now"); e != nil {
+		panic(e)
+	}
+	for n := 1; n <= 20; n++ {
+		if e = d.InsertMessage(id, core.NormalizedMessage{Source: core.SourceCodex, SessionID: "normal", UUID: fmt.Sprint(n), Role: "user", Number: n, Content: strings.Repeat("x", 128)}); e != nil {
+			panic(e)
+		}
+	}
+	if e = os.WriteFile(".tmp/legacy-show/normal.ref", []byte(core.RootREF(core.InputKey(input.Source, input.Root), input.Source, "normal")), 0600); e != nil {
+		panic(e)
+	}
+	if e = os.WriteFile(".tmp/legacy-show/normal.toml", []byte("db = 'normal.db'\n[[inputs]]\nsource = 'codex'\nroot = 'logs'\n"), 0600); e != nil {
+		panic(e)
+	}
+}
+func main() {
+	createControl()
+	root := ".tmp/legacy-show"
+	digest := strings.Repeat("a", 64)
+	for _, total := range []int{1000, 100000} {
+		path := filepath.Join(root, fmt.Sprintf("%d.db", total))
+		os.Remove(path)
+		d, e := core.OpenDB(path)
+		must(e)
+		must(d.Close())
+		db, e := sql.Open("sqlite", path)
+		must(e)
+		tx, e := db.Begin()
+		must(e)
+		ss, e := tx.Prepare(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) VALUES(?,'codex',?,'now')`)
+		must(e)
+		ms, e := tx.Prepare(`INSERT INTO legacy_messages(snapshot_sha256,uuid,source,session_id,role,content,number) VALUES(?,?,'codex',?,'user',?,?)`)
+		must(e)
+		for i := 0; i < total/20; i++ {
+			id := fmt.Sprintf("s%d", i)
+			_, e = ss.Exec(digest, id)
+			must(e)
+			for n := 1; n <= 20; n++ {
+				_, e = ms.Exec(digest, fmt.Sprintf("%s-%d", id, n), id, strings.Repeat("x", 128), n)
+				must(e)
+			}
+		}
+		must(tx.Commit())
+		must(ss.Close())
+		must(ms.Close())
+		must(os.WriteFile(filepath.Join(root, fmt.Sprintf("%d.toml", total)), []byte(fmt.Sprintf("db = '%d.db'\n[[inputs]]\nsource = 'codex'\nroot = 'logs'\n", total)), 0600))
+		for _, count := range []int{1, 8} {
+			for round := 0; round < 6; round++ {
+				sides := []string{"before", "after"}
+				if round%2 == 1 {
+					sides = []string{"after", "before"}
+				}
+				for _, side := range sides {
+					where := `source=? AND session_id=?`
+					if side == "after" {
+						where = `snapshot_sha256=? AND ` + where
+					}
+					start := time.Now()
+					got := 0
+					for i := 0; i < count; i++ {
+						args := []any{"codex", fmt.Sprintf("s%d", i)}
+						if side == "after" {
+							args = append([]any{digest}, args...)
+						}
+						q := `SELECT uuid,role,content,COALESCE(timestamp,''),'null',number,'',0,'','legacy_saved',legacy_rowid FROM legacy_messages WHERE ` + where + ` AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0) ORDER BY number`
+						if round == 0 && count == 1 {
+							plans, e := db.Query("EXPLAIN QUERY PLAN "+q, args...)
+							must(e)
+							for plans.Next() {
+								var id, parent, unused int
+								var detail string
+								must(plans.Scan(&id, &parent, &unused, &detail))
+								fmt.Fprintln(os.Stderr, total, side, detail)
+							}
+							must(plans.Close())
+							plans, e = db.Query("EXPLAIN QUERY PLAN SELECT count(*) FROM legacy_messages WHERE "+where+` AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0)`, args...)
+							must(e)
+							for plans.Next() {
+								var id, parent, unused int
+								var detail string
+								must(plans.Scan(&id, &parent, &unused, &detail))
+								fmt.Fprintln(os.Stderr, total, side, "count", detail)
+							}
+							must(plans.Close())
+							start = time.Now()
+						}
+						var counted int
+						must(db.QueryRow("SELECT count(*) FROM legacy_messages WHERE "+where+` AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0)`, args...).Scan(&counted))
+						if counted != 20 {
+							panic(counted)
+						}
+						rows, e := db.Query(q, args...)
+						must(e)
+						for rows.Next() {
+							var a, b, c, d, f, g, h, k string
+							var n, j int
+							var l int64
+							must(rows.Scan(&a, &b, &c, &d, &f, &n, &g, &j, &h, &k, &l))
+							got++
+						}
+						must(rows.Err())
+						must(rows.Close())
+					}
+					must(json.NewEncoder(os.Stdout).Encode(map[string]any{"kind": "retrieval", "total": total, "refs": count, "round": round, "side": side, "ms": float64(time.Since(start).Nanoseconds()) / 1e6, "rows": got}))
+				}
+			}
+		}
+		must(db.Close())
+	}
+}

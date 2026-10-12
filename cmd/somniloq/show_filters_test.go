@@ -193,3 +193,70 @@ func TestShowConfiguredBoundaryAndNanoPrecision(t *testing.T) {
 		}
 	}
 }
+
+func TestShowLegacySelectionPages(t *testing.T) {
+	digest := strings.Repeat("a", 64)
+	a, b := core.LegacyREF(digest, core.SourceCodex, "a"), core.LegacyREF(digest, core.SourceCursorAgent, "b")
+	for _, tc := range []struct {
+		name          string
+		flags         []string
+		total, offset int
+		texts         []string
+		refs          []string
+	}{
+		{"full", nil, 4, 0, []string{"b1", "b3", "a1", "a3"}, []string{b, b, a, a}},
+		{"page", []string{"--offset", "1", "--limit", "2"}, 4, 1, []string{"b3", "a1"}, []string{b, a}},
+		{"tail", []string{"--tail", "3"}, 4, 1, []string{"b3", "a1", "a3"}, []string{b, a, a}},
+		{"filtered", []string{"--role", "assistant", "--messages", "2:3", "--tail", "1"}, 2, 1, []string{"a3"}, []string{a}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			db, err := core.OpenDB(":memory:")
+			if err != nil {
+				t.Fatal(err)
+			}
+			tx, err := db.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			for _, row := range []struct{ source, id string }{{"codex", "a"}, {"cursor_agent", "b"}, {"codex", "unselected"}} {
+				if _, err := tx.Exec(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) VALUES(?,?,?,'now')`, digest, row.source, row.id); err != nil {
+					t.Fatal(err)
+				}
+				for _, n := range []int{3, 1, 2} {
+					if row.source == "codex" && n == 2 {
+						continue
+					}
+					role := "user"
+					if n == 3 {
+						role = "assistant"
+					}
+					sidechain := n == 2
+					if _, err := tx.Exec(`INSERT INTO legacy_messages(snapshot_sha256,uuid,source,session_id,role,content,number,is_sidechain) VALUES(?,?,?,?,?,?,?,?)`, digest, row.source+row.id+fmt.Sprint(n), row.source, row.id, role, row.id+fmt.Sprint(n), n, sidechain); err != nil {
+						t.Fatal(err)
+					}
+				}
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+			flags := tc.flags
+			var out, diag bytes.Buffer
+			code, err := showCmd(append([]string{b, a, b, "--format", "json"}, flags...), staticDB(db), config{}, &out, &diag)
+			if code != 0 || err != nil {
+				t.Fatalf("%d %v %s", code, err, diag.String())
+			}
+			var page showJSON
+			if err := json.Unmarshal(out.Bytes(), &page); err != nil {
+				t.Fatal(err)
+			}
+			var texts, refs []string
+			for _, item := range page.Items {
+				texts = append(texts, item.Text)
+				refs = append(refs, item.REF)
+			}
+			if page.Total != tc.total || page.Offset != tc.offset || !reflect.DeepEqual(texts, tc.texts) || !reflect.DeepEqual(refs, tc.refs) {
+				t.Fatalf("page: %+v", page)
+			}
+		})
+	}
+}
