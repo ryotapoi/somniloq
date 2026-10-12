@@ -2,6 +2,13 @@
 
 English · [日本語](CHANGELOG.ja.md)
 
+## v0.14.5 — 2026-10-12
+
+### Fixed
+
+- Clarified import help and the example agent skill: incremental imports retain missing Codex rollout history and old Claude conversations after a log session ID changes, while successful `--full` imports rebuild from current logs and may remove that history. Codex help now accounts for retained records from missing rollouts.
+- Added same-database concurrency guidance to the example skill: retry after the active import or migration finishes, and keep the lock sidecar in place.
+
 ## v0.14.4 — 2026-10-12
 
 ### Changed

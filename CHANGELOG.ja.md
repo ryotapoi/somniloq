@@ -2,6 +2,13 @@
 
 [English](CHANGELOG.md) · 日本語
 
+## v0.14.5 — 2026-10-12
+
+### 修正
+
+- import help と agent 向け skill のサンプルに、差分取り込みは欠落した Codex rollout の履歴と session ID が変わった Claude の旧会話を保持し、正常な `--full` は現在のログから再構築してその履歴を除去し得ることを明記した。Codex の説明も欠落 rollout の保存済み record の保持に合わせた。
+- skill のサンプルに、同じ DB への import・migrate が実行中なら終了後に再実行し、lock sidecar を削除しない案内を加えた。
+
 ## v0.14.4 — 2026-10-12
 
 ### 変更

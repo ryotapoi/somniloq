@@ -17,6 +17,8 @@ somniloq は Claude Code / Codex / Cursor Agent のセッションログを SQLi
 somniloq import --config default
 ```
 
+同じ DB への import・migrate が実行中なら、後発操作は待機せず終了1になります。実行中の操作が終わってから再実行してください。`<db>.lock` sidecar は削除しません。操作・プロセスの終了で排他は解放されます。
+
 全 DB コマンドで `--config NAME_OR_PATH` 省略時は `default` を使います。設定欠落は import もエラーと作成案内を返し、自動生成しません。`somniloq config init [NAME]` は名前省略時 default。設定宛先と参照 DB の両方が未存在の場合だけ TOML を生成し、DB は作成しません。いずれかに既存ファイル・directory・symlink（dangling を含む）があれば拒否し、内容を保持します。名前の既定 DB と明示 `--db` に同じ存在判定を適用し、相対 DB は設定の実体親を基準に解決します。既存の設定名・path を確認して選び、旧 JSON や旧 DB を自動移行するものと考えないでください。DB は import 時点のスナップショットです。自動更新ではありません。
 
 既知の旧 DB の履歴保持には `somniloq migrate --config NAME_OR_PATH --from PATH` を使います。元は sidecar のない固定 standalone snapshot、設定の `db` は別の未存在または空 DB、inputs は残存 Codex ログの全 root にします。所属不明・ログ欠落・他 source の旧履歴は保持され、legacy REF で読めます。同じ snapshot と完了 receipt がある移行先に再実行できます。詳細な受理条件と部分失敗の扱いは `somniloq migrate --help` を確認してください。
@@ -46,7 +48,7 @@ somniloq show --config default --format json <REF>
 
 Cursor Agent の履歴には時刻がないことがあり、`--since` / `--until` を付けると対象外になります。時刻不明でも直近に取り込んだ履歴は、`somniloq search --config default --imported-since 2026-10-01T00:00:00+09:00` のように zone 付き RFC3339 で探せます。search の pattern は大小文字区別の Go regexp、固定文字列は -F。project は末尾名の大小文字区別 substring と完全一致 alias 展開です。search/show の日時は日付または zone 付き RFC3339 を指定し、相対時刻は受理しません。
 
-追加 root は TOML の inputs に設定します。`import --config default --input PATH` を繰り返して入力を選べ、`--source` とは交差条件です。`--full` は選択入力だけを再構築し、他入力を保持します。Codex の子本人は継承文脈と分けて保存され、完全 REF で本人会話を選べます。Claude Code の子孫も別の本人 REF で保持します。`search --session REF PATTERN` は本人と確定子孫だけを検索し、祖先・兄弟・root 所属だけの子は含めません。pattern 必須の Go regexp 全一致検索です。一覧は本文抜粋なしのまとまり metadata と REF を返します。
+追加 root は TOML の inputs に設定します。`import --config default --input PATH` を繰り返して入力を選べ、`--source` とは交差条件です。差分取り込みは欠落した Codex rollout の履歴と、ログの session ID が変わった Claude の旧会話を保持します。`--full` は選択入力だけを現在のログから再構築し、他入力を保持します。その旧履歴は除去され得るため、実行前に選択入力の元ログが残っていることを確認してください。Codex の子本人は継承文脈と分けて保存され、完全 REF で本人会話を選べます。Claude Code の子孫も別の本人 REF で保持します。`search --session REF PATTERN` は本人と確定子孫だけを検索し、祖先・兄弟・root 所属だけの子は含めません。pattern 必須の Go regexp 全一致検索です。一覧は本文抜粋なしのまとまり metadata と REF を返します。
 
 複数の完全 REF を一回の呼び出しで渡し、指定日の実発言だけを Daily Note の材料として取得できます。REF の指定順・各会話の元の発言番号順を保ち、`--descendants` は確定子孫だけを展開して重複会話を除きます。role・発言番号・日時で絞った後に、発言単位で limit / offset / tail を適用します。`--one-line` は text だけを最初の一行へ短縮し、blocks は原文を保ちます。既定 TSV、JSON は `{items,total,count,limit,offset,hasMore,nextOffset}` envelope です。show の日時は日付または zone 付き RFC3339 で指定し、相対時刻は受理しません。旧 outline・summary・turn・表示除外・Markdown・REF なし期間入口は廃止しました。一覧は turn/snippet を返しません。search --session の `messageNumber` は show と共通の原文番号です。詳細は `somniloq show --help` を参照してください。
 

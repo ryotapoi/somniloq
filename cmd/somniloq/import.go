@@ -26,8 +26,12 @@ const importHelpDetails = `Output:
 
 Notes:
   Default import is differential. Use --full to rebuild only selected inputs, preserving other inputs.
+  Differential import retains history from missing Codex rollouts and old Claude conversations
+  whose log session ID changed. Successful --full rebuilds from current logs and may remove that history.
+  Check that the selected inputs' original logs remain before using --full.
   With --source cursor-agent --full, only selected Cursor Agent inputs are rebuilt.
-  Codex rebuilds each changed owner across all rollouts, ordered by relative path and physical line.
+  Codex rebuilds each changed owner across present rollouts, retaining saved records from missing
+  rollouts in differential mode. Messages are ordered by relative path and physical line.
   Matching payload IDs deduplicate only identical role, text blocks, and raw timestamp; conflicts fail the group.
   Codex inheritance context is stored separately and excluded from show and body search.
   Missing record timestamps remain unknown; session metadata does not supply message time.
