@@ -49,6 +49,8 @@ Codex の取り込みは rollout の本人会話と継承文脈を区別する�
 
 フラグ・出力形式は `somniloq <command> --help` を参照。`projects`、`search`、`show` は `--format tsv|json` に対応する。show と search の JSON は envelope、projects は配列。session なし search は本文抜粋を含まないまとまり一覧。Claude Code の子・孫は root と sessionId を共有しても独立した本人 REF で取り込み・検索・閲覧でき、本人 sidechain の原文も保持する。直接親は同一物理ファイルの Agent/Task call と構造化結果を厳密に照合し、path の root 所属とは区別する。走査・初期読み取りが不完全な入力は前回保存の本文・関係・cursor を保持する。その後の Codex の失敗では対象会話を保持し、他入力の取り込みを続ける。`--full` の失敗時は対象入力を変更しない。`search --session REF PATTERN` は共通 resolver で指定本人と確定子孫だけを検索し、祖先・兄弟・root 所属だけの子を含めない。Go regexp の全一致箇所を返す。複数 -e、全 pattern を固定文字列にする -F、本文集合全体の --all AND を指定できる。
 
+`projects` の TSV は header なしの2列で、`search`・`show` と同じ可逆な文字列 escape を用います。backslash/tab/LF/CR は `\\` / `\t` / `\n` / `\r`、その他の C0/DEL/C1 は `\xhh`（ESC は `\x1b`）です。左から右へ一回だけ復元し、`\xhh` は Unicode code point に戻します。保存値と JSON 文字列は維持します。
+
 複数の完全 REF を一回の呼び出しで渡し、指定日の実発言だけを Daily Note の材料として取得できます。REF の指定順・各会話の元の発言番号順を保ち、`--descendants` は確定子孫だけを展開して重複会話を除きます。role・発言番号・日時で絞った後に、発言単位で limit / offset / tail を適用します。`--one-line` は text だけを最初の一行へ短縮し、blocks は原文を保ちます。既定 TSV の文字列は端末制御文字を `\xhh`（ESC は `\x1b`）へ可逆に変換し、配列列は JSON escape 付き compact JSON を保ちます。JSON は `{items,total,count,limit,offset,hasMore,nextOffset}` envelope です。show の日時は日付または zone 付き RFC3339 で指定し、相対時刻と時00〜23・分00〜59の範囲外の offset は受理しません。旧 outline・summary・turn・表示除外・Markdown・REF なし期間入口は廃止しました。一覧は REF と metadata を返し、本文抜粋・turn を含みません。詳細 search の messageNumber は show と同じ原文番号です。詳細は [現行仕様](docs/cli-contract.md) を参照してください。
 
 ```sh

@@ -107,9 +107,9 @@
 
 #### 検索と出力の整理
 
-- [ ] projects の TSV にも既存の端末制御文字対策を適用する
+- [x] projects の TSV にも既存の端末制御文字対策を適用する
 
-  ログ由来の repository 名に ESC 等が含まれると、`projects` の既定 TSV がそのまま出力し、端末で画面消去やカーソル移動を起こし得る。`search`・`show` と同じ共通文字変換を利用し、ESC は `\x1b` 等の可逆な見える表記にする。tab・改行・backslash も同じ TSV escape 規則にそろえ、help と公開形式を更新する。取り込みから `projects` 出力までで raw 制御文字が出ないこと、文字列を復元できること、project 集約・件数・保存値・JSON 出力が変わらないことを確認する。
+  `projects` の TSV を `search`・`show` と同じ共通文字変換へそろえ、ESC は `\x1b`、tab・改行・backslash も可逆な TSV escape で返す。help・公開形式・README 両言語を同期した。実 JSONL の取り込みから出力までで raw 制御文字の不在と一回の復元、保存値・JSON の不変を確認し、alias 合算・件数・short 表示と別 repository の分離を回帰テストで確認した。
 
 - [x] TSV のログ由来の端末制御文字を無害化する
 

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -11,9 +12,12 @@ import (
 )
 
 func TestProjectOutput_ControlCharacters(t *testing.T) {
-	const alias = "alias\twith\nline\rend"
-	const rawPath = "/repos/raw\twith\nline\rend"
-	const collisionPath = "/repos/raw with line end"
+	const alias = "alias\twith\nline\rend\x1b[2J\x01\x7f\u0085\\x1b\\N"
+	const escapedAlias = `alias\twith\nline\rend\x1b[2J\x01\x7f\x85\\x1b\\N`
+	const rawPath = "/repos/raw\twith\nline\rend\x1b\x7f\u009b\\x1b\\N"
+	const escapedRawPath = `/repos/raw\twith\nline\rend\x1b\x7f\x9b\\x1b\\N`
+	const collisionPath = "/repos/raw with line end\x1b\x7f\u009b\\x1b\\N"
+	const escapedCollisionPath = `/repos/raw with line end\x1b\x7f\x9b\\x1b\\N`
 	cfg := config{ProjectAliases: map[string][]string{alias: {"old-one", "old-two"}}}
 	for _, short := range []bool{false, true} {
 		for _, format := range []string{"tsv", "json"} {
@@ -45,7 +49,7 @@ func TestProjectOutput_ControlCharacters(t *testing.T) {
 
 				wantRaw, wantCollision, wantNormal := rawPath, collisionPath, "/repos/normal"
 				if short {
-					wantRaw, wantCollision, wantNormal = "raw\twith\nline\rend", "raw with line end", "normal"
+					wantRaw, wantCollision, wantNormal = strings.TrimPrefix(rawPath, "/repos/"), strings.TrimPrefix(collisionPath, "/repos/"), "normal"
 				}
 				wantRows, aliasRows := 4, 1
 				gotNames := map[string]int{}
@@ -80,15 +84,41 @@ func TestProjectOutput_ControlCharacters(t *testing.T) {
 							t.Fatalf("TSV columns = %d, want 2: %q", len(columns), row)
 						}
 						gotNames[columns[0]]++
+						for _, r := range columns[0] {
+							if r < 0x20 || (r >= 0x7f && r <= 0x9f) {
+								t.Fatalf("raw control U+%04X in TSV project %q", r, columns[0])
+							}
+						}
 						wantCount := "1"
-						if columns[0] == "alias with line end" {
+						if columns[0] == escapedAlias {
 							wantCount = "2"
 						}
 						if columns[1] != wantCount {
 							t.Errorf("TSV count = %q, want %q: %q", columns[1], wantCount, row)
 						}
 					}
-					want := map[string]int{"alias with line end": aliasRows, wantCollision: 2, wantNormal: 1}
+					wantEscapedRaw, wantEscapedCollision := escapedRawPath, escapedCollisionPath
+					if short {
+						wantEscapedRaw = strings.TrimPrefix(wantEscapedRaw, "/repos/")
+						wantEscapedCollision = strings.TrimPrefix(wantEscapedCollision, "/repos/")
+					}
+					want := map[string]int{escapedAlias: aliasRows, wantEscapedRaw: 1, wantEscapedCollision: 1, wantNormal: 1}
+					originals := map[string]string{escapedAlias: alias, wantEscapedRaw: wantRaw, wantEscapedCollision: wantCollision, wantNormal: wantNormal}
+					for encoded := range gotNames {
+						original := originals[encoded]
+						var restored strings.Builder
+						for remaining := encoded; remaining != ""; {
+							r, _, tail, err := strconv.UnquoteChar(remaining, '"')
+							if err != nil {
+								t.Fatal(err)
+							}
+							restored.WriteRune(r)
+							remaining = tail
+						}
+						if restored.String() != original {
+							t.Errorf("decoded %q = %q, want %q", encoded, restored.String(), original)
+						}
+					}
 					if !reflect.DeepEqual(gotNames, want) {
 						t.Errorf("TSV projects = %#v, want %#v", gotNames, want)
 					}

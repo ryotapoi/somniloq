@@ -9,13 +9,15 @@ import (
 )
 
 const projectsHelpDetails = `Columns (TSV, in order):
-  project: canonical alias name when configured, otherwise repo_path or basename with --short; tabs/newlines flattened.
+  project: canonical alias name when configured, otherwise repo_path or basename with --short.
   session_count: number of sessions for that project.
 
 JSON fields:
   project, sessionCount
 
 Notes:
+  TSV strings reversibly escape backslash/tab/LF/CR as \\, \t, \n, \r and other C0/DEL/C1 controls as \xhh (ESC as \x1b).
+  Decode escapes once, left to right; \xhh restores the Unicode code point, including C1.
   Projects are grouped by repo_path in SQL, then alias-equivalent rows are merged for display.
   Existing linked Git worktrees share the main repository's repo_path when imported.
   --since/--until accept RFC3339 instants (for example, 2026-03-28T15:00:00Z or 2026-03-29T00:00:00+09:00); dates and minute datetimes are local.
@@ -76,7 +78,7 @@ func projectsCmd(args []string, openDB func() (*core.DB, error), cfg config, out
 	}
 
 	for _, r := range displayRows {
-		if _, err := fmt.Fprintf(out, "%s\t%d\n", sanitizeTSV(r.Project), r.SessionCount); err != nil {
+		if _, err := fmt.Fprintf(out, "%s\t%d\n", showTSVString(r.Project), r.SessionCount); err != nil {
 			return 1, err
 		}
 	}

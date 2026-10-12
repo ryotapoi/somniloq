@@ -28,6 +28,6 @@ REF は `slq1:INPUT_KEY:SOURCE:BASE64URL_IDENTITY`。Base64 は padding なし R
 
 `search` と `show` は成功時に0（0件含む）、入力・設定・REF・非対応DBの拒否に2、I/O失敗に1を返す。診断はstderr、結果はstdoutに分ける。`migrate` の終了値とsummaryは [移行手順](migration.md#成功失敗と出力) に従う。表示用現在時刻を日時unknownに代入しない。
 
-`projects --format json` は `{project,sessionCount}` の配列を返す。既定 TSV は header と page 行を持たず、`project` と `session_count` の2列を行ごとに返す。project 中の tab と改行は空白に置換する。
+`projects --format json` は `{project,sessionCount}` の配列を返す。既定 TSV は header と page 行を持たず、`project` と `session_count` の2列を行ごとに返す。project は上記の `search`・`show` の文字列と同じ可逆 TSV escape と一回の復元規則を用いる。保存値と JSON の project 文字列は変換しない。
 
 JSON は2スペース字下げで、HTML 文字を escape しない。

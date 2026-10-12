@@ -45,7 +45,7 @@ func TestSubcommandHelpIsSelfContained(t *testing.T) {
 			run: func(errOut *bytes.Buffer) (int, error) {
 				return projectsCmd([]string{"--help"}, openDB, config{}, &bytes.Buffer{}, errOut)
 			},
-			want: []string{"Examples:", "Columns (TSV, in order):", "session_count", "project, sessionCount", "somniloq projects --config default --format json"},
+			want: []string{"Examples:", "Columns (TSV, in order):", "session_count", "project, sessionCount", "TSV strings reversibly escape", "Decode escapes once", "somniloq projects --config default --format json"},
 		},
 	}
 
