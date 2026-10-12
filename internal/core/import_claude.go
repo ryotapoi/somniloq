@@ -66,9 +66,33 @@ func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecod
 			result.FilesSkipped++
 		}
 	}
-	if !full {
+	if !full && len(changed) > 0 {
+		// Metadata-only files can still change an owner found in another file.
+		owners := make(map[string]*claudeOwnerSnapshot, len(changed))
 		for identity := range changed {
-			unchanged, err := claudeOwnerUnchanged(db, inputID, identity, files)
+			owners[identity] = &claudeOwnerSnapshot{}
+		}
+		for i := range files {
+			f := &files[i]
+			for j := range f.Records {
+				r := &f.Records[j]
+				if owner := owners[r.Session.Identity]; owner != nil {
+					owner.records = append(owner.records, r)
+				}
+			}
+			for identity, title := range f.Titles {
+				if owner := owners[identity]; owner != nil {
+					owner.titles = append(owner.titles, title)
+				}
+			}
+			for identity, name := range f.AgentNames {
+				if owner := owners[identity]; owner != nil {
+					owner.names = append(owner.names, name)
+				}
+			}
+		}
+		for identity := range changed {
+			unchanged, err := claudeOwnerUnchanged(db, inputID, identity, owners[identity])
 			if err != nil {
 				return nil, err
 			}
@@ -183,9 +207,15 @@ func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecod
 	return result, nil
 }
 
+type claudeOwnerSnapshot struct {
+	records []*ingest.NormalizedRecord
+	titles  []string
+	names   []string
+}
+
 // Non-text appendages may change a file hash without changing stored owner text
 // or metadata. Their cursor and relation evidence still participate in the pass.
-func claudeOwnerUnchanged(db *DB, inputID int64, identity string, files []claudecode.FileSnapshot) (bool, error) {
+func claudeOwnerUnchanged(db *DB, inputID int64, identity string, owner *claudeOwnerSnapshot) (bool, error) {
 	var sessionID, cwd, repo, branch, version, title, name string
 	err := db.db.QueryRow(`SELECT session_id,COALESCE(cwd,''),COALESCE(repo_path,''),COALESCE(git_branch,''),COALESCE(version,''),COALESCE(custom_title,''),COALESCE(agent_name,'') FROM sessions WHERE input_id=? AND identity=?`, inputID, identity).Scan(&sessionID, &cwd, &repo, &branch, &version, &title, &name)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -195,30 +225,27 @@ func claudeOwnerUnchanged(db *DB, inputID int64, identity string, files []claude
 		return false, err
 	}
 	var expected []MessageRow
-	found := false
-	for _, f := range files {
-		for _, r := range f.Records {
-			if r.Session.Identity != identity {
-				continue
-			}
-			found = true
-			meta := r.Session
-			if meta.SessionID != sessionID || (meta.CWD != "" && meta.CWD != cwd) || (meta.RepoPath != "" && meta.RepoPath != repo) || (meta.GitBranch != "" && meta.GitBranch != branch) || (meta.Version != "" && meta.Version != version) {
-				return false, nil
-			}
-			m := r.Message
-			if strings.TrimSpace(m.Content) != "" {
-				expected = append(expected, MessageRow{UUID: m.UUID, Role: m.Role, Content: m.Content, Timestamp: m.Timestamp, Blocks: m.Blocks, Number: m.Number, OriginPath: m.OriginPath, OriginLine: m.OriginLine, PayloadID: m.PayloadID, Provenance: "source_record"})
-			}
-		}
-		if t, ok := f.Titles[identity]; ok && t != title {
+	for _, r := range owner.records {
+		meta := r.Session
+		if meta.SessionID != sessionID || (meta.CWD != "" && meta.CWD != cwd) || (meta.RepoPath != "" && meta.RepoPath != repo) || (meta.GitBranch != "" && meta.GitBranch != branch) || (meta.Version != "" && meta.Version != version) {
 			return false, nil
 		}
-		if n, ok := f.AgentNames[identity]; ok && n != name {
+		m := r.Message
+		if strings.TrimSpace(m.Content) != "" {
+			expected = append(expected, MessageRow{UUID: m.UUID, Role: m.Role, Content: m.Content, Timestamp: m.Timestamp, Blocks: m.Blocks, Number: m.Number, OriginPath: m.OriginPath, OriginLine: m.OriginLine, PayloadID: m.PayloadID, Provenance: "source_record"})
+		}
+	}
+	for _, t := range owner.titles {
+		if t != title {
 			return false, nil
 		}
 	}
-	if !found {
+	for _, n := range owner.names {
+		if n != name {
+			return false, nil
+		}
+	}
+	if len(owner.records) == 0 {
 		return false, nil
 	}
 	messages, err := db.GetIdentityMessages(inputID, SourceClaudeCode, identity)

@@ -490,3 +490,34 @@ func TestClaudeBlankAppendPreservesOwnerAndImportTime(t *testing.T) {
 		t.Fatalf("changed body not imported: %+v", changed)
 	}
 }
+
+func TestClaudeComparisonIncludesMetadataOnlySiblingFile(t *testing.T) {
+	root := testTempDir(t)
+	db := testDB(t)
+	const body = `{"type":"user","uuid":"u","sessionId":"r","timestamp":"2026-01-01T00:00:00Z","message":{"role":"user","content":"history"}}` + "\n"
+	writeClaude(t, root, "p/r.jsonl", body)
+	writeClaude(t, root, "q/metadata.jsonl", `{"type":"custom-title","sessionId":"r","customTitle":"old title"}`+"\n"+
+		`{"type":"agent-name","sessionId":"r","agentName":"old name"}`+"\n")
+	importClaudeTest(t, db, root)
+	session, err := db.LookupSessionREF(claudeREF(root, "r"))
+	must(t, err)
+	if session == nil {
+		t.Fatal("missing owner")
+	}
+	before, err := db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
+	must(t, err)
+	writeClaude(t, root, "p/r.jsonl", body+"\n")
+	writeClaude(t, root, "q/metadata.jsonl", `{"type":"custom-title","sessionId":"r","customTitle":"new title"}`+"\n"+
+		`{"type":"agent-name","sessionId":"r","agentName":"new name"}`+"\n")
+	importClaudeTest(t, db, root)
+	after, err := db.GetIdentityMessages(session.InputID, session.Source, session.Identity)
+	must(t, err)
+	if !reflect.DeepEqual(before, after) {
+		t.Fatalf("history changed: before=%+v after=%+v", before, after)
+	}
+	var title, name string
+	must(t, db.db.QueryRow(`SELECT custom_title,agent_name FROM sessions WHERE input_id=? AND identity=?`, session.InputID, session.Identity).Scan(&title, &name))
+	if title != "new title" || name != "new name" {
+		t.Fatalf("metadata=%q/%q", title, name)
+	}
+}
