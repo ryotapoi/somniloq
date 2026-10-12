@@ -32,7 +32,7 @@ func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecod
 			expected[path] = old
 		}
 	}
-	files, readErrors, diagnostics := adapter.BuildSnapshots(root, paths, importedAt)
+	files, readErrors, diagnostics := adapter.BuildSnapshots(root, paths, importedAt, expected)
 	result.Errors = append(result.Errors, readErrors...)
 	result.addUnparsedDiagnostics(diagnostics)
 	result.FilesFailed = len(readErrors)
@@ -59,10 +59,7 @@ func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecod
 			for _, r := range f.Records {
 				changed[r.Session.Identity] = true
 			}
-			if full {
-				old = nil
-			}
-			pr := ingest.SnapshotDiagnostics(f.Data, f.Failures, old)
+			pr := f.Diagnostics
 			result.UnparsedLines += pr.UnparsedLines
 			result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
 		} else {

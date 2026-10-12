@@ -7,6 +7,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/ryotapoi/somniloq/internal/ingest"
 )
 
 func TestBuildSnapshotsReusesRepositoryPerCWDWithinPass(t *testing.T) {
@@ -45,7 +47,7 @@ func TestBuildSnapshotsReusesRepositoryPerCWDWithinPass(t *testing.T) {
 		return repositories[cwd]
 	})
 	for pass := 1; pass <= 2; pass++ {
-		files, readErrors, diagnostics := adapter.BuildSnapshots(root, paths, "now")
+		files, readErrors, diagnostics := adapter.BuildSnapshots(root, paths, "now", nil)
 		if len(readErrors) != 0 || len(diagnostics) != 0 || len(files) != len(paths) {
 			t.Fatalf("files=%d readErrors=%v diagnostics=%v", len(files), readErrors, diagnostics)
 		}
@@ -126,7 +128,7 @@ func TestPhysicalParentEvidenceBoundaries(t *testing.T) {
 				}
 				paths = append(paths, siblingPath)
 			}
-			files, errors, _ := NewAdapter(func(cwd string) string { return cwd }).BuildSnapshots(root, paths, "now")
+			files, errors, _ := NewAdapter(func(cwd string) string { return cwd }).BuildSnapshots(root, paths, "now", nil)
 			if len(errors) > 0 {
 				t.Fatal(errors)
 			}
@@ -147,6 +149,48 @@ func TestPhysicalParentEvidenceBoundaries(t *testing.T) {
 			}
 			if !found {
 				t.Fatal("missing child")
+			}
+		})
+	}
+}
+
+func TestBuildSnapshotsCursorDiagnostics(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, "r.jsonl")
+	adapter := NewAdapter(func(cwd string) string { return cwd })
+	if err := os.WriteFile(path, []byte("bad\n"), 0644); err != nil {
+		t.Fatal(err)
+	}
+	files, readErrors, _ := adapter.BuildSnapshots(root, []string{path}, "before", nil)
+	if len(readErrors) != 0 || len(files) != 1 {
+		t.Fatalf("files=%v errors=%v", files, readErrors)
+	}
+	old := files[0].State
+	for _, tc := range []struct {
+		name, data string
+		full       bool
+		want       int
+	}{
+		{"unchanged", "bad\n", false, 0},
+		{"append", "bad\nworse\n", false, 1},
+		{"edited prefix", "BAD\nworse\n", false, 2},
+		{"full", "bad\nworse\n", true, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if err := os.WriteFile(path, []byte(tc.data), 0644); err != nil {
+				t.Fatal(err)
+			}
+			expected := map[string]*ingest.ImportState{path: &old}
+			if tc.full {
+				expected = nil
+			}
+			files, readErrors, _ := adapter.BuildSnapshots(root, []string{path}, "after", expected)
+			if len(readErrors) != 0 || len(files) != 1 {
+				t.Fatalf("files=%v errors=%v", files, readErrors)
+			}
+			got := files[0].Diagnostics
+			if got.UnparsedLines != tc.want || len(got.UnparsedDiagnostics) != tc.want {
+				t.Fatalf("diagnostics=%+v want=%d", got, tc.want)
 			}
 		})
 	}

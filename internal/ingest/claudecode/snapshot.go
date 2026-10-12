@@ -17,18 +17,18 @@ import (
 // FileSnapshot separates physical-file relation evidence from numbered text.
 // Every pass reads the complete file, including unchanged non-text records.
 type FileSnapshot struct {
-	State      ingest.ImportState
-	Records    []ingest.NormalizedRecord
-	Titles     map[string]string
-	AgentNames map[string]string
-	Failures   []ingest.ParseFailure
-	Data       []byte
-	Parents    map[string]string
+	State       ingest.ImportState
+	Records     []ingest.NormalizedRecord
+	Titles      map[string]string
+	AgentNames  map[string]string
+	Failures    []ingest.ParseFailure
+	Diagnostics ingest.ProcessResult
+	Parents     map[string]string
 }
 
 // BuildSnapshots performs Claude-specific interpretation before storage writes.
 // Direct-parent candidates never cross a physical file or a path root boundary.
-func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string) ([]FileSnapshot, []error, []error) {
+func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string, expected map[string]*ingest.ImportState) ([]FileSnapshot, []error, []error) {
 	sort.Strings(paths)
 	var files []FileSnapshot
 	var readErrors, diagnostics []error
@@ -41,7 +41,7 @@ func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string) 
 			continue
 		}
 		sum := sha256.Sum256(data)
-		f := FileSnapshot{Data: data, State: ingest.ImportState{JSONLPath: path, Source: ingest.SourceClaudeCode, FileSize: int64(len(data)), LastOffset: int64(len(data)), ContentHash: hex.EncodeToString(sum[:]), ImportedAt: importedAt}, Titles: map[string]string{}, AgentNames: map[string]string{}, Parents: map[string]string{}}
+		f := FileSnapshot{State: ingest.ImportState{JSONLPath: path, Source: ingest.SourceClaudeCode, FileSize: int64(len(data)), LastOffset: int64(len(data)), ContentHash: hex.EncodeToString(sum[:]), ImportedAt: importedAt}, Titles: map[string]string{}, AgentNames: map[string]string{}, Parents: map[string]string{}}
 		rootID := strings.TrimSuffix(filepath.Base(path), ".jsonl")
 		agent := ""
 		if filepath.Base(filepath.Dir(path)) == "subagents" {
@@ -133,6 +133,12 @@ func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string) 
 		if err != nil {
 			readErrors = append(readErrors, fmt.Errorf("%s: %w", path, err))
 			continue
+		}
+		// Resolve cursor diagnostics now so raw bytes do not survive alongside
+		// every file's normalized records until the storage transaction ends.
+		old := expected[path]
+		if old == nil || old.ContentHash != f.State.ContentHash {
+			f.Diagnostics = ingest.SnapshotDiagnostics(data, f.Failures, old)
 		}
 		for call, agents := range results {
 			parents, ok := calls[call]
