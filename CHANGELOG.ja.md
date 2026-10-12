@@ -2,6 +2,24 @@
 
 [English](CHANGELOG.md) · 日本語
 
+## v0.14.4 — 2026-10-12
+
+### 変更
+
+- import と migrate は DB open・ログ読取より前から共通の待機しない DB 排他を保持し、古い full 取込や移行 snapshot による新しい履歴の上書きを防ぐ。同じ DB の後発操作は終了1、別 DB は独立して実行できる。`<db>.lock` sidecar は削除しない。操作・プロセスの終了で排他は解放される。
+- Claude import は診断集計後に元ファイル bytes を解放してメモリ使用量を削減した。Claude・Codex の解析失敗診断の保持量も制限し、失敗総数と公開する例は維持する。Claude の会話比較と Codex owner 置換の反復走査も削減した。
+- `show` は日時条件のない発言範囲・ページ指定で必要な本文だけを取得し、legacy 会話には既存の snapshot 索引を使い、関係解決で無関係な本文集約を行わない。詳細検索の関係解決と行境界を再利用し、pattern なし・非 active の期間検索で不要な本文読取を省き、TSV 出力では固定 escape 表を再利用する。発言番号・一致位置・絞り込み・ページングは維持する。計測と限界は `cache/` に記録した。
+- import・CLI の内部処理を整理し、使われない Claude・Codex の旧取込経路と重複テストを除去した。ライセンス通知の生成・照合は UTF-8 を明示し、Windows の依存通知も同梱した。
+
+### 修正
+
+- Cursor full import の失敗時に、選択入力の旧会話・本文・cursor を保持するようにした。Codex full import も、走査時に認識した会話 ID が読取時に消えたログを拒否し、入力の旧履歴を保持する。
+- Codex の通常 import は残存ログが変わっても欠落 rollout 由来の履歴を保持し、本文なし rollout の metadata も変更判定に含める。Claude の通常 import はログの session ID が変わっても旧会話を保持する。正常な `--full` は引き続き選択入力を現在のログから再構築し、その旧履歴を除去し得る。
+- SQLite の DB パスで URI の特殊文字を escape し、import・読取・移行が指定ファイルと新規ファイルの権限を守るようにした。`config init` は DB 先が設定ファイル自身または親ディレクトリと重なる指定を拒否する。
+- `search`・`show` は RFC3339 offset の時00–23・分00–59の範囲外を DB open 前に拒否する。project 検索は full-path alias を保存 repository path 全体へ照合し、full path と basename が別 group に属する alias 設定は拒否する。
+- Git パス内・末尾の改行を repository 解決で保持し、`/.claude/worktrees/` 直下の Claude worktree を `/` として認識するようにした。変更なしの通常 import は保存済み repository 値を保持し、full import で再解決できる。
+- `projects`・`search`・`show` の TSV は ESC の `\x1b` など端末制御文字を可逆に escape し、保存値と JSON は維持する。`projects` の tab・改行も空白置換から backslash を含む可逆 escape へ変更した。TSV を読む処理は更新した [出力形式](docs/cli-contract.md) に従う。
+
 ## v0.14.3 — 2026-10-10
 
 ### 変更

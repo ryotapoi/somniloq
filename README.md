@@ -37,7 +37,7 @@ Every database command uses `default` when `--config NAME_OR_PATH` is omitted. A
 | `search` | List conversation groups without a pattern, or filter by words, time, input, source, and project. Use a known REF to find every matching occurrence. |
 | `show` | Read original messages from multiple conversations as TSV or JSON, with message filters, pagination, and one-line output. |
 
-`import` is incremental. Input selections are ORed, then intersected with `--source`. **`--full` rebuilds only the selected inputs' conversations and import state**, retaining other inputs. Check that the selected inputs' original logs are available. It asks for confirmation; `--yes` skips the prompt and is required in noninteractive environments.
+`import` is incremental. Input selections are ORed, then intersected with `--source`. Incremental import retains history from missing Codex rollouts and old Claude conversations whose log session ID changed. **`--full` rebuilds only the selected inputs' conversations and import state** from current logs, retaining other inputs but potentially removing that old history. Check that the selected inputs' original logs are available. It asks for confirmation; `--yes` skips the prompt and is required in noninteractive environments.
 
 Import and migration share a nonblocking lock for the configured database, regardless of source or `--full`. A concurrent operation exits 1 with “another import or migration is running for this database” before opening the DB or reading logs. Other databases remain independent. The `<db>.lock` sidecar remains in place; do not delete it. The lock is released when the operation finishes or its process exits.
 

@@ -37,7 +37,7 @@ somniloq show --config default REF --messages 12:18 # 発言番号で読む
 | `search` | pattern なしで一覧し、語・期間・入力・source・project から作業のまとまりを選ぶ。既知 REF は全一致詳細で探す。 |
 | `show` | 複数会話の原文を TSV / JSON で取得し、発言フィルタ・ページ・一行表示を選ぶ。 |
 
-`import` は差分取り込み。複数 input 条件は OR、source 条件とは交差する。**`--full` は選択入力の会話・差分状態だけを再構築し、他入力を保持する。** 対象入力の元ログが残っていることを確認して使う。確認プロンプトは `--yes` で省略でき、非対話環境では `--yes` が必須。
+`import` は差分取り込み。複数 input 条件は OR、source 条件とは交差する。差分取り込みは欠落した Codex rollout の履歴と、ログの session ID が変わった Claude の旧会話を保持する。**`--full` は選択入力の会話・差分状態だけを現在のログから再構築し、他入力を保持する。** その旧履歴は除去され得るため、対象入力の元ログが残っていることを確認して使う。確認プロンプトは `--yes` で省略でき、非対話環境では `--yes` が必須。
 
 import と migrate は通常・`--full` や source を問わず同じ DB の操作全体を排他する。後発は DB open・ログ読取より前に待機せず、stderr に `another import or migration is running for this database`（別の取込・移行が実行中）を表示して終了1となる。別 DB は独立して実行できる。`<db>.lock` sidecar は残るため削除しない。操作の終了・失敗・プロセス終了で排他は解放される。
 

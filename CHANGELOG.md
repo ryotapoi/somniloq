@@ -2,6 +2,24 @@
 
 English · [日本語](CHANGELOG.ja.md)
 
+## v0.14.4 — 2026-10-12
+
+### Changed
+
+- Import and migration now share a nonblocking database lock before opening the database or reading logs, preventing stale full imports and migration snapshots from overwriting newer history. A concurrent operation on the same database exits 1; different databases remain independent. Keep the `<db>.lock` sidecar; the lock is released when the operation or process ends.
+- Reduced Claude import memory use by releasing raw file bytes after diagnostic collection, and bounded retained parse-failure diagnostics in Claude and Codex imports while preserving failure counts and reported examples. Reduced repeated Claude conversation comparisons and Codex owner replacement scans.
+- `show` now fetches only needed bodies for message ranges and pagination without date filters, uses the existing snapshot index for legacy conversations, and avoids unrelated body aggregates when resolving relationships. Detailed search reuses relationship resolution and line boundaries; pattern-free non-active period searches skip unused body reads, and TSV output reuses fixed escape tables. Message numbering, match positions, filtering, and pagination remain unchanged; measurements and limits are recorded in `cache/`.
+- Simplified import and CLI internals, removed unused Claude and Codex import paths, and consolidated redundant tests. License notice generation and checking now explicitly use UTF-8, and Windows dependency notices are included.
+
+### Fixed
+
+- Failed Cursor full imports now preserve the selected input's previous conversations, bodies, and cursors. Codex full imports also reject logs whose previously recognized conversation identity disappears during reading, preserving the input's prior history.
+- Incremental Codex imports now retain history from missing rollouts when remaining logs change, and include bodyless rollout metadata in change detection. Incremental Claude imports preserve the old conversation when a log's session ID changes. Successful `--full` imports still rebuild selected inputs from current logs and can remove that old history.
+- SQLite database paths now escape URI-special characters so imports, queries, and migration use the specified file and preserve new-file permissions. `config init` rejects database destinations that overlap the config file or its parent directories.
+- `search` and `show` reject RFC3339 offsets outside hours 00–23 or minutes 00–59 before opening the database. Project searches match full-path aliases against the complete saved repository path; configuration rejects aliases whose full path and basename belong to different groups.
+- Repository resolution preserves embedded and trailing newlines in Git paths and recognizes Claude worktrees rooted at `/.claude/worktrees/` as `/`. Previously stored repository values are retained by unchanged incremental imports; a full import can resolve them again.
+- `projects`, `search`, and `show` TSV reversibly escape terminal control characters, including ESC as `\x1b`, while preserving stored values and JSON output. `projects` also uses reversible tab, newline, and backslash escaping instead of replacing tabs and newlines with spaces; TSV consumers should follow the updated [output contract](docs/cli-contract.md).
+
 ## v0.14.3 — 2026-10-10
 
 ### Changed
