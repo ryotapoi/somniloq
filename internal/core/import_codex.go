@@ -365,7 +365,7 @@ func addCodexMembershipDiagnostics(result *ImportResult, messages []ingest.Norma
 func retainMissingCodexRecords(t importTx, root string, scanned map[string]*ImportState, g *codex.Group) (bool, error) {
 	rows, err := t.tx.Query(`SELECT uuid, identity, parent_uuid, role, content, blocks_json, timestamp,
  is_sidechain, origin_path, origin_line, membership, payload_id
- FROM messages WHERE input_id=? AND source=? AND session_id=?`, t.inputID, string(ingest.SourceCodex), g.Session.SessionID)
+ FROM messages WHERE input_id=? AND source=? AND identity=?`, t.inputID, string(ingest.SourceCodex), rootIdentity(g.Session.SessionID))
 	if err != nil {
 		return false, err
 	}
@@ -395,7 +395,7 @@ func retainMissingCodexRecords(t importTx, root string, scanned map[string]*Impo
 	}
 	var saved ingest.SessionMeta
 	if err := t.tx.QueryRow(`SELECT parent_session_id, parent_identity, cwd, COALESCE(repo_path,''), git_branch, version
-  FROM sessions WHERE input_id=? AND source=? AND session_id=?`, t.inputID, string(ingest.SourceCodex), g.Session.SessionID).
+  FROM sessions WHERE input_id=? AND source=? AND identity=?`, t.inputID, string(ingest.SourceCodex), rootIdentity(g.Session.SessionID)).
 		Scan(&saved.ParentSessionID, &saved.ParentIdentity, &saved.CWD, &saved.RepoPath, &saved.GitBranch, &saved.Version); err != nil {
 		return false, err
 	}

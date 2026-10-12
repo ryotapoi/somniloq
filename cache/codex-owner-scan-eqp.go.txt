@@ -1,0 +1,34 @@
+package main
+
+import (
+	"database/sql"
+	"fmt"
+	_ "modernc.org/sqlite"
+	"os"
+)
+
+func main() {
+	d, e := sql.Open("sqlite", os.Args[1])
+	if e != nil {
+		panic(e)
+	}
+	defer d.Close()
+	var v string
+	d.QueryRow("SELECT sqlite_version()").Scan(&v)
+	fmt.Println("sqlite", v)
+	for _, column := range []string{"session_id", "identity"} {
+		for _, query := range []string{"DELETE FROM messages", "SELECT uuid,identity,parent_uuid,role,content,blocks_json,timestamp,is_sidechain,origin_path,origin_line,membership,payload_id FROM messages", "DELETE FROM sessions", "SELECT parent_session_id,parent_identity,cwd,COALESCE(repo_path,''),git_branch,version FROM sessions"} {
+			rows, e := d.Query("EXPLAIN QUERY PLAN "+query+" WHERE input_id=? AND source=? AND "+column+"=?", 1, "codex", "owner-1")
+			if e != nil {
+				panic(e)
+			}
+			for rows.Next() {
+				var a, b, c int
+				var detail string
+				rows.Scan(&a, &b, &c, &detail)
+				fmt.Println(column, query, detail)
+			}
+			rows.Close()
+		}
+	}
+}

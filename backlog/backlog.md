@@ -159,11 +159,11 @@
 
   role・発言番号を SQL に反映し、日時条件のない page / tail は総件数を数えて必要な本文だけ取得する方式を採用した。[2,000 件の対比較](../cache/2026-10-12-show-small-output.md)で `--messages 1996:2000` は wall 中央 62.0→20.2 ms、`--limit 5` は 63.5→24.5 ms、ピーク RSS は約 51→18 MiB。`--tail 5` は RSS 50.4→22.7 MiBだが wall は 63.6→62.1 ms と明確な短縮なし。全件 wall は 105.1→104.9 ms で同程度。出力一致と総件数・複数 REF・legacy・日時条件を検証した。schema は変えない。
 
+- [x] Codex owner 置換の入力全本文走査を減らす
+
+  owner の置換 DELETE と欠落 rollout 保持 SELECT を既存の identity・索引に揃えた。[対比較](../cache/2026-10-12-codex-owner-scan.md)で 256 owner × 256 本文の初回 import は 6.76→4.27 秒、migrate は 6.81→4.30 秒、欠落本文保持＋追記は 15.18→4.90 秒に短縮した。小規模は明確な差なし。特殊文字 ID、欠落本文・metadata、文脈・未解決 record、移行・失敗時保持と共通 gate を確認した。schema は変えず、full は owner 置換を通らない。測定のばらつき・空の旧 snapshot・未計測環境を記録した。
+
 #### 対応方針・採否が未確定のもの
-
-- [ ] Codex owner 置換の入力全本文走査を減らす
-
-  初回を含む多数 owner の import・移行で、同じ会話 ID の保存を更新する際、対象会話の本文を見つけるために同じ入力の全 message を探索し write transaction の負担が増える。会話の更新自体を取りやめず、既存の識別情報・索引と問い合わせ条件を整合させて反復走査を減らす。通常 import の欠落ログ由来の履歴保持と移行の保存保証を維持し、owner 数・本文数を変えた前後の query plan と取込・移行時間を確認する。
 
 - [ ] 旧 DB から残した会話本文の全体走査を減らす
 

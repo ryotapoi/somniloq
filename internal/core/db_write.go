@@ -24,10 +24,11 @@ func (t importTx) InsertMessage(msg ingest.NormalizedMessage) error {
 // ReplaceSession clears one conversation before a canonical group rewrite.
 // The enclosing transaction also owns replacement rows and import cursors.
 func (t importTx) ReplaceSession(source ingest.Source, sessionID string) error {
-	if _, err := t.tx.Exec(`DELETE FROM messages WHERE input_id=? AND source=? AND session_id=?`, t.inputID, string(source), sessionID); err != nil {
+	identity := rootIdentity(sessionID)
+	if _, err := t.tx.Exec(`DELETE FROM messages WHERE input_id=? AND source=? AND identity=?`, t.inputID, string(source), identity); err != nil {
 		return err
 	}
-	_, err := t.tx.Exec(`DELETE FROM sessions WHERE input_id=? AND source=? AND session_id=?`, t.inputID, string(source), sessionID)
+	_, err := t.tx.Exec(`DELETE FROM sessions WHERE input_id=? AND source=? AND identity=?`, t.inputID, string(source), identity)
 	return err
 }
 

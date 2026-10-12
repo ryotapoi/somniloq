@@ -1,6 +1,7 @@
 package core
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -708,5 +709,37 @@ func TestCodexMissingRolloutKeepsParentAndBodyActivity(t *testing.T) {
 	must(t, err)
 	if session.ParentSessionID != "root" || session.CWD != "/fixture" || session.StartedAt != "2026-10-01T01:00:00Z" || session.EndedAt != "2026-10-01T03:00:00Z" {
 		t.Fatalf("retained metadata=%+v", session)
+	}
+}
+
+func TestCodexEscapedOwnerReplacementRetainsMissingRollout(t *testing.T) {
+	db := testDB(t)
+	root := testTempDir(t)
+	const owner = "owner<&\"\\"
+	meta, err := json.Marshal(map[string]any{"type": "session_meta", "payload": map[string]any{"id": owner, "cwd": "/saved"}})
+	must(t, err)
+	write := func(name, content string) {
+		t.Helper()
+		message, err := json.Marshal(map[string]any{"type": "response_item", "payload": map[string]any{"type": "message", "role": "user", "content": []any{map[string]any{"type": "input_text", "text": content}}}})
+		must(t, err)
+		must(t, os.WriteFile(filepath.Join(root, name), []byte(string(meta)+"\n"+string(message)+"\n"), 0600))
+	}
+	write("a.jsonl", "old")
+	write("b.jsonl", "retained")
+	runCodexImport(t, db, root, false)
+	must(t, os.Remove(filepath.Join(root, "b.jsonl")))
+	write("a.jsonl", "updated")
+	runCodexImport(t, db, root, false)
+	id, err := db.EnsureInput(Input{Source: SourceCodex, Root: root})
+	must(t, err)
+	rows, err := db.GetMessages(id, SourceCodex, owner)
+	must(t, err)
+	if len(rows) != 2 || rows[0].Content != "updated" || rows[1].Content != "retained" {
+		t.Fatalf("replacement lost or retained wrong records: %+v", rows)
+	}
+	session, err := db.GetSession(id, SourceCodex, owner)
+	must(t, err)
+	if session == nil || session.CWD != "/saved" {
+		t.Fatalf("saved owner metadata: %+v", session)
 	}
 }
