@@ -58,17 +58,31 @@ func TestPatternFixture(t *testing.T) {
 		})
 	}
 }
-func TestMatchLines(t *testing.T) {
+func TestFindAllLineText(t *testing.T) {
 	for _, c := range []struct {
-		text       string
-		start, end int
-		want       string
+		name, text string
+		patterns   []string
+		want       []MatchSpan
 	}{
-		{"one\ntwo\nthree", 1, 6, "one\ntwo"}, {"one\ntwo", 3, 4, "one"}, {"one\ntwo", 4, 4, "two"}, {"one\n", 4, 4, ""}, {"one\ntwo", 7, 7, "two"}, {"one\ntwo", 3, 3, "one"},
+		{"multiline", "one\ntwo\nthree", []string{"ne\\ntw"}, []MatchSpan{{1, 6, []int{1}, "ne\ntw", "one\ntwo"}}},
+		{"multiline ending at newline", "one\ntwo", []string{"ne\\n"}, []MatchSpan{{1, 4, []int{1}, "ne\n", "one"}}},
+		{"newline", "one\ntwo", []string{"\\n"}, []MatchSpan{{3, 4, []int{1}, "\n", "one"}}},
+		{"zero width at newline", "one\ntwo", []string{"(?m)$"}, []MatchSpan{{3, 3, []int{1}, "", "one"}, {7, 7, []int{1}, "", "two"}}},
+		{"zero width after newline", "one\ntwo", []string{"(?m)^"}, []MatchSpan{{0, 0, []int{1}, "", "one"}, {4, 4, []int{1}, "", "two"}}},
+		{"zero width at text end", "one\ntwo", []string{"$"}, []MatchSpan{{7, 7, []int{1}, "", "two"}}},
+		{"empty final line", "one\n", []string{"$"}, []MatchSpan{{4, 4, []int{1}, "", ""}}},
+		{"overlapping spans", "one\ntwo", []string{"one\\ntwo", "two"}, []MatchSpan{{0, 7, []int{1}, "one\ntwo", "one\ntwo"}, {4, 7, []int{2}, "two", "two"}}},
+		{"utf8 byte offsets", "猫a\n犬b", []string{"a", "犬"}, []MatchSpan{{3, 4, []int{1}, "a", "猫a"}, {5, 8, []int{2}, "犬", "犬b"}}},
 	} {
-		if got := matchLines(c.text, c.start, c.end); got != c.want {
-			t.Errorf("%q [%d,%d): %q want %q", c.text, c.start, c.end, got, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			matcher, err := CompilePatterns(c.patterns, false)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := matcher.FindAll(c.text); !reflect.DeepEqual(got, c.want) {
+				t.Errorf("%+v want %+v", got, c.want)
+			}
+		})
 	}
 }
 func TestPatternModes(t *testing.T) {

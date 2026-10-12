@@ -47,7 +47,7 @@ func (m *PatternMatcher) FindAll(text string) []MatchSpan {
 	}
 	spans := make([]MatchSpan, 0, len(bySpan))
 	for k, indexes := range bySpan {
-		spans = append(spans, MatchSpan{k[0], k[1], indexes, text[k[0]:k[1]], matchLines(text, k[0], k[1])})
+		spans = append(spans, MatchSpan{k[0], k[1], indexes, text[k[0]:k[1]], ""})
 	}
 	sort.Slice(spans, func(i, j int) bool {
 		if spans[i].StartByte != spans[j].StartByte {
@@ -55,22 +55,40 @@ func (m *PatternMatcher) FindAll(text string) []MatchSpan {
 		}
 		return spans[i].EndByte < spans[j].EndByte
 	})
+	if len(spans) == 0 {
+		return spans
+	}
+	var newlines []int
+	for start := 0; start < len(text); {
+		next := strings.IndexByte(text[start:], '\n')
+		if next < 0 {
+			break
+		}
+		start += next + 1
+		newlines = append(newlines, start-1)
+	}
+	for i := range spans {
+		spans[i].LineText = matchLines(text, newlines, spans[i].StartByte, spans[i].EndByte)
+	}
 	return spans
 }
 
 // LF belongs to the preceding line; an exclusive end after LF does not include
 // the following line. A zero-width match after LF belongs to the following line.
-func matchLines(text string, start, end int) string {
-	first := strings.LastIndex(text[:start], "\n") + 1
+func matchLines(text string, newlines []int, start, end int) string {
+	first := 0
+	if before := sort.SearchInts(newlines, start) - 1; before >= 0 {
+		first = newlines[before] + 1
+	}
 	last := start
 	if end > start {
 		last = end - 1
 	}
-	stop := strings.IndexByte(text[last:], '\n')
-	if stop < 0 {
-		return text[first:]
+	stop := len(text)
+	if after := sort.SearchInts(newlines, last); after < len(newlines) {
+		stop = newlines[after]
 	}
-	return text[first : last+stop]
+	return text[first:stop]
 }
 
 type SearchOccurrence struct {
