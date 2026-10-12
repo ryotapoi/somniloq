@@ -222,3 +222,78 @@ func TestSessionResolverNamespacesAndNextSnapshot(t *testing.T) {
 		return nil
 	}))
 }
+
+func TestSessionMetadataResolverPreservesRelationsAndFullAggregates(t *testing.T) {
+	db := testDB(t)
+	root := testTempDir(t)
+	for _, name := range []string{"root.jsonl", "child.jsonl", "grandchild.jsonl"} {
+		copyCodexFixture(t, root, name)
+	}
+	runCodexImport(t, db, root, false)
+	claude, err := filepath.Abs("../ingest/testdata/v0.14.0/claude-code/input-a")
+	must(t, err)
+	importClaudeTest(t, db, claude)
+	cursorInput := testInput(t, db, SourceCursorAgent)
+	must(t, db.UpsertSession(cursorInput, SessionMeta{Source: SourceCursorAgent, SessionID: "cursor"}, "now"))
+	must(t, db.InsertMessage(cursorInput, NormalizedMessage{Source: SourceCursorAgent, SessionID: "cursor", UUID: "cursor-body", Role: "user", Content: "cursor body"}))
+	cursor, err := db.GetSession(cursorInput, SourceCursorAgent, "cursor")
+	must(t, err)
+	digest := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+	_, err = db.db.Exec(`INSERT INTO legacy_sessions(snapshot_sha256,source,session_id,imported_at) VALUES (?,'codex','saved','now')`, digest)
+	must(t, err)
+	_, err = db.db.Exec(`INSERT INTO legacy_messages(legacy_rowid,snapshot_sha256,uuid,source,session_id,role,content,number) VALUES (1,?,'saved','codex','saved','user','日本語',1)`, digest)
+	must(t, err)
+	selected := []string{relationREF(root, SourceCodex, "child"), claudeREF(claude, "cc-root", "child"), claudeREF(claude, "cc-root", "unresolved"), LegacyREF(digest, SourceCodex, "saved"), cursor.REF}
+	compare := func() {
+		t.Helper()
+		must(t, db.ReadSnapshot(func(snapshot *DB) error {
+			metadata := snapshot.NewSessionMetadataResolver()
+			full := snapshot.NewSessionResolver()
+			for _, ref := range selected {
+				for _, descendants := range []bool{false, true} {
+					want, err := full.Resolve(ref, descendants)
+					must(t, err)
+					got, err := metadata.Resolve(ref, descendants)
+					must(t, err)
+					// Check the full API against actual body bytes, before removing its
+					// aggregates to compare every metadata field and relationship.
+					clear := func(row *SessionRow) {
+						messages, err := snapshot.GetSessionMessagesFiltered(*row, MessageFilter{}, nil, 0)
+						must(t, err)
+						size := 0
+						for _, message := range messages {
+							size += len(message.Content)
+						}
+						if row.MessageCount != len(messages) || row.BodySize != size {
+							t.Fatalf("full aggregates %s: count=%d size=%d, want %d/%d", row.REF, row.MessageCount, row.BodySize, len(messages), size)
+						}
+						row.MessageCount, row.BodySize = 0, 0
+					}
+					want.Members = append([]SessionRow(nil), want.Members...)
+					clear(&want.Self)
+					if want.Parent != nil {
+						clear(want.Parent)
+					}
+					if want.Root != nil {
+						clear(want.Root)
+					}
+					for i := range want.Members {
+						clear(&want.Members[i])
+					}
+					for i := range want.Descendants {
+						clear(&want.Descendants[i])
+					}
+					if !reflect.DeepEqual(got, want) {
+						t.Fatalf("metadata %s descendants=%v: %+v, want %+v", ref, descendants, got, want)
+					}
+				}
+			}
+			return nil
+		}))
+	}
+	compare()
+	// Diagnostics include cyclic relationships in the namespace.
+	_, err = db.db.Exec(`UPDATE sessions SET parent_identity='["grandchild"]' WHERE source='codex' AND identity='["root"]'`)
+	must(t, err)
+	compare()
+}

@@ -41,20 +41,26 @@ type SessionFilter struct {
 	Projects []string
 }
 
-// Keep these selected columns in the same order as scanSessionRow. The
-// body-size sum counts bytes (OCTET_LENGTH; LENGTH on TEXT would count
-// characters) and counts only body rows, matching show and search.
-const sessionRowSelect = `
-	SELECT s.input_id, i.input_key, s.source, s.session_id, s.identity, s.root_identity, s.parent_session_id, s.parent_identity,
-	       COALESCE(p.source, ''), COALESCE(p.identity, ''), COALESCE(r.source, ''), COALESCE(r.identity, ''), COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''),
-	       COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, ''),
-	       COUNT(m.uuid) FILTER (WHERE m.membership = 'body'),
-	       COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.membership = 'body' AND (m.source IN ('codex','claude_code') OR m.is_sidechain = 0)), 0)
-	FROM sessions s
+// Keep these selected columns in the same order as scanSessionRow.
+const sessionMetadataColumns = `
+ SELECT s.input_id, i.input_key, s.source, s.session_id, s.identity, s.root_identity, s.parent_session_id, s.parent_identity,
+ COALESCE(p.source, ''), COALESCE(p.identity, ''), COALESCE(r.source, ''), COALESCE(r.identity, ''), COALESCE(s.cwd, ''), COALESCE(s.repo_path, ''),
+ COALESCE(s.started_at, ''), COALESCE(s.ended_at, ''), COALESCE(s.custom_title, '')`
+
+const sessionMetadataFrom = `
+ FROM sessions s
  JOIN inputs i ON s.input_id=i.id
-	LEFT JOIN sessions p ON p.input_id=s.input_id AND p.source=s.source AND p.identity=s.parent_identity
-	LEFT JOIN sessions r ON r.input_id=s.input_id AND r.source=s.source AND r.identity=s.root_identity
- LEFT JOIN messages m ON s.input_id=m.input_id AND s.source = m.source AND s.identity = m.identity`
+ LEFT JOIN sessions p ON p.input_id=s.input_id AND p.source=s.source AND p.identity=s.parent_identity
+ LEFT JOIN sessions r ON r.input_id=s.input_id AND r.source=s.source AND r.identity=s.root_identity`
+
+// Metadata reads omit body aggregates; zero placeholders preserve the scanner.
+const sessionMetadataSelect = sessionMetadataColumns + `, 0, 0` + sessionMetadataFrom
+
+// OCTET_LENGTH counts UTF-8 bytes, and only body rows count toward size.
+const sessionRowSelect = sessionMetadataColumns + `,
+ COUNT(m.uuid) FILTER (WHERE m.membership = 'body'),
+ COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.membership = 'body' AND (m.source IN ('codex','claude_code') OR m.is_sidechain = 0)), 0)` + sessionMetadataFrom + `
+ LEFT JOIN messages m ON s.input_id=m.input_id AND s.source=m.source AND s.identity=m.identity`
 
 // rowScanner abstracts *sql.Row and *sql.Rows so scanSessionRow serves both
 // single-row and multi-row queries.
@@ -309,12 +315,20 @@ func (d *DB) LookupSessionsByID(sessionID string) ([]SessionRow, error) {
 }
 
 func (d *DB) LookupSessionREF(ref string) (*SessionRow, error) {
+	return d.lookupSessionREF(ref, false)
+}
+
+func (d *DB) lookupSessionREF(ref string, metadataOnly bool) (*SessionRow, error) {
+	sessionSelect, legacySelect := sessionRowSelect, legacySessionRowSelect
+	if metadataOnly {
+		sessionSelect, legacySelect = sessionMetadataSelect, legacySessionMetadataSelect
+	}
 	key, source, id, err := parseREF(ref)
 	if err != nil {
 		return nil, err
 	}
 	if strings.HasPrefix(key, "legacy:") {
-		row := d.execer().QueryRow(legacySessionRowSelect+` WHERE s.snapshot_sha256=? AND s.source=? AND s.session_id=? GROUP BY s.snapshot_sha256,s.source,s.session_id`, strings.TrimPrefix(key, "legacy:"), source, id)
+		row := d.execer().QueryRow(legacySelect+` WHERE s.snapshot_sha256=? AND s.source=? AND s.session_id=? GROUP BY s.snapshot_sha256,s.source,s.session_id`, strings.TrimPrefix(key, "legacy:"), source, id)
 		r, e := scanSessionRow(row)
 		if errors.Is(e, sql.ErrNoRows) {
 			return nil, nil
@@ -324,7 +338,7 @@ func (d *DB) LookupSessionREF(ref string) (*SessionRow, error) {
 		}
 		return &r, nil
 	}
-	row := d.execer().QueryRow(sessionRowSelect+` WHERE i.input_key=? AND s.source=? AND s.identity=? GROUP BY s.input_id,s.source,s.identity`, key, source, id)
+	row := d.execer().QueryRow(sessionSelect+` WHERE i.input_key=? AND s.source=? AND s.identity=? GROUP BY s.input_id,s.source,s.identity`, key, source, id)
 	r, err := scanSessionRow(row)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil

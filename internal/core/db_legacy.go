@@ -21,9 +21,13 @@ func savedREF(key string, source Source, identity string) string {
 
 // Legacy rows remain outside normal input tables so full imports cannot erase
 // history with unknown input membership.
-const legacySessionRowSelect = `SELECT -1, 'legacy:' || s.snapshot_sha256, s.source, s.session_id, s.session_id,
+const legacySessionMetadataColumns = `SELECT -1, 'legacy:' || s.snapshot_sha256, s.source, s.session_id, s.session_id,
  '', '', '', '', '', '', '', COALESCE(s.cwd,''), COALESCE(s.repo_path,''),
- COALESCE(s.started_at,''), COALESCE(s.ended_at,''), COALESCE(s.custom_title,''),
+ COALESCE(s.started_at,''), COALESCE(s.ended_at,''), COALESCE(s.custom_title,'')`
+
+const legacySessionMetadataSelect = legacySessionMetadataColumns + `, 0, 0 FROM legacy_sessions s`
+
+const legacySessionRowSelect = legacySessionMetadataColumns + `,
  COUNT(m.uuid), COALESCE(SUM(OCTET_LENGTH(m.content)) FILTER (WHERE m.source IN ('codex','claude_code') OR COALESCE(m.is_sidechain,0)=0),0)
  FROM legacy_sessions s LEFT JOIN legacy_messages m
  ON m.snapshot_sha256=s.snapshot_sha256 AND m.source=s.source AND m.session_id=s.session_id`

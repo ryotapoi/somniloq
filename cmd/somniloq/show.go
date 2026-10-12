@@ -119,7 +119,7 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	usePagedRead := since == nil && until == nil && (tailSet || limit != nil || offset > 0)
 	selectionCode := 1
 	err = db.ReadSnapshot(func(snapshot *core.DB) error {
-		resolver := snapshot.NewSessionResolver()
+		resolver := snapshot.NewSessionMetadataResolver()
 		sessions := []core.SessionRow{}
 		seen := map[string]bool{}
 		for _, ref := range fs.Args() {

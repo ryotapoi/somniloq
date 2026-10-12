@@ -33,17 +33,27 @@ type sessionNamespace struct {
 // SessionResolver shares namespace relations for one read operation.
 // Create it inside ReadSnapshot and discard it when the callback returns.
 type SessionResolver struct {
-	db         *DB
-	namespaces map[sessionNamespace]*sessionRelations
+	metadataOnly bool
+	db           *DB
+	namespaces   map[sessionNamespace]*sessionRelations
 }
 
 func (d *DB) NewSessionResolver() *SessionResolver {
 	return &SessionResolver{db: d, namespaces: map[sessionNamespace]*sessionRelations{}}
 }
 
+// NewSessionMetadataResolver resolves the same relations and diagnostics without
+// reading body aggregates. MessageCount and BodySize are zero in every returned row.
+// Like NewSessionResolver, use it only within one ReadSnapshot callback.
+func (d *DB) NewSessionMetadataResolver() *SessionResolver {
+	r := d.NewSessionResolver()
+	r.metadataOnly = true
+	return r
+}
+
 // Resolve preserves full REF validation and optionally expands descendants.
 func (r *SessionResolver) Resolve(ref string, descendants bool) (*SessionResolution, error) {
-	self, err := r.db.LookupSessionREF(ref)
+	self, err := r.db.lookupSessionREF(ref, r.metadataOnly)
 	if err != nil || self == nil {
 		return nil, err
 	}
@@ -58,7 +68,11 @@ func (r *SessionResolver) Resolve(ref string, descendants bool) (*SessionResolut
 	namespace := sessionNamespace{inputID: self.InputID, source: self.Source}
 	g := r.namespaces[namespace]
 	if g == nil {
-		rows, err := r.db.execer().Query(sessionRowSelect+` WHERE s.input_id=? AND s.source=? GROUP BY s.input_id,s.source,s.identity`, self.InputID, self.Source)
+		sessionSelect := sessionRowSelect
+		if r.metadataOnly {
+			sessionSelect = sessionMetadataSelect
+		}
+		rows, err := r.db.execer().Query(sessionSelect+` WHERE s.input_id=? AND s.source=? GROUP BY s.input_id,s.source,s.identity`, self.InputID, self.Source)
 		if err != nil {
 			return nil, fmt.Errorf("resolve sessions: %w", err)
 		}
