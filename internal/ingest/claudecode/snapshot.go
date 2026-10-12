@@ -21,7 +21,7 @@ type FileSnapshot struct {
 	Records     []ingest.NormalizedRecord
 	Titles      map[string]string
 	AgentNames  map[string]string
-	Failures    []ingest.ParseFailure
+	Failures    ingest.SnapshotFailures
 	Diagnostics ingest.ProcessResult
 	Parents     map[string]string
 }
@@ -42,6 +42,10 @@ func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string, 
 		}
 		sum := sha256.Sum256(data)
 		f := FileSnapshot{State: ingest.ImportState{JSONLPath: path, Source: ingest.SourceClaudeCode, FileSize: int64(len(data)), LastOffset: int64(len(data)), ContentHash: hex.EncodeToString(sum[:]), ImportedAt: importedAt}, Titles: map[string]string{}, AgentNames: map[string]string{}, Parents: map[string]string{}}
+		old := expected[path]
+		if old == nil || old.ContentHash != f.State.ContentHash {
+			f.Failures = ingest.NewSnapshotFailures(data, old)
+		}
 		rootID := strings.TrimSuffix(filepath.Base(path), ".jsonl")
 		agent := ""
 		if filepath.Base(filepath.Dir(path)) == "subagents" {
@@ -57,7 +61,7 @@ func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string, 
 			at := offset
 			offset += int64(len(line))
 			fail := func(err error) {
-				f.Failures = append(f.Failures, ingest.ParseFailure{Offset: at, Diagnostic: fmt.Errorf("%s:%d: %w", path, lineNumber, err)})
+				f.Failures.Add(at, func() error { return fmt.Errorf("%s:%d: %w", path, lineNumber, err) })
 				if line[len(line)-1] != '\n' {
 					f.State.LastOffset = at
 				}
@@ -136,9 +140,8 @@ func (a Adapter) BuildSnapshots(root string, paths []string, importedAt string, 
 		}
 		// Resolve cursor diagnostics now so raw bytes do not survive alongside
 		// every file's normalized records until the storage transaction ends.
-		old := expected[path]
 		if old == nil || old.ContentHash != f.State.ContentHash {
-			f.Diagnostics = ingest.SnapshotDiagnostics(data, f.Failures, old)
+			f.Diagnostics = f.Failures.Diagnostics
 		}
 		for call, agents := range results {
 			parents, ok := calls[call]

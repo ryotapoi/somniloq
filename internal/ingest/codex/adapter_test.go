@@ -19,12 +19,12 @@ func TestAdapter_BuildGroupsMalformedSessionMetaContinues(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	groups, errs := NewAdapter(func(string) string { return "/repo" }).BuildGroups(filepath.Dir(path), []string{path}, "2026-07-12T00:00:00Z")
+	groups, errs := NewAdapter(func(string) string { return "/repo" }).BuildGroups(filepath.Dir(path), []string{path}, "2026-07-12T00:00:00Z", nil)
 	if len(errs) != 0 || len(groups) != 1 || groups[0].Err != nil {
 		t.Fatalf("groups=%+v errors=%v", groups, errs)
 	}
 	g := groups[0]
-	if len(g.Reports) != 1 || len(g.Reports[0].Failures) != 1 {
+	if len(g.Reports) != 1 || g.Reports[0].Failures.Count != 1 {
 		t.Fatalf("reports=%+v, want one malformed metadata failure", g.Reports)
 	}
 	if g.Session.SessionID != "s1" || len(g.Messages) != 1 || g.Messages[0].Content != "hello" {
@@ -41,21 +41,21 @@ func TestAdapter_RejectsEmptySessionIDsAcrossRollouts(t *testing.T) {
 		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
 			t.Fatal(err)
 		}
-		groups, errs := adapter.BuildGroups(filepath.Dir(path), []string{path}, "2026-07-12T00:00:00Z")
+		groups, errs := adapter.BuildGroups(filepath.Dir(path), []string{path}, "2026-07-12T00:00:00Z", nil)
 		if len(errs) != 0 || len(groups) != 1 || groups[0].Err != nil {
 			t.Fatalf("groups=%+v errors=%v", groups, errs)
 		}
 		g := groups[0]
 		if payload == `{"id":"valid"}` {
-			if g.Session.SessionID != "valid" || len(g.Messages) != 1 || g.Messages[0].SessionID != "valid" || len(g.Reports[0].Failures) != 0 {
+			if g.Session.SessionID != "valid" || len(g.Messages) != 1 || g.Messages[0].SessionID != "valid" || g.Reports[0].Failures.Count != 0 {
 				t.Fatalf("valid group=%+v", g)
 			}
 			continue
 		}
-		if len(g.Reports) != 1 || len(g.Reports[0].Failures) != 1 {
+		if len(g.Reports) != 1 || g.Reports[0].Failures.Count != 1 {
 			t.Fatalf("payload %s: reports=%+v", payload, g.Reports)
 		}
-		if got, want := g.Reports[0].Failures[0].Diagnostic.Error(), path+":2: session_meta payload.id is missing or empty"; got != want {
+		if got, want := g.Reports[0].Failures.First.Error(), path+":2: session_meta payload.id is missing or empty"; got != want {
 			t.Errorf("diagnostic = %q, want %q", got, want)
 		}
 		if g.Session.SessionID != "" || len(g.Messages) != 0 {
@@ -74,12 +74,12 @@ func TestAdapter_MissingRecordTimestampRemainsUnknown(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	groups, errs := NewAdapter(func(string) string { return "/repo" }).BuildGroups(filepath.Dir(path), []string{path}, "2026-07-12T01:00:00Z")
+	groups, errs := NewAdapter(func(string) string { return "/repo" }).BuildGroups(filepath.Dir(path), []string{path}, "2026-07-12T01:00:00Z", nil)
 	if len(errs) != 0 || len(groups) != 1 || groups[0].Err != nil {
 		t.Fatalf("groups=%+v errors=%v", groups, errs)
 	}
 	messages := groups[0].Messages
-	if len(groups[0].Reports[0].Failures) != 0 || len(messages) != 2 {
+	if groups[0].Reports[0].Failures.Count != 0 || len(messages) != 2 {
 		t.Fatalf("group=%+v, want two parsed messages", groups[0])
 	}
 	if got, want := messages[0].Timestamp, "2026-07-12T00:00:01Z"; got != want {

@@ -20,7 +20,7 @@ type FileReport struct {
 	Info     os.FileInfo
 	Data     []byte
 	Hash     [sha256.Size]byte
-	Failures []ingest.ParseFailure
+	Failures ingest.SnapshotFailures
 }
 
 // Group is a canonical snapshot of every discovered rollout for one owner.
@@ -60,9 +60,10 @@ func (c *collector) Commit() error                                { return nil }
 func (c *collector) Rollback() error                              { return nil }
 
 // BuildGroups reads full snapshots so edits to earlier rollouts renumber the
-// entire owner rather than append records in import encounter order.
-func (a Adapter) BuildGroups(root string, paths []string, importedAt string) ([]Group, []error) {
-	return a.buildGroups(root, paths, importedAt, false)
+// entire owner rather than append records in import encounter order. Expected
+// cursors bound new diagnostics; nil reports all failures.
+func (a Adapter) BuildGroups(root string, paths []string, importedAt string, expected map[string]*ingest.ImportState) ([]Group, []error) {
+	return a.buildGroups(root, paths, importedAt, false, expected)
 }
 
 // HashFile streams the whole rollout without retaining its body. The caller
@@ -145,7 +146,7 @@ func readImportOwner(path string) (string, error) {
 // BuildMigrationGroups preserves every rollout and rejects incomplete ownership evidence.
 // Ordinary imports intentionally continue to accept partially parsed snapshots.
 func (a Adapter) BuildMigrationGroups(root string, paths []string, importedAt string) ([]Group, []error) {
-	return a.buildGroups(root, paths, importedAt, true)
+	return a.buildGroups(root, paths, importedAt, true, nil)
 }
 
 // BuildMigrationIndex reads only through the first valid owner metadata.
@@ -211,7 +212,7 @@ func readMigrationOwner(path string) (*ingest.SessionMeta, error) {
 	}
 }
 
-func (a Adapter) buildGroups(root string, paths []string, importedAt string, strict bool) ([]Group, []error) {
+func (a Adapter) buildGroups(root string, paths []string, importedAt string, strict bool, expected map[string]*ingest.ImportState) ([]Group, []error) {
 	resolveRepoPath := memoizeRepoResolver(a.resolveRepoPath)
 	paths = append([]string(nil), paths...)
 	boundaries := map[string]*int{}
@@ -251,6 +252,7 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 		}
 		c := &collector{}
 		h := &fileHandler{resolveRepoPath: resolveRepoPath, importedAt: importedAt}
+		h.failures = ingest.NewSnapshotFailures(data, expected[path])
 		h.path = path
 		hasBody := false
 		var unfinishedTail int64
@@ -295,13 +297,13 @@ func (a Adapter) buildGroups(root string, paths []string, importedAt string, str
 			errs = append(errs, fmt.Errorf("%s: %w", path, err))
 			continue
 		}
-		if strict && len(h.failures) > 0 && strictErr == nil {
-			strictErr = h.failures[0].Diagnostic
+		if strict && h.failures.Count > 0 && strictErr == nil {
+			strictErr = h.failures.First
 		}
 		sum := sha256.Sum256(data)
 		report := FileReport{Path: path, Info: info, Hash: sum, Failures: h.failures}
 		report.Data = data
-		if c.meta == nil || (!strict && c.state.JSONLPath == "" && len(h.failures) > 0) {
+		if c.meta == nil || (!strict && c.state.JSONLPath == "" && h.failures.Count > 0) {
 			g := Group{Files: 1, Err: strictErr, Reports: []FileReport{report}}
 			if c.meta != nil {
 				g.Session.SessionID = c.meta.SessionID

@@ -154,7 +154,7 @@ func importClaudeSnapshots(db *DB, inputID int64, root string, adapter claudecod
 		}
 		if len(f.Records) > 0 && (full || oldStates[i] == nil || oldStates[i].ContentHash != f.State.ContentHash) {
 			err = t.UpsertImportState(f.State)
-		} else if len(f.Records) == 0 && len(f.Failures) == 0 {
+		} else if len(f.Records) == 0 && f.Failures.Count == 0 {
 			_, err = tx.Exec(`DELETE FROM import_state WHERE input_id=? AND jsonl_path=?`, inputID, f.State.JSONLPath)
 		}
 	}

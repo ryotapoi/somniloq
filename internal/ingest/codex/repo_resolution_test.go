@@ -35,7 +35,9 @@ func TestGroupRepoResolutionLifetime(t *testing.T) {
 				}
 				return result
 			})
-			build := adapter.BuildGroups
+			build := func(root string, paths []string, at string) ([]Group, []error) {
+				return adapter.BuildGroups(root, paths, at, nil)
+			}
 			if migration {
 				build = adapter.BuildMigrationGroups
 			}

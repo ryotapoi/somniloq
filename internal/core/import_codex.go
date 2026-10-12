@@ -79,7 +79,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 			result.FilesSkipped += len(paths)
 			continue
 		}
-		loaded, readErrs := adapter.BuildGroups(root, paths, importedAt)
+		loaded, readErrs := adapter.BuildGroups(root, paths, importedAt, expected)
 		if len(readErrs) > 0 || !sameCodexImportIndex(index, loaded) {
 			result.Errors = append(result.Errors, readErrs...)
 			if len(readErrs) == 0 {
@@ -97,8 +97,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 			if len(g.States) == 0 && len(g.EmptyPaths) == 0 {
 				result.FilesImported += g.Files
 				for _, report := range g.Reports {
-					old := expected[report.Path]
-					pr := ingest.SnapshotDiagnostics(report.Data, report.Failures, old)
+					pr := report.Failures.Diagnostics
 					result.UnparsedLines += pr.UnparsedLines
 					result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
 				}
@@ -188,7 +187,7 @@ func importCodexGroups(db *DB, inputID int64, root string, adapter codex.Adapter
 			result.FilesImported += g.Files
 			addCodexMembershipDiagnostics(result, g.Messages)
 			for _, report := range g.Reports {
-				pr := ingest.SnapshotDiagnostics(report.Data, report.Failures, expected[report.Path])
+				pr := report.Failures.Diagnostics
 				result.UnparsedLines += pr.UnparsedLines
 				result.addUnparsedDiagnostics(pr.UnparsedDiagnostics)
 			}
@@ -240,7 +239,7 @@ func replaceCodexInput(db *DB, inputID int64, root string, adapter codex.Adapter
 	var membershipDiagnostics []error
 	var writeErr error
 	for _, index := range groups {
-		loaded, readErrs := adapter.BuildGroups(root, codexGroupPaths(index), importedAt)
+		loaded, readErrs := adapter.BuildGroups(root, codexGroupPaths(index), importedAt, nil)
 		if len(readErrs) > 0 || !sameCodexImportIndex(index, loaded) {
 			result.Errors = append(result.Errors, readErrs...)
 			if len(readErrs) == 0 {
@@ -255,7 +254,7 @@ func replaceCodexInput(db *DB, inputID int64, root string, adapter codex.Adapter
 			}
 			if writeErr == nil {
 				for _, report := range g.Reports {
-					pr := ingest.SnapshotDiagnostics(report.Data, report.Failures, nil)
+					pr := report.Failures.Diagnostics
 					unparsedLines += pr.UnparsedLines
 					for _, diagnostic := range pr.UnparsedDiagnostics {
 						if len(unparsedDiagnostics) < ingest.MaxUnparsedDiagnostics {

@@ -6,16 +6,18 @@ import (
 	"encoding/hex"
 )
 
-// ParseFailure records the physical byte offset and diagnostic of a failed line.
-type ParseFailure struct {
-	Offset     int64
-	Diagnostic error
+// SnapshotFailures counts every failed line while retaining only the first error
+// and the first five errors at or after the saved cursor.
+type SnapshotFailures struct {
+	Count       int
+	First       error
+	Diagnostics ProcessResult
+	start       int64
 }
 
-// SnapshotDiagnostics reports failures newly encountered after a saved cursor.
-// An edited prefix reports all failures, while an unterminated previous final
-// line is retried because appending bytes can change how it parses.
-func SnapshotDiagnostics(data []byte, failures []ParseFailure, old *ImportState) ProcessResult {
+// NewSnapshotFailures fixes the diagnostic boundary before parsing. An edited
+// prefix reports all failures; an unterminated previous final line is retried.
+func NewSnapshotFailures(data []byte, old *ImportState) SnapshotFailures {
 	start := int64(0)
 	if old != nil && int64(len(data)) >= old.FileSize {
 		sum := sha256.Sum256(data[:old.FileSize])
@@ -26,15 +28,25 @@ func SnapshotDiagnostics(data []byte, failures []ParseFailure, old *ImportState)
 			}
 		}
 	}
-	result := ProcessResult{}
-	for _, failure := range failures {
-		if failure.Offset < start {
-			continue
-		}
-		result.UnparsedLines++
-		if len(result.UnparsedDiagnostics) < MaxUnparsedDiagnostics {
-			result.UnparsedDiagnostics = append(result.UnparsedDiagnostics, failure.Diagnostic)
-		}
+	return SnapshotFailures{start: start}
+}
+
+// Add constructs a physical-line diagnostic only when it will be retained.
+func (f *SnapshotFailures) Add(offset int64, diagnostic func() error) error {
+	f.Count++
+	report := offset >= f.start
+	if report {
+		f.Diagnostics.UnparsedLines++
 	}
-	return result
+	var err error
+	if f.First == nil || (report && len(f.Diagnostics.UnparsedDiagnostics) < MaxUnparsedDiagnostics) {
+		err = diagnostic()
+	}
+	if f.First == nil {
+		f.First = err
+	}
+	if report && len(f.Diagnostics.UnparsedDiagnostics) < MaxUnparsedDiagnostics {
+		f.Diagnostics.UnparsedDiagnostics = append(f.Diagnostics.UnparsedDiagnostics, err)
+	}
+	return err
 }

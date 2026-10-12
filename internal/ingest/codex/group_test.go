@@ -33,7 +33,7 @@ func TestHashBeforeAppendDoesNotBecomeParsedCursor(t *testing.T) {
 	if err := os.WriteFile(path, after, 0600); err != nil {
 		t.Fatal(err)
 	}
-	groups, errs := NewAdapter(func(string) string { return "" }).BuildGroups(root, []string{path}, "now")
+	groups, errs := NewAdapter(func(string) string { return "" }).BuildGroups(root, []string{path}, "now", nil)
 	if len(errs) != 0 || len(groups) != 1 || len(groups[0].States) != 1 || len(groups[0].Messages) != 2 {
 		t.Fatalf("groups=%+v errors=%v", groups, errs)
 	}
@@ -88,7 +88,9 @@ func TestCodexPayloadDedupKeepsFirstMessageAndNumbers(t *testing.T) {
 		name string
 		fn   func(string, []string, string) ([]Group, []error)
 	}{
-		{"import", adapter.BuildGroups},
+		{"import", func(root string, paths []string, at string) ([]Group, []error) {
+			return adapter.BuildGroups(root, paths, at, nil)
+		}},
 		{"migration", adapter.BuildMigrationGroups},
 	} {
 		t.Run(build.name, func(t *testing.T) {
@@ -169,7 +171,7 @@ func TestCodexFixtureOracle(t *testing.T) {
 		}
 		t.Run(c.Path, func(t *testing.T) {
 			path := filepath.Join(root, c.Path)
-			groups, errs := NewAdapter(func(cwd string) string { return cwd }).BuildGroups(filepath.Dir(path), []string{path}, "2026-10-02T00:00:00Z")
+			groups, errs := NewAdapter(func(cwd string) string { return cwd }).BuildGroups(filepath.Dir(path), []string{path}, "2026-10-02T00:00:00Z", nil)
 			if len(errs) != 0 || len(groups) != 1 || groups[0].Err != nil {
 				t.Fatalf("groups=%+v errors=%v", groups, errs)
 			}
@@ -225,7 +227,7 @@ func TestCodexPreservesOwnerMetadataBlocksAndInvalidRawTimestamp(t *testing.T) {
 	if err := os.WriteFile(path, []byte(data), 0600); err != nil {
 		t.Fatal(err)
 	}
-	groups, errs := NewAdapter(func(cwd string) string { return cwd }).BuildGroups(filepath.Dir(path), []string{path}, "")
+	groups, errs := NewAdapter(func(cwd string) string { return cwd }).BuildGroups(filepath.Dir(path), []string{path}, "", nil)
 	if len(errs) > 0 || len(groups) != 1 {
 		t.Fatalf("%+v %v", groups, errs)
 	}

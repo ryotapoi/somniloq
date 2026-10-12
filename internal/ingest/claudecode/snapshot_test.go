@@ -52,7 +52,7 @@ func TestBuildSnapshotsReusesRepositoryPerCWDWithinPass(t *testing.T) {
 			t.Fatalf("files=%d readErrors=%v diagnostics=%v", len(files), readErrors, diagnostics)
 		}
 		for _, file := range files {
-			if len(file.Failures) != 0 || len(file.Records) != len(inputs) {
+			if file.Failures.Count != 0 || len(file.Records) != len(inputs) {
 				t.Fatalf("records=%d failures=%v", len(file.Records), file.Failures)
 			}
 			for i, record := range file.Records {

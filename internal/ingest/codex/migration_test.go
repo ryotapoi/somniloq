@@ -23,7 +23,7 @@ func TestMigrationIndexRetainsOnlyOwnerMetadata(t *testing.T) {
 	if g.Session.SessionID != "owner" || len(g.Messages) != 0 || len(g.Reports) != 1 || len(g.Reports[0].Data) != 0 {
 		t.Fatalf("index retained body or lost owner: %+v", g)
 	}
-	if len(g.States) != 0 || len(g.Reports[0].Failures) != 0 {
+	if len(g.States) != 0 || g.Reports[0].Failures.Count != 0 {
 		t.Fatalf("index retained body evidence: %+v", g)
 	}
 }
@@ -102,7 +102,7 @@ func TestMigrationGroupsRejectUnsafeOwnershipWithoutChangingImportContract(t *te
 			if len(errs) != 0 || len(groups) != 1 || groups[0].Err == nil {
 				t.Fatalf("groups=%+v errors=%v", groups, errs)
 			}
-			normal, errs := adapter.BuildGroups(root, []string{path}, "")
+			normal, errs := adapter.BuildGroups(root, []string{path}, "", nil)
 			if len(errs) != 0 || len(normal) != 1 || (name != "payload conflict" && normal[0].Err != nil) {
 				t.Fatalf("ordinary import changed: %+v %v", normal, errs)
 			}
