@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 )
 
 // MessageRow carries the original block and physical provenance of a body row.
@@ -31,30 +32,82 @@ func (d *DB) GetMessages(inputID int64, source Source, sessionID string) ([]Mess
 }
 
 func (d *DB) GetIdentityMessages(inputID int64, source Source, identity string) ([]MessageRow, error) {
+	return d.GetIdentityMessagesFiltered(inputID, source, identity, MessageFilter{}, nil, 0)
+}
+
+type MessageFilter struct {
+	Role                 string
+	MinNumber, MaxNumber int
+}
+
+func messageFilterSQL(filter MessageFilter) (string, []any) {
+	var clauses []string
+	var args []any
+	if filter.Role != "" {
+		clauses = append(clauses, "role = ?")
+		args = append(args, filter.Role)
+	}
+	if filter.MinNumber > 0 {
+		clauses = append(clauses, "number >= ?")
+		args = append(args, filter.MinNumber)
+	}
+	if filter.MaxNumber > 0 {
+		clauses = append(clauses, "number <= ?")
+		args = append(args, filter.MaxNumber)
+	}
+	if len(clauses) == 0 {
+		return "", args
+	}
+	return " AND " + strings.Join(clauses, " AND "), args
+}
+
+func (d *DB) CountIdentityMessages(inputID int64, source Source, identity string, filter MessageFilter) (int, error) {
+	condition, filterArgs := messageFilterSQL(filter)
+	var query string
+	args := []any{}
 	if inputID == LegacyInputID {
-		rows, err := d.execer().Query(`SELECT uuid,role,content,COALESCE(timestamp,''),'null',number,'',0,'','legacy_saved',legacy_rowid FROM legacy_messages WHERE source=? AND session_id=? AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0) ORDER BY number`, source, identity)
-		if err != nil {
-			return nil, err
-		}
-		result, err := scanMessages(rows, "get legacy messages")
-		if err != nil {
-			return nil, err
-		}
-		return result, nil
+		query = `SELECT count(*) FROM legacy_messages WHERE source=? AND session_id=? AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0)`
+		args = append(args, source, identity)
+	} else {
+		query = `SELECT count(*) FROM messages WHERE input_id=? AND source=? AND identity=? AND membership='body' AND (source IN ('codex','claude_code') OR is_sidechain=0)`
+		args = append(args, inputID, source, identity)
 	}
-	rows, err := d.execer().Query(`
-		SELECT uuid, role, content, timestamp, blocks_json, number, origin_path, origin_line, payload_id, 'source_record', 0
-		FROM messages
-		WHERE input_id = ? AND source = ? AND identity = ?
-		  AND membership = 'body'
-		  AND (source IN ('codex','claude_code') OR is_sidechain = 0)
-		ORDER BY CASE WHEN number > 0 THEN 0 ELSE 1 END, number, rowid`,
-		inputID, string(source), identity,
-	)
+	args = append(args, filterArgs...)
+	var count int
+	if err := d.execer().QueryRow(query+condition, args...).Scan(&count); err != nil {
+		return 0, fmt.Errorf("count messages: %w", err)
+	}
+	return count, nil
+}
+
+func (d *DB) GetIdentityMessagesFiltered(inputID int64, source Source, identity string, filter MessageFilter, limit *int, offset int) ([]MessageRow, error) {
+	condition, filterArgs := messageFilterSQL(filter)
+	var query string
+	args := []any{}
+	operation := "get messages"
+	if inputID == LegacyInputID {
+		query = `SELECT uuid,role,content,COALESCE(timestamp,''),'null',number,'',0,'','legacy_saved',legacy_rowid FROM legacy_messages WHERE source=? AND session_id=? AND (source IN ('codex','claude_code') OR COALESCE(is_sidechain,0)=0)`
+		args = append(args, source, identity)
+		query += condition + ` ORDER BY number`
+		operation = "get legacy messages"
+	} else {
+		query = `SELECT uuid, role, content, timestamp, blocks_json, number, origin_path, origin_line, payload_id, 'source_record', 0 FROM messages WHERE input_id=? AND source=? AND identity=? AND membership='body' AND (source IN ('codex','claude_code') OR is_sidechain=0)`
+		args = append(args, inputID, source, identity)
+		query += condition + ` ORDER BY CASE WHEN number > 0 THEN 0 ELSE 1 END, number, rowid`
+	}
+	args = append(args, filterArgs...)
+	if limit != nil {
+		query += ` LIMIT ? OFFSET ?`
+		args = append(args, *limit, offset)
+	} else if offset > 0 {
+		query += ` LIMIT -1 OFFSET ?`
+		args = append(args, offset)
+	}
+	rows, err := d.execer().Query(query, args...)
 	if err != nil {
-		return nil, fmt.Errorf("get messages: query: %w", err)
+		return nil, fmt.Errorf("%s: query: %w", operation, err)
 	}
-	return scanMessages(rows, "get messages")
+	return scanMessages(rows, operation)
 }
 
 func scanMessages(rows *sql.Rows, operation string) ([]MessageRow, error) {

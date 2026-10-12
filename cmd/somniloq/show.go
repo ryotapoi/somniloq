@@ -109,6 +109,14 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	}
 	defer db.Close()
 	items := []showMessageJSON{}
+	var page showJSON
+	var limit *int
+	if flagWasProvided(fs, "limit") {
+		limit = f.limit
+	}
+	offset := *f.offset
+	filter := core.MessageFilter{Role: *f.role, MinNumber: lo, MaxNumber: hi}
+	usePagedRead := since == nil && until == nil && (tailSet || limit != nil || offset > 0)
 	selectionCode := 1
 	err = db.ReadSnapshot(func(snapshot *core.DB) error {
 		resolver := snapshot.NewSessionResolver()
@@ -141,15 +149,52 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 				}
 			}
 		}
+		if usePagedRead {
+			counts := make([]int, len(sessions))
+			for i, session := range sessions {
+				count, err := snapshot.CountIdentityMessages(session.InputID, session.Source, session.Identity, filter)
+				if err != nil {
+					return err
+				}
+				counts[i] = count
+				page.Total += count
+			}
+			if tailSet {
+				limit = f.tail
+				offset = max(page.Total-*f.tail, 0)
+			}
+			remaining := page.Total - min(offset, page.Total)
+			if limit != nil {
+				remaining = min(remaining, *limit)
+			}
+			skip := offset
+			for i, session := range sessions {
+				if skip >= counts[i] {
+					skip -= counts[i]
+					continue
+				}
+				if remaining == 0 {
+					break
+				}
+				fetch := min(counts[i]-skip, remaining)
+				messages, err := snapshot.GetIdentityMessagesFiltered(session.InputID, session.Source, session.Identity, filter, &fetch, skip)
+				if err != nil {
+					return err
+				}
+				for _, m := range messages {
+					items = append(items, newShowMessageJSON(session, m))
+				}
+				remaining -= len(messages)
+				skip = 0
+			}
+			return nil
+		}
 		for _, session := range sessions {
-			messages, err := snapshot.GetIdentityMessages(session.InputID, session.Source, session.Identity)
+			messages, err := snapshot.GetIdentityMessagesFiltered(session.InputID, session.Source, session.Identity, filter, nil, 0)
 			if err != nil {
 				return err
 			}
 			for _, m := range messages {
-				if *f.role != "" && m.Role != *f.role || lo > 0 && m.Number < lo || hi > 0 && m.Number > hi {
-					continue
-				}
 				if since != nil || until != nil {
 					t, err := time.Parse(time.RFC3339Nano, m.Timestamp)
 					if err != nil || since != nil && t.Before(*since) || until != nil && !t.Before(*until) {
@@ -164,16 +209,23 @@ func showCmd(args []string, openDB func() (*core.DB, error), cfg config, out, er
 	if err != nil {
 		return selectionCode, err
 	}
-	var limit *int
-	if flagWasProvided(fs, "limit") {
-		limit = f.limit
+	if usePagedRead {
+		page.Items = items
+		page.Count = len(items)
+		page.Limit = limit
+		page.Offset = offset
+		page.HasMore = offset < page.Total && page.Count < page.Total-offset
+		if page.HasMore && page.Count > 0 {
+			next := offset + page.Count
+			page.NextOffset = &next
+		}
+	} else {
+		if tailSet {
+			limit = f.tail
+			offset = max(len(items)-*f.tail, 0)
+		}
+		page = paginate(items, limit, offset)
 	}
-	offset := *f.offset
-	if tailSet {
-		limit = f.tail
-		offset = max(len(items)-*f.tail, 0)
-	}
-	page := paginate(items, limit, offset)
 	if *f.oneLine {
 		for i := range page.Items {
 			page.Items[i].Text = showFirstLine(page.Items[i].Text)

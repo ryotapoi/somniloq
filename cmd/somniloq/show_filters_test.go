@@ -70,6 +70,7 @@ func TestShowFilterPageAndOriginalBlocks(t *testing.T) {
 	}{
 		{nil, 12, 12, 0, nil, false, nil},
 		{[]string{"--limit", "2", "--offset", "5"}, 12, 2, 5, intPointer(2), true, intPointer(7)},
+		{[]string{"--offset", "11"}, 12, 1, 11, nil, false, nil},
 		{[]string{"--limit", "0"}, 12, 0, 0, intPointer(0), true, nil},
 		{[]string{"--limit", "20", "--offset", "20"}, 12, 0, 20, intPointer(20), false, nil},
 		{[]string{"--tail", "2"}, 12, 2, 10, intPointer(2), false, nil},
@@ -84,6 +85,10 @@ func TestShowFilterPageAndOriginalBlocks(t *testing.T) {
 	p = runShowPage(t, []string{a, "--since", "2026-10-01T19:00:00.000000001Z", "--until", "2026-10-01T19:00:00.000000002Z"})
 	if p.Total != 0 {
 		t.Fatalf("nano boundary: %+v", p)
+	}
+	p = runShowPage(t, []string{a, b, "--role", "user", "--messages", "2:5", "--tail", "2"})
+	if p.Total != 4 || p.Offset != 2 || p.Count != 2 || p.Items[0].REF != b || p.Items[0].MessageNumber != 3 || p.Items[1].REF != b || p.Items[1].MessageNumber != 5 {
+		t.Fatalf("filtered tail: %+v", p)
 	}
 	p = runShowPage(t, []string{a, "--since", "2026-09-30T19:00:00Z", "--until", "2026-10-01T18:59:59.999999999Z"})
 	if p.Total != 1 || p.Items[0].MessageNumber != 2 {
